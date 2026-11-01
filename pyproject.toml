@@ -1,0 +1,76 @@
+[project]
+name = "bhashabench"
+version = "0.1.0"
+description = "Automated testing and benchmarking platform for Indian-language voice AI."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "YushBytes" }]
+
+# Runtime dependencies are declared in backend/requirements.txt so that the
+# backend Docker image can be built without copying this file. This section is
+# kept intentionally empty to avoid two competing sources of truth.
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# The backend is run as an application, not installed as a distribution.
+packages = []
+
+# =============================================================================
+# Ruff - linting and formatting
+# =============================================================================
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["backend"]
+extend-exclude = [".venv", "venv", "frontend", "__pycache__", ".ruff_cache"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort (import ordering)
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "N",      # pep8-naming
+    "SIM",    # flake8-simplify
+    "RUF",    # ruff-specific rules
+    "ANN",    # flake8-annotations (enforce type annotations)
+    "ASYNC",  # flake8-async
+]
+ignore = [
+    "ANN401",  # allow `typing.Any` where it is genuinely the right type
+    "B008",    # FastAPI's `Depends(...)` in defaults is the documented idiom
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may omit return annotations on test functions.
+"backend/tests/*" = ["ANN201", "ANN001"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# =============================================================================
+# pytest
+# =============================================================================
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--showlocals",
+]
+filterwarnings = ["error"]
