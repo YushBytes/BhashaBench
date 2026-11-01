@@ -155,7 +155,43 @@ and a test asserts that such a payload does not take effect.
 |-------|-------|-----|
 | Input size | 256 KiB | A real scenario is a few kilobytes |
 | Node count | 10,000 | Anchors and aliases let a few hundred bytes expand into gigabytes — the "billion laughs" pattern stays under any byte cap, so expansion is measured *after* parsing |
-| Nesting depth | 20 | Bounds recursive structures |
+| Nesting depth | 20 | Bounds deeply nested structures |
+| Cyclic aliases | Rejected | See below |
+
+### Recursive aliases are rejected
+
+`safe_load` is safe from code execution but will still build a genuinely
+*cyclic* object graph from a recursive alias:
+
+```yaml
+name: recursive-test
+language: hi-IN
+persona: &persona
+  identity: *persona      # refers to the structure that contains it
+```
+
+That produces a mapping whose own value is itself, which naive traversal walks
+forever. The loader detects it by tracking object identity along its active
+traversal path and rejects it:
+
+```
+422  yaml_syntax_error
+scenario YAML contains a recursive alias: an anchor refers to a structure
+that contains itself. Remove the self-reference - a scenario must be a
+finite document.
+```
+
+**Non-cyclic anchors keep working.** Referencing one anchor from several
+places is normal and accepted — only a structure that contains *itself* is
+refused:
+
+```yaml
+persona:
+  identity: Caller
+  traits: &shared
+    - impatient
+expected_outcomes: *shared    # fine: shared, not cyclic
+```
 
 Files are stat-checked before being read, so an oversized file is rejected
 without being pulled into memory.

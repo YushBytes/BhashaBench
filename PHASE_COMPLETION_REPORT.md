@@ -3,14 +3,20 @@
 | | |
 |---|---|
 | **Phase** | 2 of 15 — Database & Scenario Engine |
-| **Date** | 2026-11-02 |
+| **Date** | 2026-11-02 (correction and final verification pass) |
 | **Repository** | <https://github.com/YushBytes/BhashaBench> (private) |
 | **Branch** | `feature/phase-02-database-scenarios` |
 | **Base** | `develop` @ `e69930c` |
-| **Commits** | 5 (Phase 2) + 1 report = 6; 10 Phase 1 commits preserved |
-| **Tracked files** | 93 (was 61) |
-| **Tests** | 234 passing (was 35) |
-| **Status** | **Complete.** All completion requirements met and verified. Phase 3 not started. |
+| **Commits on this branch** | **9** — 7 implementation/documentation + 2 from the correction pass. 10 Phase 1 commits preserved beneath them. |
+| **Tracked files** | 93 (was 61 after Phase 1) |
+| **Tests** | **246 passing**, 0 failed, 0 skipped (was 35 after Phase 1) |
+| **Status** | **READY FOR OWNER REVIEW.** Not approved — approval is the owner's decision. |
+
+> **Commit-count correction.** An earlier revision of this report stated
+> "5 + 1 report = 6" commits. That was wrong: it omitted both documentation
+> commits. The branch carried **7** commits before this correction pass, and
+> **9** after it. The authoritative list is in §9, and `git log --oneline` is
+> the final word.
 
 > Phase 1's report is preserved in git history at `e69930c`. This document
 > replaces it to describe the current phase.
@@ -55,6 +61,85 @@ the rules and owning transaction boundaries. Route handlers are thin.
 No telephony, audio processing, transcription, speech synthesis, caller
 simulation, evaluation or test execution. `TestRun`, `CallSession` and
 `ConversationTurn` are foundational schema; nothing writes to them.
+
+---
+
+## 1a. Correction pass — recursive YAML aliases
+
+Completed after the implementation above, in response to an independent
+review. Reported separately from the Phase 2 implementation work because it
+was verified separately.
+
+### What was actually wrong
+
+`yaml.safe_load` is safe from code execution but still builds a genuinely
+cyclic object graph from a recursive alias:
+
+```yaml
+name: recursive-test
+language: hi-IN
+persona: &persona
+  identity: *persona
+```
+
+This was confirmed empirically before any code was changed —
+`document["persona"]["identity"] is document["persona"]` evaluates to `True`.
+
+**The predicted `RecursionError` did not actually occur.** `_measure`
+increments depth at every level, so a cycle tripped `MAX_YAML_DEPTH` (20) and
+returned a controlled `ScenarioTooLargeError`. The review's underlying concern
+was nonetheless valid, for two measured reasons:
+
+1. **The error misdiagnosed the fault.** It reported *"YAML nesting exceeds
+   the maximum depth of 20"*, which sends an author looking for deep nesting
+   that does not exist.
+5. **The protection was incidental, not designed.** It held only because
+   `MAX_YAML_DEPTH` happened to be smaller than Python's recursion limit.
+   Raising `MAX_YAML_DEPTH` to 5000 and re-running the same input produced a
+   bare `RecursionError` — verified before the fix was written:
+
+   ```
+   MAX_YAML_DEPTH=20      -> ScenarioRecursionError (controlled)   [after fix]
+   MAX_YAML_DEPTH=5000    -> RecursionError (uncontrolled)         [before fix]
+   ```
+
+### The fix
+
+`_measure` now carries an `active` set holding the `id()` of every container on
+its current recursion path, and raises when it re-enters one.
+
+| Requirement | How it is met |
+|---|---|
+| Detect cycles by object identity | `id(node)` for every `dict`/`list`/`tuple` |
+| Active recursion-path set, not seen-ever | Ids are discarded once a subtree completes, so sibling references to a shared anchor are not rejected |
+| Controlled, documented error | `ScenarioRecursionError`, subclassing `ScenarioSyntaxError` |
+| Preserve the 256 KiB input cap | Unchanged |
+| Preserve the 10,000 node cap | Unchanged |
+| Preserve the depth limit of 20 | Unchanged |
+| No unbounded recursion | Depth limit and cycle check both bound the walk |
+| No unhandled `RecursionError` at the API | Cycle check, plus a defensive `RecursionError` → `ScenarioRecursionError` conversion in `parse_yaml` |
+| Normal non-cyclic anchors still work | Three tests: shared anchor, 50-way sibling fan-out, diamond DAG |
+| Useful, consistent error messages | Names the self-reference; maps to the existing 422 `yaml_syntax_error` |
+
+Ids are discarded in a `finally` block, so an exception raised deeper in the
+walk cannot leave a stale id behind and make a later sibling reference look
+like a cycle.
+
+`ScenarioRecursionError` subclasses `ScenarioSyntaxError` deliberately: the
+existing exception handler already maps that class to HTTP 422
+`yaml_syntax_error`, so **the public API contract is unchanged** while callers
+and tests can still catch the specific type.
+
+### Scope of the change
+
+Two files for the fix, one for an audit finding. No model, migration, schema,
+route or public function signature was touched.
+
+```
+backend/app/services/scenario_loader.py | 109 +++++++++++++++---
+backend/tests/test_scenario_spec.py     | 171 +++++++++++++++++++++++
+.gitignore                              |  20 ++++
+```
 
 ---
 
@@ -285,23 +370,34 @@ platform win32 -- Python 3.14.6, pytest-9.2.0, pluggy-1.7.0
 rootdir: C:\Users\ayush\OneDrive\Desktop\BhashaBench
 configfile: pyproject.toml
 testpaths: backend/tests
-collected 234 items
-........................................................................ [ 30%]
-........................................................................ [ 61%]
-........................................................................ [ 92%]
-..................                                                       [100%]
-234 passed in 8.53s
+collected 246 items
+........................................................................ [ 29%]
+........................................................................ [ 58%]
+........................................................................ [ 87%]
+..............................                                           [100%]
+246 passed in 11.70s
 ```
+
+Focused run of the new tests first, as required:
+
+```
+$ pytest backend/tests/test_scenario_spec.py -k "Recursive or NonCyclic" -v
+12 passed, 95 deselected in 0.16s
+```
+
+**0 failed, 0 skipped, 0 xfailed** - the database was available, so nothing
+was skipped. 234 -> 246 is the 12 new regression tests; no existing test was
+removed, weakened or renamed to accommodate the fix.
 
 | Module | Tests | Covers |
 |--------|-------|--------|
 | `test_health.py` | 16 | Root, liveness, versioned health; the probe reachable **and** unreachable; the endpoint still answering 200 with the database down; the error envelope |
 | `test_config.py` | 14 | Defaults, env overrides, list parsing, validation failures, production behaviour, caching |
 | `test_app_metadata.py` | 9 | App metadata, the exact OpenAPI path set, the application factory |
-| `test_scenario_spec.py` | 95 | Valid/minimal YAML, syntax errors, empty and non-mapping documents, invalid UTF-8, unsafe payloads, size/node/depth limits, every validation rule, duplicates, round-tripping, file loading |
+| `test_scenario_spec.py` | 107 | Valid/minimal YAML, syntax errors, empty and non-mapping documents, invalid UTF-8, unsafe payloads, **recursive/cyclic aliases (12 new)**, size/node/depth limits, every validation rule, duplicates, round-tripping, file loading |
 | `test_database.py` | 37 | Connection, migrated schema shape, model creation, relationships, FK delete behaviour, every constraint, transaction rollback and savepoints |
 | `test_api_suites_scenarios.py` | 63 | All nine endpoints, pagination stability, duplicates per suite, unknown ids, malformed UUIDs, oversized bodies, envelope consistency, no internal leakage |
-| **Total** | **234** | |
+| **Total** | **246** | |
 
 ### Test isolation
 
@@ -342,6 +438,12 @@ All checks passed!
 $ ruff format --check .
 54 files already formatted
 ```
+
+**No type checker is configured** in this repository - there is no mypy,
+pyright or pyre configuration in `pyproject.toml`, `requirements-dev.txt` or
+any standalone config file. Ruff's `ANN` rules enforce that annotations are
+*present*; nothing checks that they are *correct*. Static type checking is
+therefore reported as **not run, because not configured** - not as passing.
 
 The existing Phase 1 Ruff configuration is unchanged — same rule selection
 (including `ANN` type-annotation enforcement), same 100-character line length.
@@ -400,6 +502,10 @@ $ docker compose exec backend python -m pytest tests
 234 passed in 8.13s
 ```
 
+*(That figure is from the original Phase 2 verification, before the 12
+recursive-alias regression tests existed. The correction pass re-ran the
+same command and got 246 — see below.)*
+
 All 234 pass inside the container against the containerised PostgreSQL —
 including every database and API test.
 
@@ -420,6 +526,29 @@ including every database and API test.
 
 Smoke-test data was removed afterwards; the development database is back to
 `suites=0 scenarios=0`.
+
+### Correction-pass Docker verification
+
+The backend image was rebuilt with the corrected loader and the container
+recreated (`BUILD_EXIT=0`), then re-verified:
+
+| Check | Result |
+|-------|--------|
+| Backend container health | `healthy` |
+| `alembic current` in container | `3e3312d5327a (head)` |
+| `GET /api/v1/health` | aggregate `ok`; `database: ok` |
+| Full suite in container | **246 passed in 10.21s** |
+| Focused recursive tests in container | **12 passed** |
+| Valid scenario `POST` (reference file) | **201** |
+| Valid scenario `GET` | **200**, `snr=18.0` |
+| Invalid YAML `POST` | **422** `yaml_syntax_error`, with line and column |
+| **Recursive alias `POST`** | **422** `yaml_syntax_error`, message names the self-reference |
+| **Recursive alias to `/scenarios/validate`** | **200**, `valid: false`, error on `<document>` |
+| **Nested recursive alias (list)** | **200**, `valid: false` |
+| `RecursionError` or traceback in backend logs | **0 matches** |
+
+No 500 was produced by any malformed input, and no stack trace reached a
+client.
 
 ### Unrelated containers
 
@@ -446,6 +575,10 @@ stopped, restarted or deleted at any point. The
 | 3 | `432d19a` | `feat(api): add suite and scenario CRUD endpoints` | 13 files, +938 −7 |
 | 4 | `1e75cd5` | `test(phase-02): cover database, scenario validation and API endpoints` | 19 files, +2273 −48 |
 | 5 | `b927baf` | `docs(phase-02): document the database schema and scenario format` | 6 files, +934 −91 |
+| 6 | `07cd46c` | `docs(phase-02): add Phase 2 completion report` | 2 files, +629 |
+| 7 | `e8b6e92` | `docs(phase-02): record verified remote branch hashes` | 1 file, +31 −4 |
+| 8 | `2b5770d` | `fix(scenarios): reject recursive YAML aliases safely` | 2 files, +264 −16 |
+| 9 | `08d04c3` | `chore(repo): ignore database dumps and backups` | 1 file, +20 |
 
 Full hashes:
 
@@ -455,10 +588,16 @@ bcff109edfb3e90276dbf4d5d318079f160210e8
 432d19a353a0a19db8bce1cf78dd0f1ee4477b04
 1e75cd515c61654493475f212d7a5de06797032d
 b927baf00cd3e487ce3c46e38d52faf5243c33a8
+07cd46c955be060a7ea597935bbbce1a6a76c6d9
+e8b6e9274facbb6c229beb9871fb6531da0d73a5
+2b5770de3b8b31f62de101757cb59e179a96af8c
+08d04c3a5483c72faf4cfcc6886d0b76297f1da1
 ```
 
-The commit recording this report is the sixth and cannot contain its own hash;
-`git log --oneline` is authoritative.
+Commits 1–7 are the Phase 2 implementation and its documentation.
+Commits 8 and 9 are this correction pass. The commit recording this
+revision of the report cannot contain its own hash; `git log --oneline`
+is authoritative.
 
 ### A note on `develop`
 
@@ -517,7 +656,23 @@ force-pushed or deleted.
 
 ## 10. Known limitations
 
-1. **The enum CHECK constraints were initially missing.** SQLAlchemy's
+1. **The recursive-alias guard previously depended on the depth limit.**
+   Fixed in commit `2b5770d` and covered by 12 regression tests, but worth
+   recording as a *class* of problem. Two of this phase's defects - this one
+   and the enum constraints below - were protections that appeared to work
+   for an incidental reason. `MAX_YAML_DEPTH` must never be raised above
+   Python's recursion limit without re-reading the cycle check.
+2. **`_measure` is still recursive.** It is bounded by both the depth limit
+   and the cycle check, and a defensive `RecursionError` handler converts any
+   escape into a controlled error - but an iterative walk would remove the
+   stack dependency altogether. Not changed here because it is a larger
+   rewrite than the defect warranted.
+3. **Cycle detection runs on the parsed document, not during parsing.**
+   `safe_load` therefore still *builds* the cyclic object before it is
+   rejected. The 256 KiB input cap bounds how large that object can be, so
+   this is a bounded cost rather than an exposure, but a custom loader could
+   refuse the alias at construction time.
+4. **The enum CHECK constraints were initially missing.** SQLAlchemy's
    `Enum(create_constraint=...)` defaults to **`False`**, so the first version
    of the status columns were plain `VARCHAR`s whose allowed values were
    enforced only in Python — a write bypassing the ORM could have stored
@@ -526,45 +681,45 @@ force-pushed or deleted.
    was regenerated to include the constraints. *This is fixed*, but it is
    recorded because commit `dcfd34c`'s message claims the constraints were
    present from the start, and the correction landed in commit `1e75cd5`.
-2. **No authentication or authorization.** Every endpoint is unauthenticated.
+5. **No authentication or authorization.** Every endpoint is unauthenticated.
    None existed before this phase and inventing a partial scheme would be
    worse than none. Deferred to Phase 15.
-3. **No suite update or delete endpoint.** Only create, list and get. Phase 3
+6. **No suite update or delete endpoint.** Only create, list and get. Phase 3
    adds the rest, and a `DELETE /suites/{id}` needs a decision about what
    happens to run history first.
-4. **`PUT` replaces, it does not patch.** There is no `PATCH`. A scenario is
+7. **`PUT` replaces, it does not patch.** There is no `PATCH`. A scenario is
    one coherent document, and partially updating a nested spec would make it
    easy to leave a scenario in a state its author never reviewed.
-5. **Offset pagination.** Fine at current scale, but a row inserted between
+8. **Offset pagination.** Fine at current scale, but a row inserted between
    two page requests can shift results. Cursor pagination is the eventual fix.
-6. **`updated_at` is ORM-driven.** `onupdate` fires on ORM-issued UPDATEs; a
+9. **`updated_at` is ORM-driven.** `onupdate` fires on ORM-issued UPDATEs; a
    bulk `UPDATE` bypassing the ORM would not touch it. No such statement
    exists today. A database trigger would be the robust fix.
-7. **Scenario `spec` is not queryable field-by-field.** Deliberate (§2
+10. **Scenario `spec` is not queryable field-by-field.** Deliberate (§2
    decision 1), but filtering scenarios by, say, `audio.noise_profile` would
    need a GIN index or a new projected column.
-8. **The `database` health probe is not cached.** Every `/api/v1/health` call
+11. **The `database` health probe is not cached.** Every `/api/v1/health` call
    opens a connection and runs `SELECT 1`. Cheap, but a high-frequency poller
    would add measurable load. `/health` is unaffected — it does not touch the
    database.
-9. **In-container pytest needs explicit flags.** `pyproject.toml` is at the
+12. **In-container pytest needs explicit flags.** `pyproject.toml` is at the
    repository root and not copied into the image, and its `testpaths` are
    root-relative. Tests run correctly in the container but via pytest's
    defaults unless flags are passed (as §8 does). Carried over from Phase 1.
-10. **`DATABASE_URL` and `POSTGRES_HOST_PORT` can still disagree.** Now
-    documented prominently in `.env.example`, `README.md` and `CLAUDE.md`, and
-    the local `.env` was corrected — it pointed at port 5432, which on this
-    machine is an unrelated project's PostgreSQL, so `alembic upgrade head`
-    would have migrated the wrong database. A startup assertion would be
-    better than documentation.
-11. **No CI pipeline.** `.github/workflows/` still holds only `.gitkeep`.
-    Phase 14. The 234 tests are run manually.
-12. **One reference scenario, not a library.** `scenarios/` holds a single
-    fully-commented file. The multi-language library is Phase 3.
-13. **`ANN401` and `B008` remain ignored** in the Ruff configuration,
-    unchanged from Phase 1.
-14. **The project sits in a OneDrive-synced folder**, which makes dependency
-    installation slow. Unchanged from Phase 1.
+13. **`DATABASE_URL` and `POSTGRES_HOST_PORT` can still disagree.** Now
+   documented prominently in `.env.example`, `README.md` and `CLAUDE.md`, and
+   the local `.env` was corrected — it pointed at port 5432, which on this
+   machine is an unrelated project's PostgreSQL, so `alembic upgrade head`
+   would have migrated the wrong database. A startup assertion would be
+   better than documentation.
+14. **No CI pipeline.** `.github/workflows/` still holds only `.gitkeep`.
+   Phase 14. The 246 tests are run manually.
+15. **One reference scenario, not a library.** `scenarios/` holds a single
+   fully-commented file. The multi-language library is Phase 3.
+16. **`ANN401` and `B008` remain ignored** in the Ruff configuration,
+   unchanged from Phase 1.
+17. **The project sits in a OneDrive-synced folder**, which makes dependency
+   installation slow. Unchanged from Phase 1.
 
 ---
 
@@ -601,17 +756,63 @@ benchmarking (11), reporting (12), dashboard (13), CI (14), hardening and auth
 | Scenario YAML parsing and validation work | ✅ `safe_load`, strict schema, field-path errors |
 | Database persistence works | ✅ Verified through the API in Docker |
 | Required REST endpoints work | ✅ All nine, verified live |
-| Automated tests pass | ✅ 234 passed on host and in the container |
+| Automated tests pass | ✅ **246 passed** on host and in the container; 0 failed, 0 skipped |
 | Ruff and formatting checks pass | ✅ `All checks passed!`, 54 files formatted |
 | Docker backend build and runtime verified | ✅ Image builds; migrations and tests run inside it |
 | Phase 1 functionality intact | ✅ All Phase 1 endpoints work; 3 Phase 1 tests updated to match deliberate Phase 2 changes, none weakened |
 | Documentation updated | ✅ README, ARCHITECTURE, ROADMAP, new DATABASE.md, SCENARIO_FORMAT.md, CLAUDE.md |
-| Git commits created and pushed | ✅ 5 + report; see §9 |
-| Local and remote hashes verified | ✅ See the verification block below |
+| Git commits created and pushed | ✅ 9 on the branch; see §9 |
+| Local and remote hashes verified | ✅ See §9 and the terminal summary |
+| Recursive-alias defect corrected | ✅ Commit `2b5770d`, 12 regression tests, verified via the live API |
+| Static type checking | ➖ Not run — no type checker is configured in this repository |
 
 ---
 
-## 13. Phase 3 has not started
+## 13. Phase 2 readiness
+
+### READY FOR OWNER REVIEW
+
+Every completion requirement is met and verified by direct execution, not
+inference. The recursive-alias defect raised in review is corrected, covered
+by regression tests, and verified through the live API in Docker.
+
+**This is not a claim of approval.** Phase 2 is prepared for the owner's
+review; approval and integration are the owner's decision.
+
+What a reviewer may want to look at first:
+
+| Area | Where |
+|------|-------|
+| The correction itself | `backend/app/services/scenario_loader.py`, `_measure` |
+| Why it was needed | §1a of this report |
+| Regression coverage | `backend/tests/test_scenario_spec.py`, `TestRecursiveAliases` and `TestNonCyclicAliases` |
+| Schema decisions | §2 and `docs/DATABASE.md` |
+| Honest limitations | §10 — 17 items, including two "incidental protection" defects |
+
+---
+
+## 14. Recommended next action
+
+After owner approval:
+
+1. **Integrate the approved history into `main`.** `main` is still at
+   `f5ced2c`, which predates Phase 1's closure. Both `develop` (`e69930c`,
+   Phase 1) and `feature/phase-02-database-scenarios` need to reach it.
+   `develop` fast-forwards from `main` cleanly; Phase 2 then fast-forwards
+   from `develop`, since it was branched from `e69930c` and nothing has landed
+   on `develop` since.
+2. **Verify the integrated branch** before relying on it: `pytest`,
+   `ruff check .`, `ruff format --check .`, `alembic check`, and a
+   `docker compose up -d` smoke test against `main`.
+3. **Only then remove unnecessary branches**, and only after confirming each
+   one's work is reachable from `main` (`git merge-base --is-ancestor`).
+
+None of that has been done here. No branch was merged, deleted or
+force-pushed during this pass.
+
+---
+
+## 15. Phase 3 has not started
 
 **Confirmed.** No telephony, audio processing, audio degradation, voice
 synthesis, transcription, AI caller agent or evaluation logic exists in this
@@ -621,4 +822,5 @@ repository.
 the migration, covered by tests, and written to by nothing. No endpoint
 creates a row in any of them.
 
-Awaiting review before Phase 3 begins.
+No branch was merged, deleted, rebased or force-pushed during this pass, and
+no database or Docker volume was reset. Awaiting the owner's review.

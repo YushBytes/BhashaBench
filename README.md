@@ -179,7 +179,7 @@ BhashaBench/
 │   │   ├── services/          health, scenario loader, suite + scenario logic
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 234 tests across 6 modules
+│   ├── tests/                 246 tests across 6 modules
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
 │   └── Dockerfile             multi-stage: development / production
@@ -406,14 +406,14 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite has **234 tests** in six modules:
+The backend suite has **246 tests** in six modules:
 
 | Module | Tests | Covers |
 |--------|-------|--------|
 | `test_health.py` | 16 | Root, liveness and versioned health endpoints; the database probe reachable and unreachable; the error envelope; a check that no secret appears in a response |
 | `test_config.py` | 14 | Defaults, environment overrides, comma-separated list parsing, validation failures, production behaviour, settings caching |
 | `test_app_metadata.py` | 9 | App title/summary/version, the generated OpenAPI document, the application factory |
-| `test_scenario_spec.py` | 95 | YAML syntax, unsafe payloads, size and expansion limits, every validation rule, round-trip serialisation, file loading |
+| `test_scenario_spec.py` | 107 | YAML syntax, unsafe payloads, recursive/cyclic aliases, size and expansion limits, every validation rule, round-trip serialisation, file loading |
 | `test_database.py` | 37 | Connection, the migrated schema, model creation, relationships, foreign-key delete behaviour, every constraint, transaction rollback |
 | `test_api_suites_scenarios.py` | 63 | All nine endpoints, pagination, duplicates, unknown ids, malformed UUIDs, oversized bodies, error-envelope shape |
 

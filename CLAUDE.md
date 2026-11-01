@@ -86,10 +86,19 @@ objects and turns a scenario file into remote code execution. Size, node-count
 and depth limits in `app/services/scenario_loader.py` exist to stop
 anchor/alias expansion bombs; do not remove them.
 
+`safe_load` still builds *cyclic* objects from a recursive alias, so
+`_measure` tracks object identity along its active recursion path and raises
+`ScenarioRecursionError`. Two things to preserve if you touch it: the set is an
+**active path**, not a seen-ever set (a seen-ever set would wrongly reject the
+second reference to a shared anchor), and ids are discarded in a `finally` so a
+deeper exception cannot leave a stale entry behind. Do not rely on
+`MAX_YAML_DEPTH` to catch cycles — that only worked because it happened to be
+below Python's recursion limit.
+
 ## Testing
 
 ```bash
-pytest                                  # whole suite (234 tests)
+pytest                                  # whole suite (246 tests)
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

@@ -73,7 +73,7 @@ authoring format.
   async — see `app/db/session.py` for why.)
 - The `database` health component now runs a real `SELECT 1` probe, reporting
   `ok` or `unavailable` instead of a hardcoded `degraded`.
-- Repository and service layers; 234 tests, with the database ones running
+- Repository and service layers; 246 tests, with the database ones running
   against a real PostgreSQL.
 
 **Also delivered, moved forward from Phase 3:** the scenario YAML format and
