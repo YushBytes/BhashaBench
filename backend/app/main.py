@@ -19,7 +19,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.schemas.common import ErrorDetail, ErrorResponse, HealthResponse, ServiceIdentity
+from app.services.errors import ConflictError, NotFoundError
 from app.services.health import uptime_seconds
+from app.services.scenario_loader import (
+    ScenarioSyntaxError,
+    ScenarioTooLargeError,
+    ScenarioValidationError,
+)
 
 logger = logging.getLogger("bhashabench")
 
@@ -27,10 +33,15 @@ DESCRIPTION = """
 **BhashaBench** is an automated testing and benchmarking platform for
 Indian-language voice AI.
 
-This is the Phase 1 foundation: the application skeleton, configuration
-management and health endpoints. Scenario execution, telephony, speech
-services and evaluation are not implemented yet - see
-`docs/DEVELOPMENT_ROADMAP.md` for the phase plan.
+Implemented so far:
+
+* **Phase 1** - application skeleton, configuration and health endpoints.
+* **Phase 2** - PostgreSQL persistence via Alembic migrations, and the
+  scenario engine: YAML authoring, strict validation and CRUD for test suites
+  and scenarios.
+
+Telephony, speech services, audio degradation, caller simulation and automated
+evaluation are **not** implemented - see `docs/DEVELOPMENT_ROADMAP.md`.
 """
 
 
@@ -59,9 +70,41 @@ def register_exception_handlers(app: FastAPI) -> None:
         _request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         return _error_response(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "validation_error",
             f"Request validation failed: {exc.errors()}",
+        )
+
+    # -- Phase 2 domain errors ------------------------------------------------
+    # Services raise these rather than HTTPException, so the service layer
+    # stays usable outside a request and the HTTP mapping lives only here.
+
+    @app.exception_handler(NotFoundError)
+    async def handle_not_found(_request: Request, exc: NotFoundError) -> JSONResponse:
+        return _error_response(status.HTTP_404_NOT_FOUND, "not_found", str(exc))
+
+    @app.exception_handler(ConflictError)
+    async def handle_conflict(_request: Request, exc: ConflictError) -> JSONResponse:
+        return _error_response(status.HTTP_409_CONFLICT, "conflict", str(exc))
+
+    @app.exception_handler(ScenarioTooLargeError)
+    async def handle_scenario_too_large(
+        _request: Request, exc: ScenarioTooLargeError
+    ) -> JSONResponse:
+        return _error_response(
+            status.HTTP_413_CONTENT_TOO_LARGE, "payload_too_large", str(exc)
+        )
+
+    @app.exception_handler(ScenarioSyntaxError)
+    async def handle_scenario_syntax(_request: Request, exc: ScenarioSyntaxError) -> JSONResponse:
+        return _error_response(status.HTTP_422_UNPROCESSABLE_CONTENT, "yaml_syntax_error", str(exc))
+
+    @app.exception_handler(ScenarioValidationError)
+    async def handle_scenario_validation(
+        _request: Request, exc: ScenarioValidationError
+    ) -> JSONResponse:
+        return _error_response(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "scenario_validation_error", str(exc)
         )
 
     @app.exception_handler(Exception)
