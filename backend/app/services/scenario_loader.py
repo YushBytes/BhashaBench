@@ -16,6 +16,12 @@ happy to build a structure far larger than its input (the "billion laughs"
 pattern uses YAML anchors and aliases to expand a few hundred bytes into
 gigabytes). Node count and nesting depth are checked after parsing, which
 bounds alias expansion that stays under the byte cap.
+
+**Cyclic aliases.** `safe_load` is safe from code execution but will still
+build a *cyclic* object graph from a recursive alias, which naive traversal
+walks forever. `_measure` therefore tracks object identity along its active
+recursion path and rejects a cycle explicitly, rather than relying on the
+depth limit to trip first.
 """
 
 from __future__ import annotations
@@ -48,6 +54,17 @@ class ScenarioTooLargeError(ScenarioLoadError):
 
 class ScenarioSyntaxError(ScenarioLoadError):
     """Input was not well-formed YAML, or used an unsafe construct."""
+
+
+class ScenarioRecursionError(ScenarioSyntaxError):
+    """Input contained a recursive (cyclic) alias.
+
+    A subclass of `ScenarioSyntaxError` rather than a new top-level error: a
+    cycle is a malformed document, and inheriting means the existing
+    `ScenarioSyntaxError` exception handler already maps it to HTTP 422
+    `yaml_syntax_error`. Callers that want to distinguish a cycle can catch
+    this specific type; the public API shape is unchanged.
+    """
 
 
 class ScenarioValidationError(ScenarioLoadError):
@@ -94,29 +111,77 @@ def _collect_errors(exc: ValidationError) -> list[FieldError]:
     ]
 
 
-def _measure(node: Any, depth: int = 0) -> tuple[int, int]:
+def _measure(node: Any, depth: int = 0, active: set[int] | None = None) -> tuple[int, int]:
     """Return `(node_count, max_depth)` for a parsed YAML structure.
 
     Counted after parsing so that alias expansion is measured as realised, not
     as written.
+
+    **Cycle detection.** `yaml.safe_load` happily builds genuinely cyclic
+    objects from a recursive alias:
+
+        persona: &persona
+          identity: *persona
+
+    produces a dict whose own value is itself. `active` holds the `id()` of
+    every container currently on the recursion path, so re-entering one is
+    detected and reported as a cycle.
+
+    It is an *active path* set, not a "seen anywhere" set, on purpose. A
+    non-cyclic document may legitimately reference one anchor from several
+    places; each container is discarded from `active` once its subtree is
+    finished, so sibling references to a shared anchor are measured normally
+    rather than being mistaken for a cycle. Shared subtrees are deliberately
+    counted once per reference, because the node cap bounds *realised*
+    expansion.
+
+    `id()` is unique only among live objects, which is sufficient here: the
+    whole document is held alive by the caller for the duration of the walk.
+
+    Without this, the only thing standing between a cyclic document and an
+    uncontrolled `RecursionError` is `MAX_YAML_DEPTH` happening to be smaller
+    than Python's recursion limit - protection by coincidence, which breaks
+    the moment that limit is raised.
     """
     if depth > MAX_YAML_DEPTH:
         raise ScenarioTooLargeError(f"YAML nesting exceeds the maximum depth of {MAX_YAML_DEPTH}")
 
+    if active is None:
+        active = set()
+
     count = 1
     deepest = depth
 
-    if isinstance(node, dict):
-        for key, value in node.items():
-            key_count, key_depth = _measure(key, depth + 1)
-            value_count, value_depth = _measure(value, depth + 1)
-            count += key_count + value_count
-            deepest = max(deepest, key_depth, value_depth)
-    elif isinstance(node, (list, tuple)):
-        for item in node:
-            item_count, item_depth = _measure(item, depth + 1)
-            count += item_count
-            deepest = max(deepest, item_depth)
+    is_container = isinstance(node, (dict, list, tuple))
+    marker = id(node) if is_container else None
+
+    if is_container:
+        if marker in active:
+            raise ScenarioRecursionError(
+                "scenario YAML contains a recursive alias: an anchor refers to a "
+                "structure that contains itself. Remove the self-reference - a "
+                "scenario must be a finite document."
+            )
+        active.add(marker)
+
+    try:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                key_count, key_depth = _measure(key, depth + 1, active)
+                value_count, value_depth = _measure(value, depth + 1, active)
+                count += key_count + value_count
+                deepest = max(deepest, key_depth, value_depth)
+        elif isinstance(node, (list, tuple)):
+            for item in node:
+                item_count, item_depth = _measure(item, depth + 1, active)
+                count += item_count
+                deepest = max(deepest, item_depth)
+    finally:
+        # Discarded in `finally` so an exception raised deeper in the walk
+        # cannot leave a stale id behind and make a later sibling reference
+        # look like a cycle.
+        if is_container:
+            active.discard(marker)
 
     if count > MAX_YAML_NODES:
         raise ScenarioTooLargeError(
@@ -130,7 +195,8 @@ def _measure(node: Any, depth: int = 0) -> tuple[int, int]:
 def parse_yaml(content: str | bytes) -> dict[str, Any]:
     """Parse YAML into a mapping, safely and within limits.
 
-    Raises `ScenarioTooLargeError`, `ScenarioSyntaxError`.
+    Raises `ScenarioTooLargeError`, `ScenarioSyntaxError` (including its
+    `ScenarioRecursionError` subclass for a cyclic alias).
     """
     raw = content.encode("utf-8") if isinstance(content, str) else content
 
@@ -162,15 +228,26 @@ def parse_yaml(content: str | bytes) -> dict[str, Any]:
             f"scenario YAML must be a mapping of fields, got {type(document).__name__}"
         )
 
-    _measure(document)
+    try:
+        _measure(document)
+    except RecursionError as exc:
+        # Defence in depth. The depth limit and the cycle check above should
+        # make this unreachable, but a RecursionError escaping to the API
+        # would surface as an opaque 500, and exhausting the stack can leave
+        # the interpreter in a fragile state. Converting it here keeps every
+        # malformed-input path inside the module's documented error contract.
+        raise ScenarioRecursionError(
+            "scenario YAML is too deeply or recursively structured to analyse safely"
+        ) from exc
+
     return document
 
 
 def spec_from_yaml(content: str | bytes) -> ScenarioSpec:
     """Parse and validate YAML into a `ScenarioSpec`.
 
-    Raises `ScenarioTooLargeError`, `ScenarioSyntaxError`,
-    `ScenarioValidationError`.
+    Raises `ScenarioTooLargeError`, `ScenarioSyntaxError` (including
+    `ScenarioRecursionError`), `ScenarioValidationError`.
     """
     document = parse_yaml(content)
 

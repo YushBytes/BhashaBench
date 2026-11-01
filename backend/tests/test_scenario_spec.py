@@ -5,7 +5,10 @@ No database is needed here: the loader and the spec are pure functions.
 
 from __future__ import annotations
 
+import sys
+
 import pytest
+import yaml
 
 from app.schemas.scenario_spec import (
     SUPPORTED_LANGUAGES,
@@ -14,12 +17,16 @@ from app.schemas.scenario_spec import (
     ScenarioSpec,
     SpeakingStyle,
 )
+from app.services import scenario_loader
 from app.services.scenario_loader import (
     MAX_YAML_BYTES,
     MAX_YAML_NODES,
+    ScenarioLoadError,
+    ScenarioRecursionError,
     ScenarioSyntaxError,
     ScenarioTooLargeError,
     ScenarioValidationError,
+    parse_yaml,
     spec_from_file,
     spec_from_yaml,
     spec_to_yaml,
@@ -198,6 +205,170 @@ class TestUnsafeYaml:
             spec_from_yaml(payload)
 
         assert not marker.exists()
+
+
+RECURSIVE_DIRECT = """\
+name: recursive-test
+language: hi-IN
+persona: &persona
+  identity: *persona
+"""
+
+RECURSIVE_NESTED = """\
+name: recursive-nested
+language: hi-IN
+persona: &persona
+  traits:
+    - *persona
+"""
+
+RECURSIVE_LIST = """\
+name: recursive-list
+language: hi-IN
+items: &items
+  - *items
+"""
+
+RECURSIVE_MUTUAL = """\
+name: recursive-mutual
+language: hi-IN
+a: &a
+  child: &b
+    parent: *a
+"""
+
+SHARED_ALIAS = """\
+name: shared_alias
+language: hi-IN
+persona:
+  identity: Caller
+  traits: &shared
+    - impatient
+goal:
+  objective: Confirm a reused anchor is accepted.
+expected_outcomes: *shared
+"""
+
+DIAMOND_ALIAS = """\
+name: diamond
+language: hi-IN
+leaf: &leaf
+  x: 1
+left: &left
+  down: *leaf
+right: &right
+  down: *leaf
+top:
+  a: *left
+  b: *right
+"""
+
+
+class TestRecursiveAliases:
+    """A cyclic alias must be refused with a controlled, accurate error.
+
+    `yaml.safe_load` is safe from code execution but still builds genuinely
+    cyclic objects from a recursive alias, which naive traversal walks
+    forever. These tests pin the explicit cycle check rather than relying on
+    the depth limit happening to trip first.
+    """
+
+    def test_safe_load_really_does_build_a_cycle(self) -> None:
+        """Establishes the premise: there is a real cycle to walk."""
+        document = yaml.safe_load(RECURSIVE_DIRECT)
+
+        assert document["persona"]["identity"] is document["persona"]
+
+    def test_direct_self_reference_is_rejected(self) -> None:
+        with pytest.raises(ScenarioRecursionError, match="recursive alias"):
+            spec_from_yaml(RECURSIVE_DIRECT)
+
+    def test_nested_self_reference_is_rejected(self) -> None:
+        """A cycle one level down, through a list."""
+        with pytest.raises(ScenarioRecursionError, match="recursive alias"):
+            spec_from_yaml(RECURSIVE_NESTED)
+
+    def test_recursive_list_alias_is_rejected(self) -> None:
+        """A list that contains itself."""
+        with pytest.raises(ScenarioRecursionError, match="recursive alias"):
+            spec_from_yaml(RECURSIVE_LIST)
+
+    def test_mutually_recursive_aliases_are_rejected(self) -> None:
+        """Structures referring into each other, not just self-reference."""
+        with pytest.raises(ScenarioRecursionError, match="recursive alias"):
+            spec_from_yaml(RECURSIVE_MUTUAL)
+
+    def test_error_is_a_syntax_error_subclass(self) -> None:
+        """So the existing 422 `yaml_syntax_error` handler already covers it."""
+        assert issubclass(ScenarioRecursionError, ScenarioSyntaxError)
+        assert issubclass(ScenarioRecursionError, ScenarioLoadError)
+
+    def test_error_names_the_cycle_not_the_depth(self) -> None:
+        """Reporting 'too deeply nested' for a cycle sends an author hunting
+        for nesting that is not there."""
+        with pytest.raises(ScenarioRecursionError) as exc_info:
+            spec_from_yaml(RECURSIVE_DIRECT)
+
+        message = str(exc_info.value)
+        assert "recursive" in message
+        assert "depth" not in message
+
+    def test_cycle_is_caught_independently_of_the_depth_limit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The regression this fix exists for.
+
+        Before the explicit check, the only thing preventing an uncontrolled
+        `RecursionError` was `MAX_YAML_DEPTH` happening to be smaller than
+        Python's recursion limit. Raising it above that limit used to produce
+        a bare `RecursionError`; it must now still be a controlled error.
+        """
+        monkeypatch.setattr(scenario_loader, "MAX_YAML_DEPTH", 5000)
+        # Precondition: the depth guard can no longer fire before the stack
+        # runs out, so only the cycle check can save us here.
+        assert sys.getrecursionlimit() < scenario_loader.MAX_YAML_DEPTH
+
+        with pytest.raises(ScenarioRecursionError):
+            spec_from_yaml(RECURSIVE_DIRECT)
+
+    def test_cycle_detected_before_validation_sees_it(self) -> None:
+        """Pydantic must never be handed a cyclic structure."""
+        with pytest.raises(ScenarioRecursionError):
+            parse_yaml(RECURSIVE_DIRECT)
+
+
+class TestNonCyclicAliases:
+    """Legitimate anchors and aliases must keep working."""
+
+    def test_shared_anchor_is_accepted(self) -> None:
+        """One anchor referenced from two places is not a cycle."""
+        spec = spec_from_yaml(SHARED_ALIAS)
+
+        assert spec.persona.traits == ["impatient"]
+        assert spec.expected_outcomes == ["impatient"]
+
+    def test_repeated_sibling_references_are_not_mistaken_for_a_cycle(self) -> None:
+        """An active-path set, not a seen-ever set.
+
+        A "seen anywhere" implementation would wrongly reject the second and
+        subsequent references to a shared anchor.
+        """
+        content = "name: fanout\nlanguage: hi-IN\nshared: &s\n  a: 1\n  b: 2\n" + "".join(
+            f"ref{index}: *s\n" for index in range(50)
+        )
+
+        document = parse_yaml(content)
+
+        assert document["ref0"] is document["shared"]
+        assert document["ref49"] is document["shared"]
+
+    def test_deeply_shared_but_acyclic_structure_is_measured(self) -> None:
+        """A diamond-shaped DAG is acyclic and must be walked, not refused."""
+        document = parse_yaml(DIAMOND_ALIAS)
+
+        assert document["left"]["down"] is document["leaf"]
+        assert document["right"]["down"] is document["leaf"]
+        assert document["top"]["a"] is document["left"]
 
 
 class TestSizeLimits:
