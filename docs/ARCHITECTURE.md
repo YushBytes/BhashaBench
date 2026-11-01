@@ -1,10 +1,14 @@
 # BhashaBench — Architecture
 
-> **Status.** Phase 1 of 15 is complete. This document describes the *planned*
-> architecture. Only the components marked **Implemented** exist today;
-> everything else is design intent, recorded so that each phase has a target
-> to build against. Nothing here should be read as a claim that an
+> **Status.** Phases 1 and 2 of 15 are complete. This document describes the
+> *planned* architecture. Only the components marked **Implemented** exist
+> today; everything else is design intent, recorded so that each phase has a
+> target to build against. Nothing here should be read as a claim that an
 > unimplemented component is operational.
+>
+> Phase 2 added persistence and the scenario engine. For detail see
+> [`DATABASE.md`](DATABASE.md) (schema, ER diagram, migrations) and
+> [`SCENARIO_FORMAT.md`](SCENARIO_FORMAT.md) (the YAML format).
 
 ---
 
@@ -39,9 +43,10 @@ reasoning behind its score.
          ┌───────────────────────┼───────────────────────┐
          │                       │                       │
 ┌────────▼────────┐   ┌──────────▼──────────┐   ┌────────▼─────────┐
-│  Orchestrator   │   │  Scenario registry  │   │  PostgreSQL      │
-│  (Phase 9)      │   │  (Phase 3)          │   │  (service up,    │
-└────────┬────────┘   └─────────────────────┘   │   no schema yet) │
+│  Orchestrator   │   │  Scenario engine    │   │  PostgreSQL 16   │
+│  (Phase 9)      │   │  ◀── Implemented    │   │  ◀── Implemented │
+└────────┬────────┘   └─────────────────────┘   │  5 tables via    │
+         │                                      │  Alembic         │
          │                                      └──────────────────┘
          │
          ├──────────────┬──────────────┬──────────────┬──────────────┐
@@ -60,13 +65,17 @@ reasoning behind its score.
 
 ---
 
-## 3. Implemented today (Phase 1)
+## 3. Implemented today (Phases 1–2)
 
 ### 3.1 Backend — `backend/app/`
 
-A four-layer FastAPI application. The layering exists so that logic is
-testable without HTTP and so provider integrations in phases 4–8 have an
-obvious home.
+A layered FastAPI application. The layering exists so that logic is testable
+without HTTP and so provider integrations in phases 4–8 have an obvious home.
+
+Repositories hold every SQL statement and never commit; services own the
+transaction boundary and raise domain errors (`NotFoundError`,
+`ConflictError`) rather than `HTTPException`, so service code stays usable
+outside a request and the HTTP mapping lives only in `main.py`.
 
 | Layer | Package | Responsibility |
 |-------|---------|----------------|
@@ -74,7 +83,9 @@ obvious home.
 | Contracts | `schemas/` | Pydantic request/response models; the API's public shape. |
 | Logic | `services/` | Behaviour, callable and testable without a client. |
 | Config | `core/` | Settings, validation, cross-cutting concerns. |
-| Persistence | `models/` | Empty — no tables until Phase 2. |
+| Data access | `repositories/` | Every SQL statement. Takes a `Session`, never commits. |
+| Persistence | `models/` | SQLAlchemy ORM — five tables, owned by Alembic. |
+| Engine | `db/` | Declarative base, engine, session dependency. |
 | Helpers | `utils/` | Small, dependency-free utilities. |
 
 **Endpoints.**
@@ -84,6 +95,10 @@ obvious home.
 | `GET` | `/` | Product name, tagline, version, environment, docs path |
 | `GET` | `/health` | `{status, version}` — cheap liveness probe |
 | `GET` | `/api/v1/health` | Per-subsystem health, uptime, UTC timestamp |
+| `POST`/`GET` | `/api/v1/suites`, `/api/v1/suites/{id}` | Test suite CRUD |
+| `POST`/`GET` | `/api/v1/suites/{id}/scenarios` | Scenario creation and listing |
+| `GET`/`PUT`/`DELETE` | `/api/v1/scenarios/{id}` | Scenario detail, replace, delete |
+| `POST` | `/api/v1/scenarios/validate` | Validate YAML without storing it |
 
 **Design decisions.**
 
@@ -101,11 +116,17 @@ obvious home.
   `{"error": {type, message, status_code}}` shape. Clients parse one
   structure; unexpected exceptions are logged server-side and never leak
   internals to the caller.
-- **Honest health reporting.** `services/health.py` reports the `database`
-  component as `degraded` with the reason *"not probed — persistence layer not
-  implemented in this phase"*, and the aggregate status follows the worst
-  component. A green tick the system cannot justify is worse than no tick.
-  Phase 2 replaces that branch with a real probe.
+- **Honest health reporting.** `services/health.py` probes the database with
+  `SELECT 1` and reports what it finds: `ok` when reachable, `unavailable`
+  when not — `unavailable` rather than `degraded`, because without the
+  database every suite and scenario endpoint fails. The aggregate follows the
+  worst component. A green tick the system cannot justify is worse than no
+  tick.
+- **The probe is injected, not imported.** `DatabaseProbe` in `api/deps.py`
+  supplies it. Imported directly, the probe would always use the
+  process-wide engine built from global settings, so a test overriding
+  `Settings` would still report on whatever database the developer's `.env`
+  pointed at — the endpoint would look healthy for the wrong reason.
 - **No credentials in health output.** `describe_environment()` returns only
   whether a source is `present`/`absent` and `configured`/`default` — never a
   value. A test asserts the root payload contains neither `SECRET_KEY` nor
@@ -115,7 +136,29 @@ obvious home.
   staging/production stops the boot rather than surfacing on first request.
   OpenAPI docs are disabled when `APP_ENV=production`.
 
-### 3.2 Frontend — `frontend/`
+### 3.2 Persistence and the scenario engine (Phase 2)
+
+Five tables, created by a single Alembic migration: `test_suites`,
+`scenarios`, `test_runs`, `call_sessions`, `conversation_turns`. Only the
+first two are written to by the API; the other three are foundational schema
+so later phases have a stable shape to write into.
+
+The application never calls `create_all()` — Alembic owns the schema, so what
+runs in development is what will run anywhere else. `alembic.ini` sits in
+`backend/` so it is present inside the Docker image, and `env.py` reads the
+database URL from application settings so a password never enters a committed
+file.
+
+A scenario is authored as YAML and validated against `ScenarioSpec` before
+storage. The validated document is persisted as one JSONB column, with
+`name`, `description` and `language` projected into real columns because those
+are what the API filters, sorts and enforces uniqueness on. YAML is parsed
+only with `yaml.safe_load`, under size, node-count and nesting limits.
+
+Full detail, including the reasoning behind every schema decision, is in
+[`DATABASE.md`](DATABASE.md) and [`SCENARIO_FORMAT.md`](SCENARIO_FORMAT.md).
+
+### 3.3 Frontend — `frontend/`
 
 Next.js App Router with TypeScript and Tailwind CSS. Phase 1 ships a
 dark-first status shell: product identity, the current phase, and the planned
@@ -123,7 +166,7 @@ test-suite capabilities labelled as planned. It renders **no analytics and no
 fabricated data**, because there is nothing real to show yet. Phase 13
 replaces it with the operational dashboard.
 
-### 3.3 Configuration
+### 3.4 Configuration
 
 Resolution order, lowest precedence first: field defaults → `.env` at the
 repository root → real process environment variables. Docker Compose and CI
@@ -136,7 +179,7 @@ be dead code, and the request shapes the Gnani and Twilio integrations need
 are not yet known. `Settings` uses `extra="ignore"` so a complete `.env` does
 not break startup.
 
-### 3.4 Containers
+### 3.5 Containers
 
 | Service | Image / build | Notes |
 |---------|---------------|-------|

@@ -6,17 +6,22 @@ An automated testing and benchmarking platform for Indian-language voice
 bots — simulated callers, realistic audio degradation and automated
 conversation scoring.
 
-> ### Project status: Phase 1 of 15 — Foundation complete
+> ### Project status: Phase 2 of 15 complete
 >
-> This repository currently contains the **project foundation only**: a
-> running FastAPI backend with health endpoints, a Next.js status shell, a
-> Docker Compose stack and the test/lint toolchain.
+> **Phase 1 — Foundation.** FastAPI backend, health endpoints, Next.js status
+> shell, Docker Compose stack, test and lint toolchain.
+>
+> **Phase 2 — Database & scenario engine.** PostgreSQL persistence via
+> Alembic migrations, and the scenario engine: YAML authoring with strict
+> validation, plus CRUD endpoints for test suites and scenarios.
 >
 > **No calls are placed, no speech is processed and no scores are produced
-> yet.** Speech services, telephony, the degradation pipeline and evaluation
-> arrive in later phases — see [the roadmap](docs/DEVELOPMENT_ROADMAP.md).
-> Nothing in this README should be read as a claim that an unimplemented
-> feature works.
+> yet.** Telephony, speech services, audio degradation, caller simulation and
+> automated evaluation arrive in later phases — see
+> [the roadmap](docs/DEVELOPMENT_ROADMAP.md). The `TestRun`, `CallSession` and
+> `ConversationTurn` tables exist as foundational schema only; nothing writes
+> to them. Nothing in this README should be read as a claim that an
+> unimplemented feature works.
 
 ---
 
@@ -69,12 +74,12 @@ explicit criteria.
 
 ## What BhashaBench will do
 
-None of the following is implemented yet. Each item names the phase that
-delivers it.
+Scenario definitions landed in Phase 2. Nothing else below is implemented
+yet; each item names the phase that delivers it.
 
 | Capability | What it does | Phase |
 |------------|--------------|-------|
-| Scenario definitions | Declare a persona, a language, an objective and success criteria in YAML | 3 |
+| ~~Scenario definitions~~ | **Done (Phase 2).** Declare a persona, a language, an objective and success criteria in YAML | 2 |
 | Speech to text | Transcribe bot audio via Gnani Prisma, with code-mixing support | 4 |
 | Text to speech | Synthesise caller speech via Gnani Timbre, matched to the persona | 5 |
 | Simulated callers | An AI caller that pursues a goal rather than replaying a script, driven by Gnani Evon | 6 |
@@ -100,15 +105,17 @@ delivers it.
    │  FastAPI backend      │   implemented
    │  /  /health           │
    │  /api/v1/health       │
+   │  /api/v1/suites       │
+   │  /api/v1/scenarios    │
    └───────────┬───────────┘
                │
    ┌───────────┴────────────┬──────────────────────┐
    │                        │                      │
 ┌──▼──────────────┐  ┌──────▼────────┐   ┌─────────▼─────────┐
-│ Orchestrator    │  │ Scenario      │   │ PostgreSQL        │
-│ (Phase 9)       │  │ registry (P3) │   │ service runs;     │
-└──┬──────────────┘  └───────────────┘   │ no schema yet     │
-   │                                     └───────────────────┘
+│ Orchestrator    │  │ Scenario      │   │ PostgreSQL 16     │
+│ (Phase 9)       │  │ engine        │   │ 5 tables, owned   │
+└──┬──────────────┘  │ implemented   │   │ by Alembic        │
+   │                 └───────────────┘   └───────────────────┘
    ├── Caller agent — Gnani Evon      (Phase 6)
    ├── Speech to text — Gnani Prisma  (Phase 4)
    ├── Text to speech — Gnani Timbre  (Phase 5)
@@ -125,11 +132,15 @@ future provider has an obvious home:
 | Contracts | `backend/app/schemas/` | Pydantic request/response models |
 | Logic | `backend/app/services/` | Behaviour, testable without a client |
 | Config | `backend/app/core/` | Settings and validation |
-| Persistence | `backend/app/models/` | Empty until Phase 2 |
+| Data access | `backend/app/repositories/` | Every SQL statement; takes a Session, never commits |
+| Persistence | `backend/app/models/` | SQLAlchemy ORM models |
+| Engine | `backend/app/db/` | Declarative base, engine, session dependency |
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the design decisions
-behind this, including why the `database` health component reports
-`degraded` rather than `ok`.
+Further reading:
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — design decisions
+- [`docs/DATABASE.md`](docs/DATABASE.md) — schema, ER diagram, migrations
+- [`docs/SCENARIO_FORMAT.md`](docs/SCENARIO_FORMAT.md) — the scenario YAML format
 
 ---
 
@@ -139,6 +150,8 @@ behind this, including why the `database` health component reports
 |------|--------|---------|
 | Backend | Python, FastAPI, Uvicorn | 3.12+, FastAPI 0.162 |
 | Validation & config | Pydantic, pydantic-settings | 2.14, 2.16 |
+| Persistence | SQLAlchemy (2.0-style typed ORM), Alembic, psycopg | 2.1, 1.20, 3.3 |
+| Scenario format | PyYAML (`safe_load` only) | 6.0 |
 | Backend tooling | pytest, Ruff | 9.2, 0.17 |
 | Frontend | Next.js (App Router), React, TypeScript | 16.4, 19.3, 5.x |
 | Styling | Tailwind CSS | 4.x |
@@ -159,11 +172,14 @@ BhashaBench/
 │   │   ├── api/               HTTP layer
 │   │   │   ├── deps.py        injectable dependencies
 │   │   │   └── v1/            versioned routes (health.py, router.py)
-│   │   ├── models/            database models (empty until Phase 2)
-│   │   ├── schemas/common.py  response models and error envelope
-│   │   ├── services/health.py health aggregation
+│   │   ├── db/                declarative base, engine, session dependency
+│   │   ├── models/            SQLAlchemy ORM models (5 tables)
+│   │   ├── repositories/      every SQL statement lives here
+│   │   ├── schemas/           response models, error envelope, scenario spec
+│   │   ├── services/          health, scenario loader, suite + scenario logic
 │   │   └── utils/timing.py    UTC clock helpers
-│   ├── tests/                 35 tests across 3 modules
+│   ├── alembic/               migrations (alembic.ini is in backend/)
+│   ├── tests/                 234 tests across 6 modules
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
 │   └── Dockerfile             multi-stage: development / production
@@ -173,13 +189,15 @@ BhashaBench/
 │   ├── lib/content.ts         typed product copy and phase status
 │   ├── public/
 │   └── Dockerfile             multi-stage: development / builder / production
-├── scenarios/                 test scenario definitions        (Phase 3)
+├── scenarios/                 scenario YAML definitions
 ├── benchmarks/                benchmark suite definitions      (Phase 11)
 ├── sample_bot/                reference bot to test against    (Phase 6)
 ├── scripts/                   operational scripts
 ├── docs/
 │   ├── ARCHITECTURE.md
-│   └── DEVELOPMENT_ROADMAP.md
+│   ├── DATABASE.md
+│   ├── DEVELOPMENT_ROADMAP.md
+│   └── SCENARIO_FORMAT.md
 ├── .github/workflows/         CI pipelines                     (Phase 14)
 ├── docker-compose.yml
 ├── .env.example
@@ -292,14 +310,14 @@ that later phases will consume. Only the variables below are read by code
 today; the rest are declared so the surface is stable, and are inert until
 their phase lands.
 
-### Read by Phase 1
+### Read by the application today
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `APP_ENV` | `development`, `staging`, `production` or `test`. Non-development values disable OpenAPI docs and reject a placeholder `SECRET_KEY`. | `development` |
 | `APP_VERSION` | Version reported by the API | `0.1.0` |
 | `SECRET_KEY` | Signing key; must be overridden outside development | placeholder |
-| `DATABASE_URL` | SQLAlchemy-style URL; validated and reported, not yet connected | local Postgres |
+| `DATABASE_URL` | SQLAlchemy-style URL. **Its port must match `POSTGRES_HOST_PORT`** or host-side tooling, including `alembic upgrade head`, will connect to whatever else is on the old port | local Postgres |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Consumed by the Compose `db` service | — |
 | `CORS_ORIGINS` | Comma-separated allowed browser origins | `http://localhost:3000` |
 | `NEXT_PUBLIC_API_BASE_URL` | Backend URL used by the frontend | `http://localhost:8000` |
@@ -342,6 +360,26 @@ ruff format --check .                # verify formatting without writing
 uvicorn app.main:app --reload --app-dir backend
 ```
 
+### Migrations
+
+Run from `backend/`, where `alembic.ini` lives.
+
+```bash
+cd backend
+
+alembic upgrade head                 # apply pending migrations
+alembic current                      # show the applied revision
+alembic history --verbose            # list revisions
+alembic downgrade -1                 # undo the most recent migration
+alembic check                        # fail if models and migrations drifted
+alembic revision --autogenerate -m "description"
+alembic upgrade head --sql           # print the SQL without running it
+```
+
+Add new models to `app/models/__init__.py` first, or autogenerate will not see
+them. Read every generated migration: autogenerate misses renames and cannot
+know about data backfills. See [`docs/DATABASE.md`](docs/DATABASE.md).
+
 ### Frontend
 
 ```bash
@@ -359,6 +397,8 @@ npm run typecheck                    # tsc --noEmit
 docker compose config --quiet        # validate docker-compose.yml
 docker compose up -d --build         # rebuild and start detached
 docker compose exec backend pytest   # run tests inside the container
+docker compose exec backend alembic upgrade head
+docker compose exec backend alembic current
 docker compose exec db psql -U bhashabench -d bhashabench
 ```
 
@@ -366,17 +406,41 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite has **35 tests** in three modules:
+The backend suite has **234 tests** in six modules:
 
-| Module | Covers |
-|--------|--------|
-| `test_health.py` | Root, liveness and versioned health endpoints; the error envelope; a check that no secret appears in a response |
-| `test_config.py` | Defaults, environment overrides, comma-separated list parsing, validation failures, production behaviour, settings caching |
-| `test_app_metadata.py` | App title/summary/version, the generated OpenAPI document, and the application factory |
+| Module | Tests | Covers |
+|--------|-------|--------|
+| `test_health.py` | 17 | Root, liveness and versioned health endpoints; the database probe reachable and unreachable; the error envelope; a check that no secret appears in a response |
+| `test_config.py` | 14 | Defaults, environment overrides, comma-separated list parsing, validation failures, production behaviour, settings caching |
+| `test_app_metadata.py` | 9 | App title/summary/version, the generated OpenAPI document, the application factory |
+| `test_scenario_spec.py` | 95 | YAML syntax, unsafe payloads, size and expansion limits, every validation rule, round-trip serialisation, file loading |
+| `test_database.py` | 37 | Connection, the migrated schema, model creation, relationships, foreign-key delete behaviour, every constraint, transaction rollback |
+| `test_api_suites_scenarios.py` | 62 | All nine endpoints, pagination, duplicates, unknown ids, malformed UUIDs, oversized bodies, error-envelope shape |
 
 ```bash
 pytest
 ```
+
+### The database tests need PostgreSQL
+
+`test_database.py` and `test_api_suites_scenarios.py` run against a **real
+PostgreSQL** — not SQLite, because the schema uses JSONB, native UUIDs and
+`ON DELETE RESTRICT`, none of which SQLite models faithfully.
+
+```bash
+docker compose up -d db              # start it first
+pytest
+```
+
+The fixtures create a dedicated `bhashabench_test` database, migrate it with
+Alembic (so the migration is exercised on every run) and wrap each test in a
+transaction that is rolled back. Your own database is never touched.
+
+If PostgreSQL is unreachable those tests are **skipped with an explicit
+reason** naming the host and port tried, plus a session-end banner stating
+they were skipped and not passed. They never silently pass.
+
+Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
 ======================= 35 passed in 0.40s =======================
@@ -396,39 +460,83 @@ cd frontend && npm run lint && npm run typecheck && npm run build
 
 ## API endpoints
 
+### Meta and health
+
 | Method | Path | Returns |
 |--------|------|---------|
 | `GET` | `/` | Product name, tagline, version, environment, docs path |
-| `GET` | `/health` | `{"status": "ok", "version": "0.1.0"}` |
+| `GET` | `/health` | `{"status": "ok", "version": "0.1.0"}` — cheap liveness probe |
 | `GET` | `/api/v1/health` | Per-subsystem health, uptime and a UTC timestamp |
 
-`GET /api/v1/health` reports the aggregate as **`degraded`**, not `ok`. That
-is deliberate: the `database` component is honestly reported as not probed,
-because Phase 1 opens no connection, and the aggregate follows the worst
-component.
+### Test suites
+
+| Method | Path | Returns |
+|--------|------|---------|
+| `POST` | `/api/v1/suites` | 201 with the created suite. 409 if the name is taken |
+| `GET` | `/api/v1/suites` | Paginated list, newest first (`limit`, `offset`) |
+| `GET` | `/api/v1/suites/{suite_id}` | One suite with its scenario count. 404 if unknown |
+
+### Scenarios
+
+| Method | Path | Returns |
+|--------|------|---------|
+| `POST` | `/api/v1/suites/{suite_id}/scenarios` | 201. Takes `{"yaml": "..."}` |
+| `GET` | `/api/v1/suites/{suite_id}/scenarios` | Paginated summaries, ordered by name |
+| `GET` | `/api/v1/scenarios/{scenario_id}` | One scenario with its full specification |
+| `PUT` | `/api/v1/scenarios/{scenario_id}` | Replaces the definition. Takes `{"yaml": "..."}` |
+| `DELETE` | `/api/v1/scenarios/{scenario_id}` | 204 |
+| `POST` | `/api/v1/scenarios/validate` | Validates YAML without storing anything |
+
+Scenario names are unique **per suite**, so two suites may each hold an
+`appointment_booking`. See
+[`docs/SCENARIO_FORMAT.md`](docs/SCENARIO_FORMAT.md) for the YAML format.
+
+`POST /api/v1/scenarios/validate` returns **200 even for invalid YAML**, with
+the verdict in `valid` and field-addressed errors. A 4xx there would make
+"your YAML is wrong" indistinguishable from "the validation endpoint is
+broken". An oversized body is the exception and returns 413.
+
+### Health output
+
+`GET /api/v1/health` probes the database with `SELECT 1` and reports what it
+finds. The `database` component is `ok` when reachable and `unavailable` when
+not — `unavailable` rather than `degraded`, because without the database every
+suite and scenario endpoint fails. The aggregate follows the worst component.
 
 ```json
 {
-  "status": "degraded",
+  "status": "ok",
   "service": "BhashaBench",
   "version": "0.1.0",
   "api_version": "v1",
   "environment": "development",
-  "timestamp": "2026-11-01T14:33:13.855805Z",
-  "uptime_seconds": 0.829,
+  "timestamp": "2026-11-01T17:40:11.204881Z",
+  "uptime_seconds": 1.412,
   "components": [
     { "name": "api", "status": "ok", "detail": "FastAPI application is serving requests." },
-    { "name": "configuration", "status": "ok", "detail": "Settings loaded for environment 'development'; .env file absent, DATABASE_URL default." },
-    { "name": "database", "status": "degraded", "detail": "Not probed. A connection URL is configured but the persistence layer is not implemented in this phase." }
+    { "name": "configuration", "status": "ok", "detail": "Settings loaded for environment 'development'; .env file present, DATABASE_URL configured." },
+    { "name": "database", "status": "ok", "detail": "Connected; SELECT 1 succeeded." }
   ]
 }
 ```
 
+### Errors
+
 Every error, including unhandled exceptions, uses one envelope:
 
 ```json
-{ "error": { "type": "not_found", "message": "Not Found", "status_code": 404 } }
+{ "error": { "type": "not_found", "message": "suite '...' does not exist", "status_code": 404 } }
 ```
+
+| Status | `type` | When |
+|--------|--------|------|
+| 404 | `not_found` | Unknown suite or scenario id |
+| 409 | `conflict` | Duplicate suite name, or duplicate scenario name in a suite |
+| 413 | `payload_too_large` | YAML beyond the size limit |
+| 422 | `validation_error` | Malformed request body or a non-UUID path segment |
+| 422 | `yaml_syntax_error` | YAML that will not parse, or an unsafe tag |
+| 422 | `scenario_validation_error` | Parsed, but violates the scenario schema |
+| 500 | `internal_error` | Unhandled exception; details are logged, never returned |
 
 ---
 
@@ -441,7 +549,7 @@ documentation. Full detail in
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | Project foundation | ✅ Complete |
-| 2 | Data model & persistence | ⬜ Not started |
+| 2 | Database & scenario engine | ✅ Complete |
 | 3 | Scenario definition format | ⬜ Not started |
 | 4 | Speech to text (Gnani Prisma) | ⬜ Not started |
 | 5 | Text to speech (Gnani Timbre) | ⬜ Not started |

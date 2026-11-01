@@ -4,9 +4,9 @@ BhashaBench is being built in 15 controlled phases. Each phase is a reviewable
 increment: it ends with working code, passing tests and updated documentation.
 A phase is not started until the previous one is approved.
 
-**Current status: Phase 1 complete. Phases 2–15 not started.**
+**Current status: Phases 1 and 2 complete. Phases 3–15 not started.**
 
-Nothing in phases 2–15 is implemented. Where this document describes a
+Nothing in phases 3–15 is implemented. Where this document describes a
 component in the present tense, read it as the *intended* design for that
 phase, not as existing behaviour.
 
@@ -17,8 +17,8 @@ phase, not as existing behaviour.
 | # | Phase | Status |
 |---|-------|--------|
 | 1 | Project Foundation | ✅ Complete |
-| 2 | Data Model & Persistence | ⬜ Not started |
-| 3 | Scenario Definition Format | ⬜ Not started |
+| 2 | Database & Scenario Engine | ✅ Complete |
+| 3 | Scenario Library & Tooling | ⬜ Not started |
 | 4 | Gnani Prisma — Speech to Text | ⬜ Not started |
 | 5 | Gnani Timbre — Text to Speech | ⬜ Not started |
 | 6 | AI Caller Simulation (Gnani Evon) | ⬜ Not started |
@@ -59,37 +59,50 @@ telephony, no scenario execution.
 
 ---
 
-## Phase 2 — Data Model & Persistence
+## Phase 2 — Database & Scenario Engine ✅
 
-Define the durable shape of a test run.
+**Delivered.** Define the durable shape of a test run, and the scenario
+authoring format.
 
-- SQLAlchemy models: `Scenario`, `TestRun`, `Call`, `Turn`, `Evaluation`,
-  `BenchmarkResult`.
-- Alembic migrations, with the initial revision checked in.
-- Async engine and session dependency; connection pooling.
-- Replace the `database` health component's `degraded` placeholder with a real
-  `SELECT 1` probe.
-- Repository-level tests against a throwaway PostgreSQL container.
+- SQLAlchemy 2.0-style typed models: `TestSuite`, `Scenario`, `TestRun`,
+  `CallSession`, `ConversationTurn`. UUID keys, `timestamptz`, explicit
+  `ondelete` on every foreign key, CHECK-constrained status columns.
+- Alembic migrations with the initial revision checked in, a verified
+  downgrade, and `alembic check` for drift.
+- Synchronous engine and session dependency with pooling. (Synchronous, not
+  async — see `app/db/session.py` for why.)
+- The `database` health component now runs a real `SELECT 1` probe, reporting
+  `ok` or `unavailable` instead of a hardcoded `degraded`.
+- Repository and service layers; 234 tests, with the database ones running
+  against a real PostgreSQL.
 
-**Exit criteria.** `alembic upgrade head` succeeds against the Compose
-database, and `/api/v1/health` reports the database honestly.
+**Also delivered, moved forward from Phase 3:** the scenario YAML format and
+its strict validation, plus suite and scenario CRUD endpoints. The schema and
+the authoring format are two halves of the same decision, and splitting them
+would have meant storing documents whose shape was not yet defined.
+
+**Exit criteria — met.** `alembic upgrade head` succeeds against the Compose
+database, the downgrade is reversible, and `/api/v1/health` reports the
+database honestly.
 
 ---
 
-## Phase 3 — Scenario Definition Format
+## Phase 3 — Scenario Library & Tooling
 
-A scenario is the unit of testing: a persona, a goal and a set of
-expectations.
+The scenario *format*, its validation and its CRUD endpoints were delivered in
+Phase 2. What remains:
 
-- YAML schema with Pydantic validation: persona, language, locale, objective,
-  conversation turns, success criteria, degradation profile.
-- Loader with precise, line-aware error messages.
-- `scenarios/` populated with reference scenarios across Indian languages.
-- CRUD endpoints under `/api/v1/scenarios`.
-- A scenario-validation entry point in `scripts/`.
+- `scenarios/` populated with reference scenarios across all supported Indian
+  languages (Phase 2 ships one documented reference file).
+- Bulk import and export: load a directory of YAML files into a suite, and
+  dump a suite back to files.
+- A scenario-validation CLI entry point in `scripts/`, for use in CI before
+  anything is stored.
+- Suite update and delete endpoints, and scenario copy/move between suites.
+- Code-mixing annotation on scenarios, ahead of Phase 11's benchmarks.
 
-**Exit criteria.** An invalid scenario is rejected with an actionable message;
-valid scenarios round-trip through the API.
+**Exit criteria.** A directory of scenario files can be validated offline and
+imported into a suite in one command.
 
 ---
 
