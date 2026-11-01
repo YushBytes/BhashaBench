@@ -8,19 +8,36 @@
 # CI regardless of what the developer has installed locally.
 FROM python:3.12-slim AS base
 
+# PIP_DEFAULT_TIMEOUT / PIP_RETRIES: pip's 15s default read timeout is too
+# short on connections with unreliable sustained throughput. Observed here:
+# pip established the HTTPS connection to files.pythonhosted.org but the
+# read stalled, failing with "TimeoutError: The read operation timed out"
+# and the misleading "No matching distribution found". With these values the
+# same install completes in ~220s. They only raise patience, never relax
+# version resolution, so the pinned requirements still bind exactly.
 # PYTHONDONTWRITEBYTECODE: no .pyc clutter in the image layer.
 # PYTHONUNBUFFERED:        logs reach `docker logs` immediately.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRIES=10
 
 WORKDIR /app
 
 # curl is needed by the Compose health check below.
-RUN apt-get update \
-    && apt-get install --no-install-recommends -y curl \
+#
+# Acquire::ForceIPv4 is deliberate. deb.debian.org publishes both A and AAAA
+# records, and apt tries the AAAA address first. On a host whose Docker build
+# network has no working IPv6 egress the connection is blackholed rather than
+# refused, so apt retries with long timeouts and the build hangs indefinitely
+# (observed here: >25 minutes with no output, versus ~30 seconds with this
+# flag). Forcing IPv4 makes the build deterministic on such networks, and is
+# a no-op where IPv6 works.
+RUN apt-get -o Acquire::ForceIPv4=true update \
+    && apt-get -o Acquire::ForceIPv4=true install --no-install-recommends -y curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Dependencies are copied and installed before application code so that the
