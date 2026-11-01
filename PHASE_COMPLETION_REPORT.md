@@ -793,6 +793,14 @@ What a reviewer may want to look at first:
 
 ## 14. Recommended next action
 
+> **Completed.** The owner approved Phase 2, and this integration has since
+> been carried out: `main` was fast-forwarded through Phase 1 (`e69930c`)
+> and Phase 2 (`3aa5f19`), verified, pushed, and the `develop`,
+> `feature/phase-01-foundation` and `feature/phase-02-database-scenarios`
+> branches were deleted locally and remotely after ancestry checks. `main`
+> is now the only branch. The steps below are retained as the record of
+> what was planned and done.
+
 After owner approval:
 
 1. **Integrate the approved history into `main`.** `main` is still at

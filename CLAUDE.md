@@ -130,10 +130,15 @@ ruff check . && ruff format --check .   # from the repository root
 
 ## Git
 
-- Branch from `develop`, named `feature/phase-NN-short-description`.
+- `main` is the single authoritative branch and holds all approved work.
+  Start new work from the latest `main`, on a temporary branch named
+  `feature/phase-NN-short-description`. Delete it after integration.
+  There is no `develop` branch - it was removed once Phases 1 and 2 were
+  integrated into `main`.
 - Conventional Commits. Explain **why** in the body, not just what.
 - Never force-push or rewrite pushed history.
-- Never merge into `main` without being asked.
+- Never merge into `main` without being asked, and never integrate a phase
+  before the owner has approved it.
 - Review `git diff --cached` before committing: no secrets, no build
   artefacts.
 

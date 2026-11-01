@@ -17,9 +17,11 @@ be verifiable on its own.
 Two rules matter more than anything else here:
 
 1. **Never claim something works when it does not.** If a subsystem is not
-   implemented, report it as `degraded` or `planned` with a reason — not as
-   `ok`. The `database` component in `/api/v1/health` is the reference
-   example: it reports "not probed" rather than green.
+   implemented, report it as `degraded`, `unavailable` or `planned` with a
+   reason — not as `ok`. The `database` component in `/api/v1/health` is the
+   reference example: in Phase 1 it reported "not probed" rather than green,
+   and Phase 2 replaced that with a real `SELECT 1` so it now reports `ok` or
+   `unavailable` based on what it actually finds.
 2. **Never commit a secret.** `.env` is git-ignored. Credentials belong in
    your local `.env` or in GitHub Environments, never in a tracked file,
    never in `.env.example`, and never in a log line or health response.
@@ -55,11 +57,20 @@ docker compose up --build
 
 ## Branching
 
+`main` is the **single authoritative branch**. It holds the complete approved
+project history, and every completed and approved phase is integrated into it.
+
 | Branch | Purpose |
 |--------|---------|
-| `main` | Released, reviewed work. Protected; never commit directly. |
-| `develop` | Integration branch. Feature branches merge here first. |
-| `feature/*` | One unit of work. Branch from `develop`. |
+| `main` | The authoritative branch. All approved work lives here. |
+| `feature/*` | A temporary branch for one unit of work. Branch from `main`. |
+
+There is no long-lived integration branch. A `develop` branch existed while
+Phases 1 and 2 were being built and was removed once both were integrated into
+`main`; the history it carried is preserved in `main`.
+
+Feature branches are optional and temporary: start one from the latest `main`,
+and delete it once its work is integrated and verified.
 
 ### Naming
 
@@ -83,8 +94,9 @@ refactor/split-health-service
 test/config-validation-cases
 ```
 
-Keep branches short-lived. Rebase onto `develop` rather than merging it back
-into your branch, so history stays linear.
+Keep branches short-lived. Rebase onto `main` rather than merging it back into
+your branch, so history stays linear and the eventual integration can be a
+fast-forward.
 
 ---
 
@@ -214,7 +226,7 @@ warning fails the suite. Fix the cause rather than widening the filter.
 
 ### Before opening
 
-- [ ] Branched from `develop` and rebased onto its current tip
+- [ ] Branched from `main` and rebased onto its current tip
 - [ ] `pytest` passes
 - [ ] `ruff check .` and `ruff format --check .` pass
 - [ ] `npm run lint`, `npm run typecheck` and `npm run build` pass
@@ -231,7 +243,9 @@ output for a behaviour change, and a screenshot for a UI change.
 
 ### Review
 
-- Target `develop`. Only release branches merge into `main`.
+- Target `main`. Integration is preferably a fast-forward, which is why
+  rebasing onto the current `main` before opening the request matters.
+- Never force-push, and never rewrite history that has been pushed.
 - One approval required; CI must be green.
 - Squash-merge, with a conventional-commit subject on the squashed commit.
 - Address feedback with new commits rather than force-pushing over it, so
