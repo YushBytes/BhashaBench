@@ -11,7 +11,23 @@
 # serves fine and `--reload` degrades to polling-based file watching. Add
 # `uvicorn[standard]` deliberately when optimising a production deployment.
 
+# -- Web framework ------------------------------------------------------------
 fastapi~=0.162.0
 uvicorn~=0.54.0
 pydantic~=2.14.0
 pydantic-settings~=2.16.0
+
+# -- Persistence (Phase 2) ----------------------------------------------------
+# SQLAlchemy 2.1 keeps the 2.0-style typed ORM API this project uses
+# (`DeclarativeBase`, `Mapped`, `mapped_column`, `select()`).
+sqlalchemy~=2.1.0
+alembic~=1.20.0
+# `psycopg` is psycopg 3. The `[binary]` extra ships prebuilt wheels so no
+# local libpq or C toolchain is needed - important on Windows and in the slim
+# container image. The driver is used synchronously; see docs/ARCHITECTURE.md
+# for why this phase does not adopt an async engine.
+psycopg[binary]~=3.3.0
+
+# -- Scenario definitions (Phase 2) -------------------------------------------
+# Loaded exclusively with `yaml.safe_load`; never `yaml.load`.
+pyyaml~=6.0.0

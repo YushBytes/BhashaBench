@@ -8,6 +8,7 @@ phases can add real dependency probes (database, Gnani, Twilio) in one place.
 from __future__ import annotations
 
 from app.core.config import Settings, describe_environment
+from app.db.session import check_database_connection
 from app.schemas.common import ApiHealthResponse, ComponentHealth, HealthStatus
 from app.utils.timing import monotonic_seconds, utc_now
 
@@ -34,12 +35,13 @@ def _aggregate(components: list[ComponentHealth]) -> HealthStatus:
 def collect_components(settings: Settings) -> list[ComponentHealth]:
     """Describe each subsystem the API currently depends on.
 
-    Phase 1 reports only what it can genuinely verify: that the application is
-    serving requests, and whether configuration was loaded. The database is
-    reported as `degraded` with an explicit reason because no connection is
-    attempted yet - it is not claimed to be healthy.
+    Each component reports only what can be verified. Phase 2 replaced the
+    database placeholder with a real `SELECT 1`, so this endpoint now
+    distinguishes a reachable database from an unreachable one instead of
+    reporting `degraded` either way.
     """
     sources = describe_environment()
+    reachable, db_detail = check_database_connection()
 
     return [
         ComponentHealth(
@@ -56,12 +58,12 @@ def collect_components(settings: Settings) -> list[ComponentHealth]:
             ),
         ),
         ComponentHealth(
+            # `unavailable` rather than `degraded`: without the database every
+            # suite and scenario endpoint fails, so the API is not partly
+            # working - it is not working.
             name="database",
-            status="degraded",
-            detail=(
-                "Not probed. A connection URL is configured but the persistence "
-                "layer is not implemented in this phase."
-            ),
+            status="ok" if reachable else "unavailable",
+            detail=db_detail,
         ),
     ]
 
