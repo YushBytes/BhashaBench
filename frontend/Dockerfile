@@ -23,8 +23,16 @@ FROM base AS development
 
 COPY . .
 
+# Compose mounts /app/.next as an anonymous volume so the container's build
+# cache never mixes with one built on a Windows host. Docker seeds such a
+# volume from the image's content at that path - and creates it root-owned
+# if the path is absent. .next is excluded by .dockerignore, so it would be
+# absent, and `next dev` running as `node` then fails with
+# "EACCES: permission denied, mkdir '/app/.next/dev'". Creating the
+# directory before the chown means the volume inherits node ownership.
+#
 # `node` is a non-root user that ships with the official image.
-RUN chown -R node:node /app
+RUN mkdir -p /app/.next && chown -R node:node /app
 USER node
 
 EXPOSE 3000
