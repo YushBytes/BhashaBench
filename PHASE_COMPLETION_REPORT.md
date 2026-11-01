@@ -3,12 +3,13 @@
 | | |
 |---|---|
 | **Phase** | 1 of 15 — Project Foundation |
-| **Date** | 2026-11-01 |
-| **Repository** | `C:\Users\ayush\OneDrive\Desktop\BhashaBench` |
+| **Date** | 2026-11-01 (closure pass same day) |
+| **Local path** | `C:\Users\ayush\OneDrive\Desktop\BhashaBench` |
+| **GitHub** | <https://github.com/YushBytes/BhashaBench> (private) |
 | **Branch** | `feature/phase-01-foundation` |
-| **Commits** | 6 |
-| **Tracked files** | 60 |
-| **Status** | Complete, with two environment-caused verification gaps recorded in [Known limitations](#known-limitations) |
+| **Commits** | 9 |
+| **Tracked files** | 61 |
+| **Status** | **Closed.** All four images build and run, all three Compose services are healthy, and all three branches are pushed and hash-verified. Remaining items are deferred scope, not unverified claims. |
 
 ---
 
@@ -123,8 +124,16 @@ and `frontend/public/`.
 `frontend/app/layout.tsx`, `frontend/app/page.tsx`,
 `frontend/app/globals.css` and `frontend/package.json` were replaced or edited
 after scaffolding. The default `create-next-app` SVG assets and boilerplate
-`README.md` were deleted. **No pre-existing user file was modified or
-overwritten** — the project directory was empty at the start.
+`README.md` were deleted.
+
+During the closure pass, `backend/Dockerfile` and `frontend/Dockerfile` were
+each amended to fix a real build/run defect (decisions 19–21, detailed in
+§8.2–§8.4), and `docker-compose.yml` plus `.env.example` gained the
+configurable host-port bindings.
+
+**No pre-existing user file was modified or overwritten** — the project
+directory was empty at the start, and the unrelated repository at
+`C:\Users\ayush\OneDrive\Desktop` was left untouched.
 
 ---
 
@@ -150,6 +159,9 @@ overwritten** — the project directory was empty at the start.
 | 16 | **`NoDecode` on `cors_origins`** | pydantic-settings JSON-decodes list-typed fields before validators run, so a comma-separated environment value raised `SettingsError`. `Annotated[list[str], NoDecode]` defers parsing to the field validator. |
 | 17 | **Configurable Compose host ports** | Port 5432 was already bound on this machine by another project's PostgreSQL container, which makes `docker compose up` fail with an opaque port-conflict error. `POSTGRES_HOST_PORT`, `BACKEND_HOST_PORT` and `FRONTEND_HOST_PORT` default to the conventional ports; in-container ports are unchanged. |
 | 18 | **`.gitattributes` pinning LF** | Files authored on Windows must stay parsable and executable inside Linux containers. |
+| 19 | **`Acquire::ForceIPv4=true` for apt** | `deb.debian.org` publishes A and AAAA records; this host's Docker build network resolves the AAAA address but has no IPv6 egress, and the connection is blackholed rather than refused, so apt retries with long timeouts. The step hung >25 minutes; with the flag it completes in 31.6s. A no-op where IPv6 works. See §8.2. |
+| 20 | **`PIP_DEFAULT_TIMEOUT=120`, `PIP_RETRIES=10`** | pip opened its connection to `files.pythonhosted.org` and then stalled mid-read, hitting the 15s default and reporting the misleading `No matching distribution found`. These raise patience only — they never relax version resolution, so the pins still bind exactly. See §8.3. |
+| 21 | **`mkdir -p /app/.next` before `chown` in the frontend image** | Compose mounts `/app/.next` as an anonymous volume. Docker seeds such a volume from the image and creates it **root-owned** when the path is absent — and `.next` is excluded by `.dockerignore`. `next dev` running as `node` then died with `EACCES`. Creating the directory first makes the volume inherit `node` ownership. See §8.4. |
 
 ### Deviations from the phase specification
 
@@ -164,8 +176,13 @@ overwritten** — the project directory was empty at the start.
    for configuration loading and application metadata, and one file per
    concern is clearer than one large file.
 5. `.dockerignore` and `.gitattributes` added (decision 18).
-6. One extra commit (`chore(config)`) beyond the seven suggested, for the
-   port-conflict fix discovered during Docker validation.
+6. Nine commits rather than the seven suggested. Commit boundaries were
+   adjusted to match the actual work: environment and quality configuration
+   landed with the repository scaffold and the tests with the backend, while
+   three commits were added that the original plan could not have
+   anticipated — `chore(config)` for the host-port conflict found during
+   Docker validation, and two `fix(docker)` commits for the network and
+   volume-ownership defects found during the closure pass (decisions 19–21).
 
 All deviations are documented in `docs/ARCHITECTURE.md` §5.
 
@@ -352,249 +369,480 @@ present, so the design is verified as applied rather than merely compiled:
 18 KB emitted CSS.
 
 ---
+## 8. Docker image build results
 
-## 8. Docker validation results
+All four images now build and run. The two failures that blocked the first
+attempt were diagnosed to root cause and fixed in the Dockerfiles; neither fix
+weakens the build.
 
-### Compose configuration — ✅ valid
+### 8.1 Summary
+
+| Image | Target | Tag | Size | Builds | Runs |
+|-------|--------|-----|------|--------|------|
+| Backend | `development` | `bhashabench-backend:latest` | 280 MB | ✅ | ✅ |
+| Backend | `production` | `bhashabench-backend:prod` | 223 MB | ✅ | ✅ |
+| Frontend | `development` | `bhashabench-frontend:latest` | 1.8 GB | ✅ | ✅ |
+| Frontend | `production` | `bhashabench-frontend:prod` | 756 MB | ✅ | ✅ |
+
+### 8.2 Root cause 1 — apt hung indefinitely
+
+```
+#25 [backend base 3/5] RUN apt-get update && apt-get install ... curl
+#25 3.766 Get:4 http://deb.debian.org/debian trixie/main amd64 Packages [9678 kB]
+   ... no further output for >25 minutes ...
+```
+
+Probed from inside the build network:
+
+```
+-- address families for deb.debian.org:80 --
+   IPv4: ['199.232.114.132']
+   IPv6: ['2a04:4e42:5c::644']
+-- TCP connect over IPv4 --   OK 199.232.114.132 in 0.01s
+-- TCP connect over IPv6 --   FAIL: OSError: [Errno 101] Network is unreachable
+```
+
+`deb.debian.org` publishes both A and AAAA records. This host's Docker build
+network resolves the AAAA address but has no IPv6 egress, and the connection
+is blackholed rather than refused, so apt retries with long timeouts.
+
+**Fix:** `Acquire::ForceIPv4=true` on both apt invocations. The identical
+step, including installing curl, then completed in **31.6s**. It is a no-op on
+networks where IPv6 works.
+
+**Classification:** host/Docker network configuration, surfaced by a Dockerfile
+that did not pin the address family. Not a Dockerfile logic error, and not a
+Docker Hub problem.
+
+### 8.3 Root cause 2 — pip reported a misleading resolution failure
+
+```
+#27 21.33 ERROR: Could not find a version that satisfies the requirement
+          fastapi~=0.162.0 (from versions: none)
+#27 21.34 ERROR: No matching distribution found for fastapi~=0.162.0
+```
+
+`from versions: none` suggests a resolution problem. `pip install -vvv`
+showed the actual cause:
+
+```
+#7 2.056 Starting new HTTPS connection (1): pypi.org:443
+#7 3.456   Starting new HTTPS connection (1): files.pythonhosted.org:443
+#7 23.36 ERROR: Exception:
+#7 23.36   File ".../urllib3/response.py", line 438, in _error_catcher
+#7 23.36   File "/usr/local/lib/python3.12/ssl.py", line 1116, in read
+#7 23.36 TimeoutError: The read operation timed out
+```
+
+pip established the connection and then the sustained read stalled, exceeding
+its 15-second default. Small requests succeeded throughout (a 285 KB index
+fetch returned HTTP 200 in 0.7s), so this was throughput instability on larger
+transfers, not unreachability.
+
+**Fix:** `PIP_DEFAULT_TIMEOUT=120` and `PIP_RETRIES=10`. The same install then
+completed in **~220s**, resolving to exactly the pinned versions:
+
+```
+Successfully installed fastapi-0.162.0 pydantic-2.14.2 pydantic-settings-2.16.2
+  starlette-1.10.0 uvicorn-0.54.0 annotated-doc-0.0.5 annotated-types-0.8.0
+  anyio-4.16.0 click-8.5.0 h11-0.16.0 idna-3.20 opentelemetry-api-1.45.2
+  pydantic-core-2.50.2 python-dotenv-1.2.4 typing-extensions-4.16.0
+  typing-inspection-0.4.4
+```
+
+These settings raise patience only. They do not relax version resolution, so
+`requirements.txt` still binds exactly as written.
+
+**Classification:** network throughput, mitigated in the Dockerfile. Not a
+dependency-specification error.
+
+### 8.4 Root cause 3 — frontend crash-looped under Compose
+
+The frontend image built and ran standalone, but the Compose service restarted
+repeatedly:
+
+```
+✓ Ready in 897ms
+Error: EACCES: permission denied, mkdir '/app/.next/dev'
+  errno: -13, code: 'EACCES', syscall: 'mkdir', path: '/app/.next/dev'
+```
+
+Compose mounts `/app/.next` as an anonymous volume so a container-built cache
+never mixes with one built on the Windows host. Docker seeds such a volume
+from the image's content at that path, and creates it **root-owned** when the
+path is absent in the image. `.next` is excluded by `.dockerignore` and is
+never produced in the development target, so it was absent — and `next dev`
+running as the non-root `node` user could not write into it. `node_modules`
+escaped this only incidentally: it does exist in the image, so its volume
+inherited the ownership set by the existing `chown`.
+
+**Fix:** `RUN mkdir -p /app/.next && chown -R node:node /app`, so the volume is
+seeded from a `node`-owned directory. No change to the volume layout or to
+Compose.
+
+**Classification:** Dockerfile defect, interacting with Docker's
+anonymous-volume seeding. Found only because the full stack was started, not
+merely built.
+
+### 8.5 Runtime verification per image
+
+Backend **production** (`bhashabench-backend:prod`):
+
+| Check | Result |
+|-------|--------|
+| `GET /` | `200`, correct identity payload |
+| `GET /health` | `{"status":"ok","version":"0.1.0"}` |
+| `GET /api/v1/health` | `200`, aggregate `degraded` (as designed) |
+| Runs as | `appuser` (non-root) |
+| `import pytest` | `ModuleNotFoundError` — dev tooling correctly absent |
+
+Backend **development** (`bhashabench-backend:latest`):
+
+| Check | Result |
+|-------|--------|
+| `GET /health` | `{"status":"ok","version":"0.1.0"}` |
+| Runs as | `appuser` (non-root) |
+| pytest / ruff present | `9.2.0` / `0.17.3` |
+| **Full suite inside the image** | **35 passed in 0.35s** |
+| Ruff inside the image, project config supplied | `All checks passed!`, 21 files formatted |
+
+Frontend **production** (`bhashabench-frontend:prod`):
+
+| Check | Result |
+|-------|--------|
+| HTTP status | `200` |
+| `<title>` | `BhashaBench — Test your voice AI before India tests it for you.` |
+| Content assertions | `BhashaBench`, `Phase 1 of 15`, `Planned · Phase 7`, `Fifteen phases` all present |
+| Runs as | `node` (non-root) |
+| `NODE_ENV` | `production` |
+
+### 8.6 Full Compose stack
+
+```
+$ docker compose up -d
+ Container bhashabench-db        Healthy
+ Container bhashabench-backend   Started
+ Container bhashabench-backend   Healthy
+ Container bhashabench-frontend  Started
+
+$ docker compose ps
+bhashabench-backend  | Up 7 minutes (healthy)
+bhashabench-db       | Up 2 hours (healthy)
+bhashabench-frontend | Up 19 seconds
+```
+
+Health-gated ordering works as configured: the backend waits for the database
+to report healthy, and the frontend waits for the backend. Verified through the
+published host ports:
+
+| Endpoint | Result |
+|----------|--------|
+| `http://localhost:8000/` | `200`, identity payload |
+| `http://localhost:8000/health` | `{"status":"ok","version":"0.1.0"}` |
+| `http://localhost:8000/api/v1/health` | `degraded` — `api: ok`, `configuration: ok`, `database: degraded` |
+| `http://localhost:3000/` | `200`, correct `<title>` and page content |
+
+Frontend log after the fix, with no `EACCES`:
+
+```
+▲ Next.js 16.4.3 (Turbopack)
+- Network:  http://0.0.0.0:3000
+✓ Ready in 783ms
+ GET / 200 in 717ms (next.js: 351ms, application-code: 366ms)
+```
+
+### 8.7 Compose configuration
 
 ```
 $ docker compose config --quiet
 (exit 0)
 ```
 
-Variable interpolation resolves correctly, including `DATABASE_URL` composed
-from the Postgres credentials against the in-network host `db`, and the three
+Interpolation resolves correctly, including `DATABASE_URL` composed from the
+Postgres credentials against the in-network host `db`, and the three
 configurable host-port bindings.
-
-### PostgreSQL — ✅ verified end to end
-
-```
-$ docker compose up -d db
- Volume bhashabench-postgres-data  Created
- Network bhashabench_default       Created
- Container bhashabench-db          Started
-
-$ docker compose ps
-bhashabench-db | running | Up 16 seconds (healthy) | 0.0.0.0:5434->5432/tcp
-```
-
-| Check | Result |
-|-------|--------|
-| Container health check (`pg_isready`) | `healthy` after 3 polls (~9s) |
-| Server version | `PostgreSQL 16.15 on x86_64-pc-linux-musl` |
-| Credentials from `.env` accepted | ✅ |
-| Write/read round-trip (`create table`, `insert`, `select`) | ✅ `1 => phase-1 docker validation` |
-| Named volume created | `bhashabench-postgres-data` |
-| Smoke table dropped afterwards | ✅ database left empty |
-
-### Backend runtime on Python 3.12 — ✅ verified in a container
-
-The local interpreter is 3.14.6, but the project targets 3.12, so the pinned
-requirements and the full suite were cross-validated inside
-`python:3.12-slim` with the repository mounted:
-
-```
-$ docker run --rm -v "...\BhashaBench:/src" -w /src python:3.12-slim bash -c     "pip install -r backend/requirements.txt -r backend/requirements-dev.txt      && ruff check . && ruff format --check . && pytest -q"
-
-Python 3.12.14
---- installed ---
-fastapi           0.162.0
-httpx2            2.16.0
-pydantic          2.14.2
-pydantic-settings 2.16.2
-pytest            9.2.0
-ruff              0.17.3
-starlette         1.10.0
-uvicorn           0.54.0
---- ruff check ---
-All checks passed!
---- ruff format ---
-26 files already formatted
---- pytest ---
-...................................                                      [100%]
-35 passed in 2.06s
-[exited with code 0]
-```
-
-Every pinned constraint resolved to exactly the intended version, and lint,
-format and all 35 tests pass on 3.12 as well as on 3.14. This confirms the
-backend's containerised runtime environment independently of the image build
-below.
-
-### Backend and frontend images — ⚠️ not completed
-
-The image builds did not finish. The cause is external to the repository:
-Docker Hub layer downloads on this machine stalled at roughly 10 KB/s.
-
-```
-#13 [backend base 1/5] FROM docker.io/library/python:3.12-slim@sha256:aa943ce4...
-#13 sha256:6fc242d2... 4.19MB / 29.86MB 421.5s
-#13 retrying in 1s
-```
-
-A `python:3.12-slim` image is already present locally, but BuildKit resolved
-the tag to a newer upstream digest and attempted to fetch it. The frontend
-image progressed further (`node:22-alpine` pulled, `npm ci` running) before
-the run was stopped.
-
-Nothing in `docker-compose.yml`, `backend/Dockerfile` or `frontend/Dockerfile`
-was implicated: no Dockerfile instruction failed, and no build error was
-emitted. **The images themselves remain unverified, and this is listed as a
-limitation below.** What *is* verified is every ingredient they assemble: the
-Compose configuration, the PostgreSQL service, the backend's Python 3.12
-dependency set and test suite (above), and both services running on the host
-(sections 6 and 7).
 
 ---
 
-## 9. Git commits
+## 9. PostgreSQL verification
+
+| Check | Result |
+|-------|--------|
+| Container health check (`pg_isready`) | `healthy` after ~9s |
+| Server version | `PostgreSQL 16.15 on x86_64-pc-linux-musl` |
+| Credentials from `.env` accepted | ✅ |
+| Write/read round-trip (`create table`, `insert`, `select`) | ✅ `1 => phase-1 docker validation` |
+| Named volume | `bhashabench-postgres-data` created and retained |
+| Still healthy at end of closure pass | ✅ `Up 2 hours (healthy)` |
+| Smoke table removed afterwards | ✅ database left empty |
+
+Host port is `5434` on this machine, set via `POSTGRES_HOST_PORT`, because
+`5432` is held by an unrelated project.
+
+**Unrelated containers were not stopped, restarted or deleted.** Confirmed at
+the end of the pass:
+
+```
+novaflow-pytest-mongo | Up 7 hours
+whistledrop-db        | Up 7 hours (healthy)
+whistledrop-db-test   | Up 7 hours (healthy)
+```
+
+Only `bhashabench-frontend` was deliberately removed and recreated
+(`docker compose rm -sfv frontend`), to discard the root-owned anonymous
+volume described in §8.4. The `bhashabench-postgres-data` volume was never
+removed.
+
+---
+
+## 10. Final verification suite
+
+Run against the final committed state:
+
+| Check | Command | Result |
+|-------|---------|--------|
+| Backend tests | `pytest` | **35 passed in 0.38s** |
+| Backend tests, in container | `pytest` inside dev image | **35 passed in 0.35s** |
+| Ruff lint | `ruff check .` | `All checks passed!` |
+| Ruff format | `ruff format --check .` | `26 files already formatted` |
+| Frontend lint | `npm run lint` | clean, no findings |
+| Frontend types | `npm run typecheck` | clean, no errors |
+| Frontend build | `npm run build` | `✓ Compiled successfully`, 4/4 static pages |
+| Compose config | `docker compose config --quiet` | exit 0 |
+
+### Live endpoint re-verification
+
+| Request | Status | Response |
+|---------|--------|----------|
+| `GET /` | `200` | name, tagline, version `0.1.0`, environment, `docs_url` |
+| `GET /health` | `200` | `{"status":"ok","version":"0.1.0"}` |
+| `GET /api/v1/health` | `200` | `degraded`; 3 components; UTC timestamp; uptime |
+| `GET /does-not-exist` | `404` | `{"error":{"type":"not_found",...}}` |
+| `POST /health` | `405` | `{"error":{"type":"http_error",...}}` |
+| `GET /docs` | `200` | Swagger UI |
+| `GET /openapi.json` | `200` | paths exactly `['/', '/api/v1/health', '/health']` |
+
+With a local `.env` present, the `configuration` component correctly reports
+`.env file present` rather than `absent` — the config-source detection works in
+both states.
+
+---
+
+## 11. Git commits
 
 Branch `feature/phase-01-foundation`, oldest first:
 
 | # | Hash | Commit | Changes |
 |---|------|--------|---------|
-| 1 | `9129768` | `chore(repo): initialise monorepo structure` | 8 files, +253 |
-| 2 | `0c9b707` | `feat(backend): establish FastAPI application` | 24 files, +984 |
-| 3 | `8864c80` | `feat(frontend): initialise Next.js dashboard` | 21 files, +7621 |
-| 4 | `08c659d` | `chore(docker): configure development infrastructure` | 3 files, +205 |
-| 5 | `449b84b` | `docs(project): add architecture and development roadmap` | 4 files, +1249 |
-| 6 | `1d4fefe` | `chore(config): make Compose host ports configurable` | 2 files, +16 −4 |
+| 1 | `bb5d017` | `chore(repo): initialise monorepo structure` | 8 files, +253 |
+| 2 | `32945c3` | `feat(backend): establish FastAPI application` | 24 files, +984 |
+| 3 | `8c8f1c6` | `feat(frontend): initialise Next.js dashboard` | 21 files, +7621 |
+| 4 | `c926ec2` | `chore(docker): configure development infrastructure` | 3 files, +205 |
+| 5 | `f5ced2c` | `docs(project): add architecture and development roadmap` | 4 files, +1249 |
+| 6 | `0aa8a25` | `chore(config): make Compose host ports configurable` | 2 files, +16 −4 |
+| 7 | `9128b60` | `docs(project): add Phase 1 completion report` | 1 file, +629 |
+| 8 | `e3648ed` | `fix(docker): make the backend image build on networks with broken IPv6` | 1 file, +20 −3 |
+| 9 | `a319011` | `fix(docker): give the frontend container ownership of its .next volume` | 1 file, +9 −1 |
+
+The commit that records this updated report is necessarily the tenth, and
+cannot contain its own hash. Run `git log --oneline` for the authoritative
+current list.
 
 Full hashes:
 
 ```
-9129768c75efdf8319ac249ebfc378879429bcc6
-0c9b707018bd640f95592a6cdd827adc56c04c67
-8864c80ba19a1d49c2e2764696018ec393d94800
-08c659dee84d04486d84b6f7440e5fa7f781aaae
-449b84b4aff78f1bf3ed6f7bde08e1bad0a6e4cf
-1d4fefeaa2706c1808838d2aee563f0749f79bc7
+bb5d017ef940771c7ba61154274055aea45d4596
+32945c328cece9f3cf28424d16333d37d3da66c5
+8c8f1c6bd9e6b49f58bba6483158972708b31694
+c926ec27c43cc35163ca9259d664f3cdd732f90c
+f5ced2c3ff4da3ddc5786a2ca1e0fabad950f98e
+0aa8a25f227f9d8c677d29ca1c58617c805882ef
+9128b60e655e9a7b8bafaebaff5d8ac44ab7f0b3
+e3648ed3a7269955c8e852d253a62bc1db6f2019
+a31901178968c7bffd68776f866f15a06cc65744
 ```
 
-### Branches
+### Commit authorship was corrected
 
-| Branch | Tip | Notes |
-|--------|-----|-------|
-| `main` | `449b84b` | Foundation through documentation |
-| `develop` | `449b84b` | Integration branch |
-| `feature/phase-01-foundation` | `1d4fefe` | Phase 1 work, current checkout |
+The first seven commits were originally authored with
+`maprojects3829@gmail.com`. GitHub attributes commits **by email**, and that
+address is registered to a different account (`madhurgrover-cs`), so every
+commit displayed as authored by that user even though `user.name` read
+`YushBytes` and the repository belongs to `YushBytes`.
 
-Nothing was merged into `main`, and no branch was force-updated.
+Identity was corrected to the account's noreply address:
 
-### Secret audit
+```
+user.name  = YushBytes
+user.email = 234807623+YushBytes@users.noreply.github.com
+```
+
+All commits were then rewritten with `git filter-branch --env-filter`,
+changing author **and** committer email. This rewrote history on already-pushed
+branches and therefore required a force push, which the project owner
+explicitly authorised for this one correction.
+
+Proof the rewrite changed metadata only:
+
+| Branch | Tree before | Tree after | Identical |
+|--------|-------------|------------|-----------|
+| `main` / `develop` | `c69daf30d800…` | `c69daf30d800…` | ✅ |
+| `feature/phase-01-foundation` | `e126266da82f…` | `e126266da82f…` | ✅ |
+
+`git diff` between the old and new tips is empty; commit count, messages and
+timestamps are unchanged. The `refs/original/*` backups and a stale
+`refs/stash` ref were then dropped and garbage-collected, leaving **0**
+occurrences of the old address in reachable history.
+
+GitHub now reports `author=YushBytes` for all nine commits.
+
+---
+
+## 12. GitHub repository
+
+| | |
+|---|---|
+| **URL** | <https://github.com/YushBytes/BhashaBench> |
+| **Visibility** | **Private** |
+| **Owner** | `YushBytes` |
+| **Default branch** | `main` |
+| **Created** | This closure pass — it did not previously exist (`gh repo view` returned `Could not resolve to a Repository`) |
+| **Remote** | `origin` → `https://github.com/YushBytes/BhashaBench.git` |
+
+No pre-existing repository was overwritten.
+
+### Remote branch verification
+
+Local hashes compared against `git ls-remote` (authoritative, not the cached
+remote-tracking refs):
+
+| Branch | Local | Remote | Match |
+|--------|-------|--------|-------|
+| `main` | `f5ced2c3ff4d` | `f5ced2c3ff4d` | ✅ |
+| `develop` | `f5ced2c3ff4d` | `f5ced2c3ff4d` | ✅ |
+| `feature/phase-01-foundation` | `a31901178968` | `a31901178968` | ✅ |
+
+All three report `ahead 0, behind 0`; no branch has diverged.
+
+The force push used `--force-with-lease` with an explicit expected value per
+branch, so a remote that had moved underneath would have aborted the push
+rather than being clobbered. The first attempt did in fact reject with
+`stale info` — `filter-branch` had rewritten the remote-tracking refs — and
+was resolved by re-fetching to restore a true baseline before pushing, not by
+escalating to a bare `--force`.
+
+Nothing has been merged into `main`; `main` and `develop` sit at `f5ced2c`
+while the two Docker fixes remain on the feature branch for review.
+
+---
+
+## 13. Security audit
 
 | Check | Result |
 |-------|--------|
-| `.env` tracked in any commit, on any branch | Never tracked |
-| `.env` ignored by git | Confirmed via `git check-ignore` → `.gitignore:4` |
+| `.env` tracked in any commit, on any branch, ever | **Never** |
+| `.env` ignored by git | ✅ `.gitignore:4` |
+| Any `.env*` tracked besides `.env.example` | None |
+| Private key material (`*.pem`, `*.key`, `*.p12`, `*.pfx`) | None |
+| Build artefacts (`node_modules/`, `.next/`, `.venv/`, `__pycache__/`) tracked | None |
 | Credential-shaped assignments across all commits | Only `SECRET_KEY=replace-with-a-generated-secret` and `POSTGRES_PASSWORD=change-me` in `.env.example` — both placeholders |
-| Provider credentials in `.env.example` | All empty |
-| `node_modules/`, `.next/`, `.venv/` staged | 0 paths |
+| Provider credentials in `.env.example` | All empty (`GNANI_API_KEY`, `TWILIO_*`) |
+| `.env` present in the pushed remote tree | **Absent** (verified via `git ls-tree -r origin/feature/phase-01-foundation`) |
+| Untracked-and-unignored files (what `git add -A` would stage) | **0** |
+| Secrets in API responses | Test asserts neither `SECRET_KEY` nor `DATABASE_URL` appears in the root payload |
+| Health endpoint leakage | `describe_environment()` returns only `present`/`absent`, `configured`/`default` — never a value |
+
+`.gitignore` coverage was verified behaviourally with `git check-ignore`
+rather than by reading the file:
+
+```
+IGNORED  .env                                   <- .gitignore:4
+IGNORED  .venv/pyvenv.cfg                       <- .gitignore:40
+IGNORED  frontend/node_modules/.package-lock.json <- frontend/.gitignore:4
+IGNORED  frontend/.next/BUILD_ID                <- frontend/.gitignore:17
+IGNORED  backend/app/__pycache__/x.pyc          <- .gitignore:18
+IGNORED  storage/audio/a.wav                    <- .gitignore:76
+IGNORED  secrets/k.pem                           <- .gitignore:13
+IGNORED  app.log                                 <- .gitignore:81
+```
+
+`.env.example` declares all 18 specification-required variables, plus the
+Postgres and host-port settings, with no real value anywhere.
+
+One note: a local `.env` containing generated development secrets exists on
+disk at the project root. It is git-ignored and was never committed or pushed.
+
+### Repository hygiene
+
+| Check | Result |
+|-------|--------|
+| Project repo root | `C:/Users/ayush/OneDrive/Desktop/BhashaBench` ✅ |
+| Git directory | `…/BhashaBench/.git` ✅ |
+| Working tree | Clean |
+| Tracked files | 61 |
+| `Desktop\.git` deleted | **No** — left untouched as instructed |
+| Does the Desktop repo track this project? | **No** — its index holds 0 files, it has 0 commits and 0 remotes; it is entirely inert |
+| Personal files outside the project touched | **None** |
 
 ---
 
-## 10. GitHub push status
+## 14. Known limitations
 
-**Not pushed — no remote is configured.**
-
-```
-$ git remote -v
-(no output)
-```
-
-Per the phase instructions, local commits were completed and no remote was
-created. The GitHub CLI is authenticated on this machine as **`YushBytes`**
-with `repo` and `workflow` scopes, so either route below will work.
-
-### Option A — create the repository with the GitHub CLI
-
-```bash
-cd "C:\Users\ayush\OneDrive\Desktop\BhashaBench"
-
-# Private (recommended until you have reviewed the contents):
-gh repo create BhashaBench --private --source=. --remote=origin
-
-# Then push all three branches and set upstreams:
-git push -u origin main
-git push -u origin develop
-git push -u origin feature/phase-01-foundation
-```
-
-### Option B — connect an existing empty repository
-
-```bash
-cd "C:\Users\ayush\OneDrive\Desktop\BhashaBench"
-git remote add origin https://github.com/YushBytes/BhashaBench.git
-git push -u origin main
-git push -u origin develop
-git push -u origin feature/phase-01-foundation
-```
-
-### Then open the Phase 1 pull request
-
-```bash
-gh pr create --base develop --head feature/phase-01-foundation \
-  --title "feat: Phase 1 — project foundation" \
-  --body "Monorepo scaffold, FastAPI backend with health endpoints, Next.js status shell, Docker Compose stack, Ruff + pytest, and documentation. 35 backend tests pass; frontend lint, typecheck and build pass."
-```
-
-Before pushing, confirm `.env` is absent from the index:
-
-```bash
-git ls-files | Select-String "^\.env$"     # PowerShell — expect no output
-```
-
----
-
-## 11. Known limitations
-
-1. **Backend and frontend Docker images were never built.** The builds
-   stalled on Docker Hub layer downloads at roughly 10 KB/s (§8). No
-   Dockerfile instruction failed, but the images were not produced, so "the
-   backend and frontend start successfully *as containers*" is not something
-   this report can claim. The backend's Python 3.12 runtime, its pinned
-   dependencies and all 35 tests *were* validated inside
-   `python:3.12-slim` (§8), and both services were verified running on the
-   host (§§6–7). Re-run `docker compose up -d --build` on a faster
-   connection to close the remaining gap.
-2. **An unrelated git repository exists at `C:\Users\ayush\OneDrive\Desktop`.**
-   It has no commits, no remote, and ~100 untracked personal files. It looks
-   like an accidental `git init`. The project repository is nested inside it,
-   which git tolerates but which can confuse tooling run from the Desktop
-   folder. Consider removing it: `Remove-Item -Recurse -Force "$HOME\OneDrive\Desktop\.git"`
-   — your call, and nothing in this project depends on it.
-3. **The project lives inside a OneDrive-synced folder.** This made dependency
-   installation unusually slow (the first `pip install` exceeded five minutes)
-   and OneDrive may try to sync `node_modules` and `.venv`. Moving the project
-   outside OneDrive, or excluding those directories from sync, would help.
-4. **The database is not connected.** `DATABASE_URL` is validated and
-   reported, but no engine or session exists, which is why
-   `/api/v1/health` returns `degraded`. Phase 2.
-5. **Frontend data is static.** `lib/content.ts` holds typed constants, since
+1. **The database is not connected.** `DATABASE_URL` is validated and
+   reported, but no engine or session exists, which is why `/api/v1/health`
+   returns `degraded`. Phase 2.
+2. **Frontend data is static.** `lib/content.ts` holds typed constants, since
    the endpoints that would serve it arrive in Phase 12.
-6. **No CI pipeline.** `.github/workflows/` holds only `.gitkeep`; CI is
-   Phase 14.
-7. **No authentication, rate limiting or structured logging.** Phase 15.
-8. **Provider credentials are declared but inert.** No Gnani or Twilio
+3. **No CI pipeline.** `.github/workflows/` holds only `.gitkeep`; CI is
+   Phase 14. The two Docker fixes in this pass are exactly the kind of
+   environment-specific breakage CI would have caught earlier.
+4. **No authentication, rate limiting or structured logging.** Phase 15.
+5. **Provider credentials are declared but inert.** No Gnani or Twilio
    endpoint, auth scheme or payload shape is assumed anywhere, by design.
+6. **In-container pytest does not use the project's pytest settings.**
+   `pyproject.toml` lives at the repository root and is not copied into the
+   backend image, and its `testpaths`/`pythonpath` are root-relative. Tests do
+   run correctly in the container (35 passed, imports resolve via
+   `PYTHONPATH=/app`), but via pytest's defaults rather than the project's
+   `addopts` and `filterwarnings = ["error"]`. Copying the file in naively
+   makes things worse — it triggers `PytestConfigWarning: No files were found
+   in testpaths`, which `filterwarnings` escalates to a failure. Resolving
+   this properly means reconciling the path layout, which is not Phase 1 work.
+7. **The IPv6 condition is mitigated, not repaired.** `Acquire::ForceIPv4`
+   works around this host's missing IPv6 egress inside the Docker build
+   network. The underlying Docker/host networking is unchanged; fixing it is a
+   system-settings change outside this repository's scope.
+8. **Frontend development image is large** (1.8 GB). It carries the full
+   dependency tree and build cache by design. The production image is 756 MB;
+   neither has been size-optimised, which is Phase 15 work.
 9. **No visual screenshot of the dashboard.** Three Chrome browsers are
-    connected to this machine and selecting one requires interactive input,
-    so the UI was verified by asserting on served HTML and the compiled CSS
-    (§7) rather than by image.
+   connected to this machine and selecting one requires interactive input, so
+   the UI was verified by asserting on served HTML and the compiled CSS
+   (§7) rather than by image.
+10. **The project lives inside a OneDrive-synced folder.** This made dependency
+    installation slow and OneDrive may try to sync `node_modules` and `.venv`.
+    Moving the project outside OneDrive, or excluding those directories from
+    sync, would help.
+11. **An inert git repository remains at `C:\Users\ayush\OneDrive\Desktop`.**
+    Zero commits, zero indexed files, zero remotes — it looks like an
+    accidental `git init`. Left in place as instructed. Removing it is
+    optional: `Remove-Item -Recurse -Force "$HOME\OneDrive\Desktop\.git"`.
 
 ---
 
-## 12. Remaining work
+## 15. Remaining work
 
-### To fully close Phase 1
+### Phase 1 — optional follow-ups
 
-- [ ] Complete `docker compose up --build` on a usable connection and confirm
-      all three containers reach `healthy`.
-- [ ] Create the GitHub remote and push all three branches (§10).
-- [ ] Open the `feature/phase-01-foundation` → `develop` pull request.
-- [ ] Optionally remove the stray Desktop git repository.
+- [ ] Open the `feature/phase-01-foundation` → `develop` pull request:
+      ```
+      gh pr create --base develop --head feature/phase-01-foundation \
+        --title "feat: Phase 1 - project foundation"
+      ```
+- [ ] Decide whether to merge the two Docker fixes down to `develop`/`main`.
+- [ ] Optionally remove the inert `Desktop\.git`.
 
-### Phase 2 — Data Model & Persistence (awaiting approval)
+### Phase 2 — Data Model & Persistence (awaiting approval, not started)
 
 - SQLAlchemy models: `Scenario`, `TestRun`, `Call`, `Turn`, `Evaluation`,
   `BenchmarkResult`.
@@ -607,23 +855,26 @@ Full detail for phases 2–15: `docs/DEVELOPMENT_ROADMAP.md`.
 
 ---
 
-## 13. Completion criteria
+## 16. Completion criteria
 
 | # | Criterion | Status |
 |---|-----------|--------|
 | 1 | Repository structure established | ✅ All specified paths present and verified |
-| 2 | Backend starts successfully | ✅ Uvicorn served all endpoints over HTTP |
-| 3 | Frontend starts successfully | ✅ `next start` served the built app, content asserted |
+| 2 | Backend starts successfully | ✅ On host and in both images |
+| 3 | Frontend starts successfully | ✅ On host and in both images |
 | 4 | Docker configuration valid | ✅ `docker compose config --quiet` exits 0 |
 | 5 | PostgreSQL starts through Compose | ✅ Healthy, queried, write/read round-trip |
-| 6 | Backend tests pass | ✅ 35 passed |
-| 7 | Frontend lint and build succeed | ✅ ESLint, `tsc --noEmit` and `next build` clean |
+| 6 | Backend tests pass | ✅ 35 passed on host; 35 passed inside the dev image |
+| 7 | Frontend lint and build succeed | ✅ ESLint, `tsc --noEmit`, `next build` all clean |
 | 8 | Ruff checks pass | ✅ `check` and `format --check` clean |
-| 9 | Documentation complete | ✅ README, ARCHITECTURE, ROADMAP, CONTRIBUTING |
-| 10 | Git commits created | ✅ 6 commits on three branches |
-| 11 | GitHub push verified, if a remote exists | ➖ No remote configured; commands provided (§10) |
-| — | Backend Python 3.12 runtime, deps and tests in a container | ✅ 35 passed, Ruff clean, on `python:3.12-slim` (§8) |
-| — | Backend/frontend images build in Docker | ⚠️ Not verified — registry download stall (§8, limitation 1) |
+| 9 | Documentation complete | ✅ README, ARCHITECTURE, ROADMAP, CONTRIBUTING, this report |
+| 10 | Git commits created | ✅ 9 Conventional Commits |
+| 11 | GitHub push verified | ✅ Private repo created; 3 branches pushed; hashes verified via `ls-remote` |
+| 12 | Backend dev + prod images build and run | ✅ 280 MB / 223 MB, both serve, both non-root |
+| 13 | Frontend dev + prod images build and run | ✅ 1.8 GB / 756 MB, both serve, both non-root |
 
-**Phase 1 is complete and stopping here.** Phase 2 has not been started and
-awaits explicit approval.
+**Phase 1 is closed.** Every criterion is met by direct verification, not
+inference. No claim in this report rests on a build that did not complete or a
+push that was not confirmed.
+
+**Phase 2 has not been started** and awaits explicit approval.
