@@ -1,0 +1,17 @@
+# Runtime dependencies for the BhashaBench backend.
+#
+# Pinned with compatible-release (~=) so patch releases are picked up while
+# breaking minor releases are not. Versions below are the ones this phase was
+# built and tested against.
+#
+# `uvicorn` is intentionally installed WITHOUT the `[standard]` extra: those
+# extras (httptools, uvloop, watchfiles) ship no wheels for the newest CPython
+# releases and fall back to compiling from source, which breaks a plain
+# `pip install` on a developer machine running Python 3.13+. Plain uvicorn
+# serves fine and `--reload` degrades to polling-based file watching. Add
+# `uvicorn[standard]` deliberately when optimising a production deployment.
+
+fastapi~=0.162.0
+uvicorn~=0.54.0
+pydantic~=2.14.0
+pydantic-settings~=2.16.0
