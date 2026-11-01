@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+/* ===========================================================================
+   BhashaBench design tokens
+   ---------------------------------------------------------------------------
+   The product commits to a single dark interface rather than following the
+   system theme: it is a developer tool meant to sit open next to a terminal,
+   and one palette keeps the status colours unambiguous. `color-scheme: dark`
+   makes native controls and scrollbars match.
+   ======================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, from furthest back to closest. */
+  --surface-base: #07090d;
+  --surface-raised: #0d1118;
+  --surface-overlay: #121823;
+  --border-subtle: #1b2230;
+  --border-strong: #2a3444;
+
+  /* Type. */
+  --text-primary: #e7eaf0;
+  --text-secondary: #9aa4b6;
+  --text-tertiary: #6b7488;
+
+  /* Accent: a cool periwinkle, used sparingly for emphasis and focus. */
+  --accent: #7f9cff;
+  --accent-strong: #9db1ff;
+  --accent-dim: #1d2740;
+
+  /* Status. Meaning is fixed across the app:
+     live   = verified working today
+     partial= exists but intentionally incomplete
+     planned= not built yet                              */
+  --status-live: #4ade80;
+  --status-partial: #fbbf24;
+  --status-planned: #64748b;
+}
+
+@theme inline {
+  --color-surface-base: var(--surface-base);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-dim: var(--accent-dim);
+
+  --color-status-live: var(--status-live);
+  --color-status-partial: var(--status-partial);
+  --color-status-planned: var(--status-planned);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background-color: var(--surface-base);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A single, consistent focus ring for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Respect a reduced-motion preference; the UI uses very little motion as it
+   is, but transitions should still stop. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
