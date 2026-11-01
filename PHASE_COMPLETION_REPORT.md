@@ -480,8 +480,38 @@ No force push, no history rewrite, no branch deleted.
 
 ### Remote verification
 
-See the verification block appended at the end of this report — local and
-remote hashes are compared with `git ls-remote` after the final push.
+Compared with `git ls-remote` — the authoritative remote state, not the
+cached remote-tracking refs:
+
+| Branch | Local | Remote | Match |
+|--------|-------|--------|-------|
+| `main` | `f5ced2c3ff4d` | `f5ced2c3ff4d` | ✅ |
+| `develop` | `e69930c30c8a` | `e69930c30c8a` | ✅ |
+| `feature/phase-01-foundation` | `e69930c30c8a` | `e69930c30c8a` | ✅ |
+| `feature/phase-02-database-scenarios` | `07cd46c955be` | `07cd46c955be` | ✅ |
+
+Both active branches report `ahead 0, behind 0`. The push that created the
+Phase 2 branch was a plain `git push -u` — the remote branch did not exist
+beforehand, so no force was involved and nothing was overwritten.
+
+GitHub attributes all six Phase 2 commits to `YushBytes`. The remote tree
+contains no `.env`.
+
+History preservation on this branch:
+
+```
+total commits reachable: 16
+Phase 1 tip e69930c is an ancestor: YES
+```
+
+That is 10 Phase 1 commits + 6 Phase 2 commits. Nothing was rewritten,
+force-pushed or deleted.
+
+> The commit that adds this verification block is the seventh on the branch
+> and is therefore not in the hash above. Re-run
+> `git ls-remote origin refs/heads/feature/phase-02-database-scenarios`
+> against `git rev-parse feature/phase-02-database-scenarios` to confirm the
+> current tip; the two matched at every push during this phase.
 
 ---
 
