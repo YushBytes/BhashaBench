@@ -410,12 +410,12 @@ The backend suite has **234 tests** in six modules:
 
 | Module | Tests | Covers |
 |--------|-------|--------|
-| `test_health.py` | 17 | Root, liveness and versioned health endpoints; the database probe reachable and unreachable; the error envelope; a check that no secret appears in a response |
+| `test_health.py` | 16 | Root, liveness and versioned health endpoints; the database probe reachable and unreachable; the error envelope; a check that no secret appears in a response |
 | `test_config.py` | 14 | Defaults, environment overrides, comma-separated list parsing, validation failures, production behaviour, settings caching |
 | `test_app_metadata.py` | 9 | App title/summary/version, the generated OpenAPI document, the application factory |
 | `test_scenario_spec.py` | 95 | YAML syntax, unsafe payloads, size and expansion limits, every validation rule, round-trip serialisation, file loading |
 | `test_database.py` | 37 | Connection, the migrated schema, model creation, relationships, foreign-key delete behaviour, every constraint, transaction rollback |
-| `test_api_suites_scenarios.py` | 62 | All nine endpoints, pagination, duplicates, unknown ids, malformed UUIDs, oversized bodies, error-envelope shape |
+| `test_api_suites_scenarios.py` | 63 | All nine endpoints, pagination, duplicates, unknown ids, malformed UUIDs, oversized bodies, error-envelope shape |
 
 ```bash
 pytest
