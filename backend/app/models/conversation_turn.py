@@ -59,6 +59,7 @@ class ConversationTurn(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Enum(
             Speaker,
             name="speaker",
+            create_constraint=True,
             native_enum=False,
             values_callable=lambda e: [m.value for m in e],
         ),

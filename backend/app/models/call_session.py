@@ -74,6 +74,7 @@ class CallSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Enum(
             CallStatus,
             name="call_status",
+            create_constraint=True,
             native_enum=False,
             values_callable=lambda e: [m.value for m in e],
         ),

@@ -1,0 +1,89 @@
+# =============================================================================
+# BhashaBench scenario: appointment_booking
+# =============================================================================
+# A reference scenario showing every field the specification accepts. Validate
+# it without storing anything:
+#
+#   curl -X POST http://localhost:8000/api/v1/scenarios/validate \
+#     -H 'Content-Type: application/json' \
+#     --data @- <<'JSON'
+#   {"yaml": "...contents of this file..."}
+#   JSON
+#
+# Fields marked optional may be omitted entirely; the API fills in the default
+# shown. Unknown fields are rejected, so a typo is an error rather than a
+# silently ignored key.
+
+# Machine-friendly identifier. Lowercase letters, digits, underscore and
+# hyphen; must be unique within its suite.
+name: appointment_booking
+
+# Optional. What this scenario is testing, for a human reading the results.
+description: Test whether a voice bot can book a doctor appointment in Hindi.
+
+# BCP 47 tag. Must be one of the supported Indian languages - see
+# SUPPORTED_LANGUAGES in backend/app/schemas/scenario_spec.py.
+language: hi-IN
+
+# Who the simulated caller is. Phase 6 conditions the caller agent on this.
+persona:
+  identity: Working professional
+  # Optional, default `neutral`. One of: polite, neutral, brusque, confused,
+  # hurried, elderly.
+  speaking_style: polite
+  # Optional, default empty. At most 10, no duplicates.
+  traits:
+    - impatient
+    - prefers short responses
+
+# What the caller is trying to achieve.
+goal:
+  objective: Book an appointment with a general physician for tomorrow morning.
+  # Optional, default 20. Range 1-100. A hard cap on conversation turns, so a
+  # bot that loops cannot run up cost indefinitely.
+  max_turns: 15
+
+# Optional, default empty. Facts the caller knows and can supply when asked.
+#
+# Values must be strings. Quote anything that YAML would otherwise read as a
+# number - `"0123"` stays `0123`, whereas unquoted `0123` would become the
+# integer 123 and be spoken incorrectly.
+known_facts:
+  patient_name: Rahul Sharma
+  preferred_time: "10 AM"
+  phone_last_four: "0042"
+
+# What the bot must achieve for this scenario to pass. At least one is
+# required - a scenario with nothing to check can neither pass nor fail.
+# Duplicates are rejected, since they would be scored twice.
+expected_outcomes:
+  - Confirm the appointment date
+  - Confirm the appointment time
+  - Confirm the patient name
+  - State the clinic address
+
+# Optional. Acoustic conditions to simulate. Phase 7 implements these; until
+# then the values are validated and stored but not applied.
+audio:
+  # Optional, default `clean`. One of: clean, urban, rural, market,
+  # indoor_fan, worst_case.
+  noise_profile: urban
+  # Optional, default 30. Range 0-40 dB. Higher is cleaner; 40 is effectively
+  # studio quality, 0 means background noise as loud as the speech.
+  snr_db: 18
+  # Optional, default 0. Range 0-30 percent.
+  packet_loss_percent: 2
+
+# Optional, omitted entirely by default. Limits on how the conversation may
+# proceed. Phase 9 enforces these.
+constraints:
+  # Optional, default 5.0. Range above 0 and up to 60 seconds.
+  max_silence_seconds: 4.0
+  # Optional, default true. Whether the caller may talk over the bot.
+  allow_interruptions: true
+  # Optional, default empty. Phrases the caller must say at some point.
+  required_phrases:
+    - my name is Rahul
+  # Optional, default empty. Phrases the caller must never say.
+  forbidden_phrases:
+    - cancel the appointment

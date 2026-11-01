@@ -7,8 +7,9 @@ phases can add real dependency probes (database, Gnani, Twilio) in one place.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from app.core.config import Settings, describe_environment
-from app.db.session import check_database_connection
 from app.schemas.common import ApiHealthResponse, ComponentHealth, HealthStatus
 from app.utils.timing import monotonic_seconds, utc_now
 
@@ -32,7 +33,9 @@ def _aggregate(components: list[ComponentHealth]) -> HealthStatus:
     return "ok"
 
 
-def collect_components(settings: Settings) -> list[ComponentHealth]:
+def collect_components(
+    settings: Settings, probe: Callable[[], tuple[bool, str]]
+) -> list[ComponentHealth]:
     """Describe each subsystem the API currently depends on.
 
     Each component reports only what can be verified. Phase 2 replaced the
@@ -41,7 +44,7 @@ def collect_components(settings: Settings) -> list[ComponentHealth]:
     reporting `degraded` either way.
     """
     sources = describe_environment()
-    reachable, db_detail = check_database_connection()
+    reachable, db_detail = probe()
 
     return [
         ComponentHealth(
@@ -68,9 +71,11 @@ def collect_components(settings: Settings) -> list[ComponentHealth]:
     ]
 
 
-def build_api_health(settings: Settings) -> ApiHealthResponse:
+def build_api_health(
+    settings: Settings, probe: Callable[[], tuple[bool, str]]
+) -> ApiHealthResponse:
     """Assemble the structured health report for the versioned API."""
-    components = collect_components(settings)
+    components = collect_components(settings, probe)
 
     return ApiHealthResponse(
         status=_aggregate(components),

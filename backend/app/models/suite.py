@@ -28,15 +28,19 @@ class TestSuite(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # `selectin` avoids the N+1 queries that lazy loading causes when a list
-    # endpoint serialises many suites. `delete-orphan` with `cascade="all"`
-    # means removing a suite removes its scenarios; the database-level
-    # ON DELETE CASCADE on the child column enforces the same thing for
-    # statements that bypass the ORM.
+    # Loaded on demand only. No endpoint serialises a suite's scenarios
+    # inline - the scenario list is its own paginated endpoint, and the suite
+    # detail response reports a SQL COUNT rather than measuring a loaded
+    # collection - so eager loading would fetch rows nothing reads.
+    #
+    # `delete-orphan` with `cascade="all"` means removing a suite removes its
+    # scenarios. `passive_deletes=True` lets the database-level ON DELETE
+    # CASCADE do that work instead of SQLAlchemy loading every child first,
+    # which also keeps statements that bypass the ORM correct.
     scenarios: Mapped[list[Scenario]] = relationship(
         back_populates="suite",
         cascade="all, delete-orphan",
-        lazy="selectin",
+        lazy="select",
         passive_deletes=True,
     )
 

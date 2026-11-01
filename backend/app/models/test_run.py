@@ -62,13 +62,19 @@ class TestRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     status: Mapped[RunStatus] = mapped_column(
-        # `native_enum=False` stores a VARCHAR with a CHECK constraint instead
-        # of a PostgreSQL ENUM type. Postgres enums cannot have a value removed
-        # and need DDL to add one, which makes them awkward to migrate; a
-        # checked VARCHAR is cheap to evolve.
+        # `native_enum=False` stores a VARCHAR instead of a PostgreSQL ENUM
+        # type: a Postgres enum cannot have a value removed and needs DDL to
+        # add one, which makes it awkward to migrate, whereas a checked VARCHAR
+        # is cheap to evolve.
+        #
+        # `create_constraint=True` is required, not decorative. SQLAlchemy
+        # defaults it to False, which would leave the column a plain VARCHAR
+        # whose allowed values are enforced only in Python - so any write that
+        # bypassed the ORM could store nonsense.
         Enum(
             RunStatus,
             name="run_status",
+            create_constraint=True,
             native_enum=False,
             values_callable=lambda enum: [member.value for member in enum],
         ),

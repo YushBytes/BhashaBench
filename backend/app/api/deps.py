@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -9,7 +10,7 @@ from fastapi import Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.db.session import get_db
+from app.db.session import check_database_connection, get_db
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 """Injected application settings.
@@ -54,3 +55,19 @@ def pagination_params(
 
 PaginationParams = Annotated[Pagination, Depends(pagination_params)]
 """Injected pagination window, shared by every list endpoint."""
+
+
+def get_database_probe() -> Callable[[], tuple[bool, str]]:
+    """Return the callable the health endpoint uses to probe the database.
+
+    Injected rather than imported so a test can supply a stub. Without this
+    seam the probe would always use the process-wide engine built from global
+    settings, which means a test that overrides `Settings` would still report
+    on whatever database the developer's `.env` happens to point at - the
+    endpoint would look healthy for the wrong reason.
+    """
+    return check_database_connection
+
+
+DatabaseProbe = Annotated[Callable[[], tuple[bool, str]], Depends(get_database_probe)]
+"""Injected database health probe, returning `(reachable, detail)`."""

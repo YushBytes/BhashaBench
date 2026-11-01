@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.api.deps import get_database_probe
 from app.core.config import Settings
 
 
@@ -50,9 +52,10 @@ class TestApiHealthEndpoint:
     def test_reports_aggregate_and_metadata(self, client: TestClient) -> None:
         body = client.get("/api/v1/health").json()
 
-        # The database component is honestly reported as not probed, so the
-        # aggregate must be `degraded` rather than `ok`.
-        assert body["status"] == "degraded"
+        # Phase 2 probes the database for real, and the `client` fixture
+        # stubs that probe as reachable, so the aggregate is `ok`. In Phase 1
+        # the database was never probed and this was `degraded`.
+        assert body["status"] == "ok"
         assert body["service"] == "BhashaBench"
         assert body["api_version"] == "v1"
         assert body["environment"] == "test"
@@ -74,13 +77,60 @@ class TestApiHealthEndpoint:
         assert set(by_name) == {"api", "configuration", "database"}
         assert by_name["api"]["status"] == "ok"
         assert by_name["configuration"]["status"] == "ok"
-        # Phase 1 opens no connection, so this must not claim to be healthy.
-        assert by_name["database"]["status"] == "degraded"
+        assert by_name["database"]["status"] == "ok"
         assert all(component["detail"] for component in components)
 
     def test_unversioned_api_health_is_not_served(self, client: TestClient) -> None:
         """Health detail lives behind the version prefix only."""
         assert client.get("/api/health").status_code == 404
+
+
+class TestApiHealthDatabaseProbe:
+    """The report must follow the probe, not assume a healthy database."""
+
+    def test_unreachable_database_reports_unavailable(
+        self, test_app: FastAPI, settings: Settings
+    ) -> None:
+        """Without the database nothing works, so `unavailable`, not `degraded`."""
+        test_app.dependency_overrides[get_database_probe] = lambda: (
+            lambda: (False, "Connection failed (OperationalError).")
+        )
+
+        with TestClient(test_app) as client:
+            body = client.get("/api/v1/health").json()
+
+        by_name = {component["name"]: component for component in body["components"]}
+        assert by_name["database"]["status"] == "unavailable"
+        assert body["status"] == "unavailable"
+
+    def test_endpoint_still_answers_when_the_database_is_down(self, test_app: FastAPI) -> None:
+        """A health endpoint that 500s when its dependency is down is useless."""
+        test_app.dependency_overrides[get_database_probe] = lambda: (
+            lambda: (False, "Connection failed (OperationalError).")
+        )
+
+        with TestClient(test_app) as client:
+            assert client.get("/api/v1/health").status_code == 200
+
+    def test_probe_detail_never_contains_the_connection_url(self, test_app: FastAPI) -> None:
+        """The real probe reports only an exception class name, never the DSN."""
+        with TestClient(test_app) as client:
+            raw = client.get("/api/v1/health").text
+
+        assert "postgresql" not in raw
+        assert "password" not in raw.lower()
+
+    def test_liveness_probe_is_independent_of_the_database(self, test_app: FastAPI) -> None:
+        """`/health` must stay cheap so a load balancer keeps the pod alive."""
+        test_app.dependency_overrides[get_database_probe] = lambda: (
+            lambda: (False, "Connection failed (OperationalError).")
+        )
+
+        with TestClient(test_app) as client:
+            response = client.get("/health")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
 
 
 class TestErrorHandling:

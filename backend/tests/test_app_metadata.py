@@ -32,10 +32,28 @@ class TestOpenApiDocument:
         assert response.status_code == 200
         assert response.json()["openapi"].startswith("3.")
 
-    def test_declares_the_phase_one_paths(self, client: TestClient) -> None:
+    def test_declares_every_implemented_path(self, client: TestClient) -> None:
+        """The documented surface must match exactly what is implemented.
+
+        Phase 1 shipped three paths; Phase 2 added the suite and scenario
+        endpoints. Asserting the exact set - rather than a subset - is what
+        catches a route that was added without being documented, or one left
+        mounted after being removed.
+        """
         paths = client.get("/openapi.json").json()["paths"]
 
-        assert set(paths) == {"/", "/health", "/api/v1/health"}
+        assert set(paths) == {
+            # Phase 1
+            "/",
+            "/health",
+            "/api/v1/health",
+            # Phase 2
+            "/api/v1/suites",
+            "/api/v1/suites/{suite_id}",
+            "/api/v1/suites/{suite_id}/scenarios",
+            "/api/v1/scenarios/validate",
+            "/api/v1/scenarios/{scenario_id}",
+        }
 
     def test_info_block_matches_settings(self, client: TestClient, settings: Settings) -> None:
         info = client.get("/openapi.json").json()["info"]

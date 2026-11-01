@@ -13,12 +13,17 @@ calls, but `call_sessions.scenario_id` uses ON DELETE RESTRICT so a scenario
 with recorded call history cannot be removed and leave those results
 uninterpretable.
 
-The downgrade drops everything in reverse dependency order and is exercised in
-CI, so this migration is reversible rather than one-way.
+Status columns are VARCHAR with a CHECK constraint rather than PostgreSQL
+ENUM types, so a value can be added or removed without DDL gymnastics. The
+CHECK is explicit (`create_constraint=True`); SQLAlchemy omits it by default,
+which would leave the allowed values enforced only in Python.
 
-Revision ID: 7eb8ae1b4f9e
+The downgrade drops everything in reverse dependency order and is exercised on
+every test run, so this migration is reversible rather than one-way.
+
+Revision ID: 3e3312d5327a
 Revises:
-Create Date: 2026-11-01 17:01:42.048462+00:00
+Create Date: 2026-11-01
 """
 
 from collections.abc import Sequence
@@ -29,7 +34,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "7eb8ae1b4f9e"
+revision: str = "3e3312d5327a"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -104,6 +109,7 @@ def upgrade() -> None:
                 "cancelled",
                 name="run_status",
                 native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -166,6 +172,7 @@ def upgrade() -> None:
                 "busy",
                 name="call_status",
                 native_enum=False,
+                create_constraint=True,
             ),
             nullable=False,
         ),
@@ -233,7 +240,9 @@ def upgrade() -> None:
         sa.Column("call_session_id", sa.UUID(), nullable=False),
         sa.Column("turn_index", sa.Integer(), nullable=False),
         sa.Column(
-            "speaker", sa.Enum("caller", "bot", name="speaker", native_enum=False), nullable=False
+            "speaker",
+            sa.Enum("caller", "bot", name="speaker", native_enum=False, create_constraint=True),
+            nullable=False,
         ),
         sa.Column("content", sa.Text(), nullable=True),
         sa.Column("spoken_at", sa.DateTime(timezone=True), nullable=True),

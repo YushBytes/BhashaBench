@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, status
 
-from app.api.deps import SettingsDep
+from app.api.deps import DatabaseProbe, SettingsDep
 from app.schemas.common import ApiHealthResponse
 from app.services.health import build_api_health
 
@@ -22,6 +22,6 @@ router = APIRouter(tags=["health"])
         "reported as `degraded` with a reason, never as healthy."
     ),
 )
-async def api_health(settings: SettingsDep) -> ApiHealthResponse:
+async def api_health(settings: SettingsDep, probe: DatabaseProbe) -> ApiHealthResponse:
     """Return a structured health report for the v1 API."""
-    return build_api_health(settings)
+    return build_api_health(settings, probe)

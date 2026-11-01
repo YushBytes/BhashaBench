@@ -91,9 +91,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_scenario_too_large(
         _request: Request, exc: ScenarioTooLargeError
     ) -> JSONResponse:
-        return _error_response(
-            status.HTTP_413_CONTENT_TOO_LARGE, "payload_too_large", str(exc)
-        )
+        return _error_response(status.HTTP_413_CONTENT_TOO_LARGE, "payload_too_large", str(exc))
 
     @app.exception_handler(ScenarioSyntaxError)
     async def handle_scenario_syntax(_request: Request, exc: ScenarioSyntaxError) -> JSONResponse:

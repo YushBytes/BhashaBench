@@ -38,10 +38,14 @@ class Base(DeclarativeBase):
 class UUIDPrimaryKeyMixin:
     """A UUID primary key, generated application-side.
 
-    Generated in Python rather than by a database default so that code holds
-    the identifier before the row is flushed - which keeps a caller from
-    needing a round-trip to learn the id of something it just created. The
-    column is a native PostgreSQL `uuid`, not a string, so comparisons and
+    `default=uuid.uuid4` is a Python-side column default: SQLAlchemy evaluates
+    it when the INSERT is emitted and sends the value as a bound parameter, so
+    no `RETURNING` round-trip is needed to learn the id of a new row, and no
+    database extension or version-specific function is relied on. Note that
+    the attribute is therefore populated at flush time, not at construction -
+    `TestSuite(name="x").id` is None until the object is flushed.
+
+    The column is a native PostgreSQL `uuid`, not a string, so comparisons and
     indexes use 16 bytes rather than 36 characters.
     """
 

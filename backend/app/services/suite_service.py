@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.suite import TestSuite
+from app.repositories import scenarios as scenario_repo
 from app.repositories import suites as suite_repo
 from app.services.errors import ConflictError, NotFoundError
 
@@ -40,6 +41,17 @@ def get_suite(session: Session, suite_id: uuid.UUID) -> TestSuite:
     if suite is None:
         raise NotFoundError("suite", suite_id)
     return suite
+
+
+def count_scenarios(session: Session, suite_id: uuid.UUID) -> int:
+    """Return how many scenarios a suite holds.
+
+    Counted with SQL rather than `len(suite.scenarios)`. Loading every
+    scenario row to measure the collection would be wasteful for a large
+    suite, and the loaded collection can be stale if rows were inserted
+    through a different identity map since it was populated.
+    """
+    return scenario_repo.count_for_suite(session, suite_id)
 
 
 def list_suites(session: Session, *, limit: int, offset: int) -> tuple[list[TestSuite], int]:

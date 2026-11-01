@@ -24,11 +24,12 @@ from app.services import suite_service
 router = APIRouter(prefix="/suites", tags=["suites"])
 
 
-def _to_read(suite: TestSuite) -> SuiteRead:
+def _to_read(suite: TestSuite, scenario_count: int) -> SuiteRead:
     """Shape a suite for a detail response.
 
-    `scenario_count` is taken from the eagerly loaded relationship, so this
-    costs no extra query.
+    The count is passed in rather than read from `suite.scenarios`, so a
+    suite with many scenarios does not have to load them all to report a
+    single number.
     """
     return SuiteRead(
         id=suite.id,
@@ -36,7 +37,7 @@ def _to_read(suite: TestSuite) -> SuiteRead:
         description=suite.description,
         created_at=suite.created_at,
         updated_at=suite.updated_at,
-        scenario_count=len(suite.scenarios),
+        scenario_count=scenario_count,
     )
 
 
@@ -50,7 +51,8 @@ def _to_read(suite: TestSuite) -> SuiteRead:
 def create_suite(payload: SuiteCreate, session: DbSession) -> SuiteRead:
     """Create a suite. Suite names are unique."""
     suite = suite_service.create_suite(session, name=payload.name, description=payload.description)
-    return _to_read(suite)
+    # A newly created suite has no scenarios yet.
+    return _to_read(suite, scenario_count=0)
 
 
 @router.get(
@@ -80,4 +82,5 @@ def list_suites(session: DbSession, pagination: PaginationParams) -> Page[SuiteS
 )
 def get_suite(suite_id: uuid.UUID, session: DbSession) -> SuiteRead:
     """Return one suite with its scenario count."""
-    return _to_read(suite_service.get_suite(session, suite_id))
+    suite = suite_service.get_suite(session, suite_id)
+    return _to_read(suite, scenario_count=suite_service.count_scenarios(session, suite_id))
