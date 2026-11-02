@@ -17,7 +17,7 @@ dependencies = []
 # `python -m app.cli` from `backend/`, which is how CI and the test suite
 # invoke it.
 [project.scripts]
-bhashabench = "app.cli:main"
+bhashabench = "app.cli.main:main"
 
 [build-system]
 requires = ["setuptools>=68"]

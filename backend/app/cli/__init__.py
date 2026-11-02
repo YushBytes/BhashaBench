@@ -24,6 +24,12 @@ Exit codes are meaningful, because a CLI's real consumer is a shell script:
     3  the database is unreachable
 """
 
-from app.cli.main import app, main
+from app.cli.main import app
 
-__all__ = ["app", "main"]
+__all__ = ["app"]
+
+# Only ``app`` is re-exported. Binding the entry-point function here as
+# ``main`` would shadow the ``app.cli.main`` submodule on this package, so
+# ``app.cli.main`` would resolve to a function and any patch or import that
+# addresses the module by path would break. The console script therefore
+# points at ``app.cli.main:main`` directly.

@@ -12,11 +12,12 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+from typer.core import TyperGroup
 
 from app.cli.output import (
     ExitCode,
@@ -37,6 +38,30 @@ from app.services.bundle import BUNDLE_FORMAT, parse_bundle
 from app.services.errors import ConflictError, NotFoundError
 from app.services.scenario_loader import ScenarioLoadError, spec_from_yaml, spec_to_yaml
 
+
+class DomainErrorGroup(TyperGroup):
+    """Translate service-layer domain errors into a message and an exit code.
+
+    This lives in the command group rather than in `main` so the translation
+    applies however the CLI is entered - the console script, `python -m
+    app.cli`, or a harness driving the Click object directly. Doing it only in
+    `main` meant the exit codes a shell script sees could differ from the ones
+    exercised in tests, which is exactly the gap that makes exit codes
+    untrustworthy.
+
+    Only errors a user can act on are caught. Anything else keeps its
+    traceback, because a bug should look like a bug.
+    """
+
+    def invoke(self, ctx: typer.Context) -> Any:
+        try:
+            return super().invoke(ctx)
+        except (NotFoundError, ConflictError) as exc:
+            fail(str(exc), ExitCode.FAILED)
+        except ScenarioLoadError as exc:
+            fail(str(exc), ExitCode.INVALID_INPUT)
+
+
 app = typer.Typer(
     name="bhashabench",
     help=(
@@ -46,6 +71,7 @@ app = typer.Typer(
     ),
     no_args_is_help=True,
     add_completion=False,
+    cls=DomainErrorGroup,
 )
 
 suite_app = typer.Typer(help="Manage test suites.", no_args_is_help=True)
@@ -577,32 +603,15 @@ def export_suite(
     write_output(document, output)
 
 
-def _abort(message: str, code: ExitCode) -> None:
-    """Print an error and exit, without a traceback.
-
-    Used only by `main`. It raises `SystemExit` rather than `typer.Exit`
-    because at this point we are *outside* `app()`, where Typer is no longer
-    catching its own exception - a `typer.Exit` raised here propagates to the
-    interpreter and prints the full traceback alongside the message, which is
-    noise for a plain "that name is already taken".
-    """
-    typer.echo(f"error: {message}", err=True)
-    raise SystemExit(int(code))
-
-
 def main() -> None:
     """Console-script entry point.
 
-    Domain errors are translated here rather than in each command, so every
-    command reports a missing suite or a name conflict identically.
+    Does nothing but prepare the output streams: domain errors are translated
+    by `DomainErrorGroup`, inside the app, so this wrapper and a test harness
+    behave identically.
     """
     configure_streams()
-    try:
-        app()
-    except (NotFoundError, ConflictError) as exc:
-        _abort(str(exc), ExitCode.FAILED)
-    except ScenarioLoadError as exc:
-        _abort(str(exc), ExitCode.INVALID_INPUT)
+    app()
 
 
 if __name__ == "__main__":  # pragma: no cover
