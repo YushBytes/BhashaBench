@@ -9,13 +9,14 @@ BhashaBench is an automated testing and benchmarking platform for
 Indian-language voice bots. It is being built in **15 controlled phases**; see
 `docs/DEVELOPMENT_ROADMAP.md`.
 
-**Phases 1 and 2 are complete.** Phase 3 has not started.
+**Phases 1, 2 and 3 are complete.** Phase 4 has not started.
 
 | Phase | Status |
 |-------|--------|
 | 1 — Project foundation | ✅ Complete |
 | 2 — Database & scenario engine | ✅ Complete |
-| 3–15 | ⬜ Not started |
+| 3 — Scenario library & tooling | ✅ Complete |
+| 4–15 | ⬜ Not started |
 
 ## The two rules that matter most
 
@@ -30,9 +31,11 @@ Indian-language voice bots. It is being built in **15 controlled phases**; see
 ## Phase discipline
 
 Do not implement functionality belonging to a future phase, even if it seems
-convenient. A pull request that does will be asked to split. Phase 3+ work —
-telephony, speech-to-text, text-to-speech, audio degradation, caller
-simulation, evaluation — is explicitly out of scope until its phase.
+convenient. A pull request that does will be asked to split. Phase 4+ work —
+speech-to-text, text-to-speech, caller simulation, audio degradation,
+telephony, orchestration, evaluation — is explicitly out of scope until its
+phase. In particular, do not add Gnani Prisma, Timbre or Evon clients, and do
+not invent their endpoints or credentials.
 
 The `TestRun`, `CallSession` and `ConversationTurn` tables exist as
 **foundational schema only**. Nothing executes a run, places a call or
@@ -58,6 +61,34 @@ db/           engine, session, declarative base
 - Services raise `NotFoundError` / `ConflictError` from
   `app/services/errors.py`. The exception handlers in `app/main.py` are the
   single place that maps a domain failure to an HTTP status.
+
+### The language catalogue
+
+`app/core/languages.py` is the **single source of truth** for supported
+languages. The scenario schema, the search filters, the CLI and
+`GET /api/v1/languages` all read from it. Do not hardcode a language list
+anywhere else, and do not add a language without its endonym, ISO 15924 script
+and POSIX locale.
+
+`validate_tag` checks shape before membership, so `hi_IN` fails as malformed
+while `fr-FR` fails as unsupported with the full supported list. Those are
+different mistakes and deserve different messages.
+
+### Front ends share services, not messages
+
+The API and the CLI both call `services/`. A domain error that suggests a
+remedy must not name one front end's mechanism: `delete_suite` takes a
+`cascade_remedy` phrase so the HTTP refusal says `cascade=true` and the CLI
+says `--cascade`. Telling a shell user to pass `cascade=true` sends them
+looking for a flag that does not exist.
+
+The CLI translates domain errors in `DomainErrorGroup.invoke`, inside the
+Typer app — not in `main()`. Doing it in `main()` meant only the console script
+got messages and exit codes; every other entry point got a bare `1`.
+
+`app/cli/__init__.py` exports only `app`. Binding the entry function as `main`
+there would shadow the `app.cli.main` submodule, so `app.cli.main` would
+resolve to a function and patching the module by path would fail.
 
 ### Database
 
@@ -98,7 +129,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # whole suite (246 tests)
+pytest                                  # whole suite (551 tests)
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```
@@ -115,6 +146,14 @@ ruff check . && ruff format --check .   # from the repository root
 - Do not import the `TestSuite` or `TestRun` ORM classes under their real
   names into a test module — pytest tries to collect any module-level
   `Test*` class. Alias them (`TestSuite as SuiteModel`).
+- A class-scoped fixture must not be written as an instance method; pytest 9
+  deprecates it, and `filterwarnings = ["error"]` turns that into an error.
+  Use a module-level fixture.
+- CLI tests drive the real Typer app through `CliRunner`, with
+  `app.cli.main.session_scope` rebound to the test's rolled-back transaction.
+  Do not test CLI behaviour by calling the command functions directly — that
+  skips the argument parsing and the exit codes, which is most of what a CLI
+  is.
 
 ## Local environment notes
 
@@ -149,10 +188,16 @@ ruff check . && ruff format --check .   # from the repository root
 | `README.md` | setup, commands, endpoints, environment variables change |
 | `docs/ARCHITECTURE.md` | a structural decision is made or revised |
 | `docs/DATABASE.md` | the schema changes |
-| `docs/SCENARIO_FORMAT.md` | the scenario specification changes |
+| `docs/SCENARIO_FORMAT.md` | the scenario specification or bundle format changes |
+| `docs/CLI.md` | a command, flag, exit code or output format changes |
+| `scenarios/README.md` | a reference scenario is added or changed |
 | `docs/DEVELOPMENT_ROADMAP.md` | a phase's scope or status changes |
 | `.env.example` | any configuration variable is added or renamed |
 | `CLAUDE.md` | these instructions change |
+
+After editing anything in `scenarios/`, regenerate
+`scenarios/bundles/indian_language_reference.yaml` (the command is in
+`scenarios/README.md`). A test fails if the bundle is stale.
 
 The phase-status tables in `README.md`, `CLAUDE.md` and the roadmap must
 agree — they are the first thing a reader checks to learn what actually works.

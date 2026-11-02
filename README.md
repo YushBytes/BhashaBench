@@ -6,7 +6,7 @@ An automated testing and benchmarking platform for Indian-language voice
 bots — simulated callers, realistic audio degradation and automated
 conversation scoring.
 
-> ### Project status: Phase 2 of 15 complete
+> ### Project status: Phase 3 of 15 complete
 >
 > **Phase 1 — Foundation.** FastAPI backend, health endpoints, Next.js status
 > shell, Docker Compose stack, test and lint toolchain.
@@ -14,6 +14,11 @@ conversation scoring.
 > **Phase 2 — Database & scenario engine.** PostgreSQL persistence via
 > Alembic migrations, and the scenario engine: YAML authoring with strict
 > validation, plus CRUD endpoints for test suites and scenarios.
+>
+> **Phase 3 — Scenario library & tooling.** Search, filtering and tags across
+> suites; suite editing and guarded deletion; scenario copy and move; a
+> 13-language catalogue with structured code-mixing annotations; bulk YAML
+> import and deterministic export; and the `bhashabench` CLI.
 >
 > **No calls are placed, no speech is processed and no scores are produced
 > yet.** Telephony, speech services, audio degradation, caller simulation and
@@ -37,6 +42,7 @@ conversation scoring.
 - [Environment configuration](#environment-configuration)
 - [Development commands](#development-commands)
 - [Testing](#testing)
+- [Command-line interface](#command-line-interface)
 - [API endpoints](#api-endpoints)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -169,17 +175,19 @@ BhashaBench/
 │   ├── app/
 │   │   ├── main.py            FastAPI app factory, error handlers, lifespan
 │   │   ├── core/config.py     pydantic-settings configuration
+│   │   ├── core/languages.py  the 13-language catalogue, single source
 │   │   ├── api/               HTTP layer
 │   │   │   ├── deps.py        injectable dependencies
-│   │   │   └── v1/            versioned routes (health.py, router.py)
+│   │   │   └── v1/            versioned routes (health, suites, scenarios, languages)
+│   │   ├── cli/               the `bhashabench` command-line interface
 │   │   ├── db/                declarative base, engine, session dependency
 │   │   ├── models/            SQLAlchemy ORM models (5 tables)
 │   │   ├── repositories/      every SQL statement lives here
 │   │   ├── schemas/           response models, error envelope, scenario spec
-│   │   ├── services/          health, scenario loader, suite + scenario logic
+│   │   ├── services/          health, scenario loader, bundles, suite + scenario logic
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 246 tests across 6 modules
+│   ├── tests/                 551 tests across 11 modules
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
 │   └── Dockerfile             multi-stage: development / production
@@ -189,12 +197,13 @@ BhashaBench/
 │   ├── lib/content.ts         typed product copy and phase status
 │   ├── public/
 │   └── Dockerfile             multi-stage: development / builder / production
-├── scenarios/                 scenario YAML definitions
 ├── benchmarks/                benchmark suite definitions      (Phase 11)
 ├── sample_bot/                reference bot to test against    (Phase 6)
 ├── scripts/                   operational scripts
+├── scenarios/                 reference scenario YAML (6 languages)
 ├── docs/
 │   ├── ARCHITECTURE.md
+│   ├── CLI.md
 │   ├── DATABASE.md
 │   ├── DEVELOPMENT_ROADMAP.md
 │   └── SCENARIO_FORMAT.md
@@ -270,6 +279,16 @@ pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 
 uvicorn app.main:app --reload --app-dir backend
 ```
+
+### Command-line tools
+
+```bash
+pip install -e .                     # installs the `bhashabench` entry point
+bhashabench --help
+python -m app.cli --help             # equivalent, without installing
+```
+
+See [Command-line interface](#command-line-interface).
 
 The API is then on <http://localhost:8000>, with docs at `/docs`.
 
@@ -406,7 +425,7 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite has **246 tests** in six modules:
+The backend suite has **551 tests** in eleven modules:
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -415,7 +434,12 @@ The backend suite has **246 tests** in six modules:
 | `test_app_metadata.py` | 9 | App title/summary/version, the generated OpenAPI document, the application factory |
 | `test_scenario_spec.py` | 107 | YAML syntax, unsafe payloads, recursive/cyclic aliases, size and expansion limits, every validation rule, round-trip serialisation, file loading |
 | `test_database.py` | 37 | Connection, the migrated schema, model creation, relationships, foreign-key delete behaviour, every constraint, transaction rollback |
-| `test_api_suites_scenarios.py` | 63 | All nine endpoints, pagination, duplicates, unknown ids, malformed UUIDs, oversized bodies, error-envelope shape |
+| `test_api_suites_scenarios.py` | 63 | The Phase 2 endpoints, pagination, duplicates, unknown ids, malformed UUIDs, oversized bodies, error-envelope shape |
+| `test_languages.py` | 89 | Catalogue invariants (unique codes and locales, endonym scripts), tag shape and membership rejection, and that the schema and the API read from this one source |
+| `test_bundle.py` | 39 | Bundle parsing and building: per-entry error collection, duplicate rejection, the 500-entry cap, byte-identical round-trips, no ids or timestamps in output |
+| `test_api_library.py` | 74 | Search, filters, pagination and ordering; suite `PATCH` and guarded `DELETE`; copy and move; import dry-run and atomicity; export round-trip |
+| `test_cli.py` | 65 | Argument parsing, exit codes and output for every command through Typer's `CliRunner`, plus that no connection string reaches the terminal on a database outage |
+| `test_reference_scenarios.py` | 38 | Every committed scenario in `scenarios/` validates and round-trips, the set covers six languages and the documented audio and code-mixing cases, and the generated bundle is not stale |
 
 ```bash
 pytest
@@ -423,8 +447,8 @@ pytest
 
 ### The database tests need PostgreSQL
 
-`test_database.py` and `test_api_suites_scenarios.py` run against a **real
-PostgreSQL** — not SQLite, because the schema uses JSONB, native UUIDs and
+`test_database.py`, `test_api_suites_scenarios.py`, `test_api_library.py` and
+the database-backed half of `test_cli.py` run against a **real PostgreSQL** — not SQLite, because the schema uses JSONB, native UUIDs and
 `ON DELETE RESTRICT`, none of which SQLite models faithfully.
 
 ```bash
@@ -443,7 +467,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-======================= 35 passed in 0.40s =======================
+====================== 551 passed in 22.99s ======================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -458,6 +482,35 @@ cd frontend && npm run lint && npm run typecheck && npm run build
 
 ---
 
+## Command-line interface
+
+`bhashabench` is the authoring and administration tool for the scenario
+library — a thin front end over the same services the API calls, so the two
+cannot disagree about whether a scenario is valid.
+
+```bash
+pip install -e .                     # provides the `bhashabench` command
+
+# Offline: no database, no running service.
+bhashabench validate scenarios/appointment_booking.yaml
+bhashabench validate-bundle scenarios/bundles/indian_language_reference.yaml
+bhashabench languages
+
+# Database-backed.
+bhashabench suite create "Reference"
+bhashabench scenario list --language ta-IN --tag payment
+bhashabench import scenarios/bundles/indian_language_reference.yaml --suite "$ID" --dry-run
+bhashabench export "$ID" --output bundle.yaml
+```
+
+Exit codes are distinguished so a shell script can act on them: `0` success,
+`1` the operation failed (not found, conflict, refused), `2` invalid input,
+`3` the database is unreachable. Every command takes `--json`.
+
+Full reference: [`docs/CLI.md`](docs/CLI.md).
+
+---
+
 ## API endpoints
 
 ### Meta and health
@@ -467,6 +520,7 @@ cd frontend && npm run lint && npm run typecheck && npm run build
 | `GET` | `/` | Product name, tagline, version, environment, docs path |
 | `GET` | `/health` | `{"status": "ok", "version": "0.1.0"}` — cheap liveness probe |
 | `GET` | `/api/v1/health` | Per-subsystem health, uptime and a UTC timestamp |
+| `GET` | `/api/v1/languages` | The 13 supported languages with endonym, script and locale |
 
 ### Test suites
 
@@ -475,6 +529,8 @@ cd frontend && npm run lint && npm run typecheck && npm run build
 | `POST` | `/api/v1/suites` | 201 with the created suite. 409 if the name is taken |
 | `GET` | `/api/v1/suites` | Paginated list, newest first (`limit`, `offset`) |
 | `GET` | `/api/v1/suites/{suite_id}` | One suite with its scenario count. 404 if unknown |
+| `PATCH` | `/api/v1/suites/{suite_id}` | Updates the name, the description, or both. 409 on a duplicate name |
+| `DELETE` | `/api/v1/suites/{suite_id}` | 409 if the suite still holds scenarios. `?cascade=true` deletes them with it |
 
 ### Scenarios
 
@@ -486,6 +542,11 @@ cd frontend && npm run lint && npm run typecheck && npm run build
 | `PUT` | `/api/v1/scenarios/{scenario_id}` | Replaces the definition. Takes `{"yaml": "..."}` |
 | `DELETE` | `/api/v1/scenarios/{scenario_id}` | 204 |
 | `POST` | `/api/v1/scenarios/validate` | Validates YAML without storing anything |
+| `GET` | `/api/v1/scenarios` | Searches the whole library. `suite_id`, `language`, `name`, repeatable `tag`, `limit`, `offset` |
+| `POST` | `/api/v1/scenarios/{scenario_id}/copy` | 201. Copies into another suite with a new id. Takes `{"target_suite_id": ..., "new_name": ...}` |
+| `POST` | `/api/v1/scenarios/{scenario_id}/move` | Moves to another suite, keeping the id |
+| `POST` | `/api/v1/suites/{suite_id}/scenarios/import` | Bulk import from a bundle. Takes `{"yaml": ..., "dry_run": ..., "atomic": ...}` |
+| `GET` | `/api/v1/suites/{suite_id}/scenarios/export` | The suite as a deterministic, re-importable bundle |
 
 Scenario names are unique **per suite**, so two suites may each hold an
 `appointment_booking`. See
@@ -533,7 +594,7 @@ Every error, including unhandled exceptions, uses one envelope:
 | 404 | `not_found` | Unknown suite or scenario id |
 | 409 | `conflict` | Duplicate suite name, or duplicate scenario name in a suite |
 | 413 | `payload_too_large` | YAML beyond the size limit |
-| 422 | `validation_error` | Malformed request body or a non-UUID path segment |
+| 422 | `validation_error` | Malformed request body, a non-UUID path segment, or an unsupported `?language=` filter |
 | 422 | `yaml_syntax_error` | YAML that will not parse, or an unsafe tag |
 | 422 | `scenario_validation_error` | Parsed, but violates the scenario schema |
 | 500 | `internal_error` | Unhandled exception; details are logged, never returned |
@@ -550,7 +611,7 @@ documentation. Full detail in
 |---|-------|--------|
 | 1 | Project foundation | ✅ Complete |
 | 2 | Database & scenario engine | ✅ Complete |
-| 3 | Scenario definition format | ⬜ Not started |
+| 3 | Scenario library & tooling | ✅ Complete |
 | 4 | Speech to text (Gnani Prisma) | ⬜ Not started |
 | 5 | Text to speech (Gnani Timbre) | ⬜ Not started |
 | 6 | AI caller simulation (Gnani Evon) | ⬜ Not started |

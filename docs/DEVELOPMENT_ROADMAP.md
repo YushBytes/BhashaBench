@@ -18,7 +18,7 @@ phase, not as existing behaviour.
 |---|-------|--------|
 | 1 | Project Foundation | ✅ Complete |
 | 2 | Database & Scenario Engine | ✅ Complete |
-| 3 | Scenario Library & Tooling | ⬜ Not started |
+| 3 | Scenario Library & Tooling | ✅ Complete |
 | 4 | Gnani Prisma — Speech to Text | ⬜ Not started |
 | 5 | Gnani Timbre — Text to Speech | ⬜ Not started |
 | 6 | AI Caller Simulation (Gnani Evon) | ⬜ Not started |
@@ -87,22 +87,50 @@ database honestly.
 
 ---
 
-## Phase 3 — Scenario Library & Tooling
+## Phase 3 — Scenario Library & Tooling ✅
 
-The scenario *format*, its validation and its CRUD endpoints were delivered in
-Phase 2. What remains:
+**Delivered.** Make a scenario collection navigable, editable and portable.
+The scenario *format*, its validation and its CRUD endpoints arrived in
+Phase 2; this phase is everything around them.
 
-- `scenarios/` populated with reference scenarios across all supported Indian
-  languages (Phase 2 ships one documented reference file).
-- Bulk import and export: load a directory of YAML files into a suite, and
-  dump a suite back to files.
-- A scenario-validation CLI entry point in `scripts/`, for use in CI before
-  anything is stored.
-- Suite update and delete endpoints, and scenario copy/move between suites.
-- Code-mixing annotation on scenarios, ahead of Phase 11's benchmarks.
+- **Library search.** `GET /api/v1/scenarios` across every suite, filtering by
+  suite, exact language, name substring and repeatable tags, ordered by name
+  then id so paging stays stable. Tag filtering is a JSONB containment test
+  served by a new GIN index on `scenarios.spec` (migration `4997650a09c8`).
+- **Suite editing.** `PATCH` for name and description, distinguishing an
+  omitted field from an explicit null; `DELETE` that refuses a non-empty suite
+  unless `?cascade=true`, because the foreign key cascades and a bare delete
+  would take every scenario with it.
+- **Copy and move.** Copy gives the new scenario a fresh id and re-validates
+  the spec; move preserves the id so existing references stay valid.
+- **Language catalogue.** 13 Indian languages in `app/core/languages.py` as
+  the single source of truth, with endonym, ISO 15924 script and POSIX locale,
+  readable at `GET /api/v1/languages`.
+- **Code-mixing annotations.** A structured, optional `code_mixing` block —
+  primary and secondary languages, switch triggers, expected ratio, sample
+  utterances — plus `expected: false` to assert a monolingual caller. Scenario
+  spec version 2; v1 documents still validate unchanged.
+- **Bundles.** One YAML document holding a suite and its scenarios.
+  Import collects every entry error rather than stopping at the first, and is
+  atomic by default with a dry-run mode. Export is deterministic and
+  round-trippable: ordered by name, defaults materialised, no ids or
+  timestamps.
+- **The `bhashabench` CLI.** Validation and the catalogue work offline so CI
+  can reject a malformed scenario before any service exists; suite, scenario,
+  import and export commands reuse the same services the API calls.
+  Distinguished exit codes (0/1/2/3) and `--json` on every command.
+- **Reference scenarios.** Six languages in `scenarios/`, each stressing a
+  different failure mode, with a generated bundle and tests that fail if they
+  drift from the schema.
+- 551 tests, up from 246.
 
-**Exit criteria.** A directory of scenario files can be validated offline and
-imported into a suite in one command.
+**Exit criteria — met.** A directory of scenario files can be validated
+offline (`for f in scenarios/*.yaml; do bhashabench validate "$f"; done`) and
+a whole suite imported in one command, with a dry run first.
+
+**Deliberately not in this phase.** No Gnani Prisma, Timbre or Evon
+integration, no telephony, no audio processing and no scoring. The scenario
+library is now complete enough to drive those.
 
 ---
 

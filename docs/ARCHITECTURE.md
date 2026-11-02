@@ -1,14 +1,16 @@
 # BhashaBench — Architecture
 
-> **Status.** Phases 1 and 2 of 15 are complete. This document describes the
-> *planned* architecture. Only the components marked **Implemented** exist
+> **Status.** Phases 1, 2 and 3 of 15 are complete. This document describes
+> the *planned* architecture. Only the components marked **Implemented** exist
 > today; everything else is design intent, recorded so that each phase has a
 > target to build against. Nothing here should be read as a claim that an
 > unimplemented component is operational.
 >
-> Phase 2 added persistence and the scenario engine. For detail see
-> [`DATABASE.md`](DATABASE.md) (schema, ER diagram, migrations) and
-> [`SCENARIO_FORMAT.md`](SCENARIO_FORMAT.md) (the YAML format).
+> Phase 2 added persistence and the scenario engine; Phase 3 added the
+> scenario library, its tooling and a second front end over the same services.
+> For detail see [`DATABASE.md`](DATABASE.md) (schema, ER diagram,
+> migrations), [`SCENARIO_FORMAT.md`](SCENARIO_FORMAT.md) (the YAML and bundle
+> formats) and [`CLI.md`](CLI.md) (the command-line tool).
 
 ---
 
@@ -30,24 +32,32 @@ reasoning behind its score.
 ## 2. Component map
 
 ```
-                    ┌──────────────────────────┐
-                    │  Next.js dashboard       │  ◀── Implemented (shell only)
-                    │  (App Router, TS, TW)    │
-                    └────────────┬─────────────┘
-                                 │ HTTPS / JSON
-                    ┌────────────▼─────────────┐
-                    │  FastAPI backend         │  ◀── Implemented
-                    │  /  /health  /api/v1/*   │
-                    └────────────┬─────────────┘
-                                 │
-         ┌───────────────────────┼───────────────────────┐
-         │                       │                       │
-┌────────▼────────┐   ┌──────────▼──────────┐   ┌────────▼─────────┐
-│  Orchestrator   │   │  Scenario engine    │   │  PostgreSQL 16   │
-│  (Phase 9)      │   │  ◀── Implemented    │   │  ◀── Implemented │
-└────────┬────────┘   └─────────────────────┘   │  5 tables via    │
-         │                                      │  Alembic         │
-         │                                      └──────────────────┘
+   ┌─────────────────────────┐      ┌─────────────────────────┐
+   │  Next.js dashboard      │      │  bhashabench CLI        │
+   │  (App Router, TS, TW)   │      │  (Typer)                │
+   │  ◀── Shell only         │      │  ◀── Implemented        │
+   └────────────┬────────────┘      └────────────┬────────────┘
+                │ HTTPS / JSON                   │ in-process:
+                │                                │ same services,
+                │                                │ own session
+   ┌────────────▼────────────┐                   │
+   │  FastAPI backend        │                   │
+   │  /  /health  /api/v1/*  │                   │
+   │  ◀── Implemented        │                   │
+   └────────────┬────────────┘                   │
+                │                                │
+   ┌────────────▼────────────────────────────────▼────────────┐
+   │  services/  repositories/  models/     ◀── Implemented   │
+   └────────────────────────────┬─────────────────────────────┘
+                                │
+         ┌──────────────────────┼──────────────────────┐
+         │                      │                      │
+┌────────▼────────┐  ┌──────────▼─────────┐  ┌─────────▼────────┐
+│  Orchestrator   │  │  Scenario engine   │  │  PostgreSQL 16   │
+│  (Phase 9)      │  │  ◀── Implemented   │  │  ◀── Implemented │
+└────────┬────────┘  └────────────────────┘  │  5 tables via    │
+         │                                   │  Alembic         │
+         │                                   └──────────────────┘
          │
          ├──────────────┬──────────────┬──────────────┬──────────────┐
          │              │              │              │              │
@@ -65,7 +75,7 @@ reasoning behind its score.
 
 ---
 
-## 3. Implemented today (Phases 1–2)
+## 3. Implemented today (Phases 1–3)
 
 ### 3.1 Backend — `backend/app/`
 
@@ -82,7 +92,8 @@ outside a request and the HTTP mapping lives only in `main.py`.
 | HTTP | `api/` | Routing, status codes, dependency injection. No logic. |
 | Contracts | `schemas/` | Pydantic request/response models; the API's public shape. |
 | Logic | `services/` | Behaviour, callable and testable without a client. |
-| Config | `core/` | Settings, validation, cross-cutting concerns. |
+| Config | `core/` | Settings, validation, the language catalogue. |
+| CLI | `cli/` | A second front end over `services/`. Owns only its output and exit codes. |
 | Data access | `repositories/` | Every SQL statement. Takes a `Session`, never commits. |
 | Persistence | `models/` | SQLAlchemy ORM — five tables, owned by Alembic. |
 | Engine | `db/` | Declarative base, engine, session dependency. |
@@ -157,6 +168,41 @@ only with `yaml.safe_load`, under size, node-count and nesting limits.
 
 Full detail, including the reasoning behind every schema decision, is in
 [`DATABASE.md`](DATABASE.md) and [`SCENARIO_FORMAT.md`](SCENARIO_FORMAT.md).
+
+### 3.2a The scenario library and its two front ends (Phase 3)
+
+Phase 3 added search across suites, suite editing, copy and move, a language
+catalogue, code-mixing annotations, and bundle import/export — and a second
+front end over all of it.
+
+The `bhashabench` CLI is **not** an HTTP client. It imports the same
+`services/` functions the routes call and opens its own session through
+`app/db/session.py`. That is the structural point: validation, uniqueness
+rules, transaction boundaries and the cascade guard exist once. A CLI that
+re-implemented any of them could disagree with the API about whether a
+scenario is valid, which is the one failure a test-authoring tool cannot
+afford.
+
+What each front end owns is only its own surface: HTTP status codes and the
+error envelope on one side, exit codes and terminal output on the other.
+Where a domain error suggests a remedy, the service takes the wording from its
+caller (`cascade_remedy`) so neither front end tells a user to use the other's
+mechanism.
+
+Two decisions follow from the catalogue being a single module
+(`app/core/languages.py`) rather than a constant per consumer:
+
+- A language is supported everywhere or nowhere. The spec schema, the search
+  filter, the CLI and `GET /api/v1/languages` all read the same tuple.
+- `UnsupportedLanguageError` is a `ValueError`, so it surfaces as a Pydantic
+  validation error inside a document and needs an explicit handler for the
+  one path that consults the catalogue directly — the `?language=` filter.
+  Without it a bad query string would have been a 500.
+
+Bundles are the unit of portability: one YAML document, a suite's metadata and
+its scenarios, no database identifiers. Export is deterministic so a bundle
+committed to git diffs cleanly, and import is atomic by default so a failed
+batch never leaves a half-populated suite.
 
 ### 3.3 Frontend — `frontend/`
 

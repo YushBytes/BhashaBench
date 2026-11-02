@@ -100,6 +100,9 @@ arrives this becomes a composite constraint rather than a new column.
 One test case. The validated specification is stored as a single JSONB
 document in `spec`.
 
+`spec` carries a **GIN index** (`ix_scenarios_spec_gin`) so the library's tag
+filter is an index scan rather than a sequential one. See below.
+
 ### `test_runs`, `call_sessions`, `conversation_turns`
 
 Foundational. See the scope note above.
@@ -128,7 +131,36 @@ the schema.
 
 `spec_version` records which revision of that schema produced the stored
 document, so a future schema change can migrate old rows rather than guess at
-their shape.
+their shape. It is currently `2`: v2 added the optional `tags` and
+`code_mixing` fields, both with defaults, so a stored v1 document still
+validates unchanged. No data migration was needed, and a v1 row keeps its
+recorded version until it is next written.
+
+### Why `spec` has a GIN index
+
+Tag filtering (`GET /api/v1/scenarios?tag=healthcare`) is a JSONB containment
+test — `spec @> '{"tags": ["healthcare"]}'`. B-tree indexes cannot answer
+containment, so without a GIN index every tag query is a sequential scan of
+the whole table that deserialises each document.
+
+```sql
+CREATE INDEX ix_scenarios_spec_gin ON scenarios USING gin (spec);
+```
+
+`EXPLAIN` on a tag filter shows a Bitmap Index Scan on this index, which is
+the behaviour the index exists to produce.
+
+The index covers the whole `spec` column rather than a `jsonb_path_ops`
+expression index on `tags` alone. That is deliberate: later phases will filter
+on other parts of the document, and a general index serves those without
+another migration. The cost is a larger index and slightly slower writes —
+acceptable for a table that is written once per authored scenario and read on
+every library query.
+
+This is also why the tag filter is a containment test rather than SQL
+generated from a list of `LIKE` patterns: containment requires every requested
+tag to be present, which is the semantics the endpoint documents, and it is
+the form the index can answer.
 
 ### Why `name`, `description` and `language` are duplicated out of the spec
 
@@ -267,7 +299,13 @@ target whatever the application itself would connect to.
 | Revision | Description |
 |----------|-------------|
 | `3e3312d5327a` | Create the suite, scenario and execution tables (initial) |
+| `4997650a09c8` | Index `scenarios.spec` with GIN for tag filtering |
 
-The initial migration's `downgrade()` drops everything in reverse dependency
-order and is exercised on every test run, so it is genuinely reversible rather
-than one-way.
+Both are reversible. The initial migration's `downgrade()` drops everything in
+reverse dependency order and is exercised on every test run, so it is
+genuinely reversible rather than one-way; `4997650a09c8` drops its index.
+
+Phase 3 added the `tags` and `code_mixing` fields without a data migration:
+they live inside the existing JSONB document and are optional with defaults,
+so no existing row had to be rewritten. The only schema change was the
+index.
