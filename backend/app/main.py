@@ -18,6 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
+from app.core.languages import UnsupportedLanguageError
 from app.schemas.common import ErrorDetail, ErrorResponse, HealthResponse, ServiceIdentity
 from app.services.errors import ConflictError, NotFoundError
 from app.services.health import uptime_seconds
@@ -86,6 +87,20 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ConflictError)
     async def handle_conflict(_request: Request, exc: ConflictError) -> JSONResponse:
         return _error_response(status.HTTP_409_CONFLICT, "conflict", str(exc))
+
+    @app.exception_handler(UnsupportedLanguageError)
+    async def handle_unsupported_language(
+        _request: Request, exc: UnsupportedLanguageError
+    ) -> JSONResponse:
+        """An unsupported language tag is invalid input, not a server fault.
+
+        Inside a scenario document this already surfaces as a Pydantic
+        validation error. This handler covers the other path: a bad
+        `?language=` filter on the search endpoint, where the catalogue is
+        consulted directly. Without it the error is a `ValueError`, which the
+        catch-all handler would turn into an opaque 500.
+        """
+        return _error_response(status.HTTP_422_UNPROCESSABLE_CONTENT, "validation_error", str(exc))
 
     @app.exception_handler(ScenarioTooLargeError)
     async def handle_scenario_too_large(
