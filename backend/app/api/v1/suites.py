@@ -12,13 +12,21 @@ database calls inside `async def` would stall every other request.
 from __future__ import annotations
 
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from app.api.deps import DbSession, PaginationParams
 from app.models.suite import TestSuite
 from app.schemas.common import ErrorResponse
-from app.schemas.suite import Page, SuiteCreate, SuiteRead, SuiteSummary
+from app.schemas.suite import (
+    Page,
+    SuiteCreate,
+    SuiteDeleteResult,
+    SuiteRead,
+    SuiteSummary,
+    SuiteUpdate,
+)
 from app.services import suite_service
 
 router = APIRouter(prefix="/suites", tags=["suites"])
@@ -84,3 +92,67 @@ def get_suite(suite_id: uuid.UUID, session: DbSession) -> SuiteRead:
     """Return one suite with its scenario count."""
     suite = suite_service.get_suite(session, suite_id)
     return _to_read(suite, scenario_count=suite_service.count_scenarios(session, suite_id))
+
+
+@router.patch(
+    "/{suite_id}",
+    response_model=SuiteRead,
+    summary="Update a test suite",
+    description=(
+        "Updates editable metadata. PATCH rather than PUT because both fields "
+        "are optional: a caller may change the name without restating the "
+        "description. Send `description: null` to clear it; omitting the key "
+        "leaves it untouched. Scenarios are never affected."
+    ),
+    responses={
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Not found"},
+        status.HTTP_409_CONFLICT: {"model": ErrorResponse, "description": "Name taken"},
+    },
+)
+def update_suite(suite_id: uuid.UUID, payload: SuiteUpdate, session: DbSession) -> SuiteRead:
+    """Update a suite's name and/or description."""
+    suite = suite_service.update_suite(
+        session,
+        suite_id,
+        name=payload.name,
+        description=payload.description,
+        # `model_fields_set` records the keys the client actually sent, which
+        # is the only way to tell `description: null` (clear it) from an
+        # omitted key (leave it alone).
+        clear_description=(
+            "description" in payload.model_fields_set and payload.description is None
+        ),
+    )
+    return _to_read(suite, scenario_count=suite_service.count_scenarios(session, suite_id))
+
+
+@router.delete(
+    "/{suite_id}",
+    response_model=SuiteDeleteResult,
+    summary="Delete a test suite",
+    description=(
+        "Refuses with 409 when the suite still contains scenarios. The "
+        "database-level foreign key cascades, so a bare delete would silently "
+        "take every scenario with it - the wrong default for an "
+        "unrecoverable operation. Pass `cascade=true` to delete the suite and "
+        "its scenarios together, which the response then reports."
+    ),
+    responses={
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Not found"},
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": "Suite is not empty, or a scenario is referenced by call history",
+        },
+    },
+)
+def delete_suite(
+    suite_id: uuid.UUID,
+    session: DbSession,
+    cascade: Annotated[
+        bool,
+        Query(description="Delete the suite's scenarios along with it."),
+    ] = False,
+) -> SuiteDeleteResult:
+    """Delete a suite, with an explicit opt-in for taking its scenarios."""
+    deleted = suite_service.delete_suite(session, suite_id, cascade=cascade)
+    return SuiteDeleteResult(suite_id=suite_id, scenarios_deleted=deleted)

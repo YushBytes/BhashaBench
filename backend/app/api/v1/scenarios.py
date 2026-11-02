@@ -9,14 +9,21 @@ honest rather than forcing a redundant suite id into every path.
 from __future__ import annotations
 
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from app.api.deps import DbSession, PaginationParams
 from app.models.scenario import Scenario
 from app.schemas.common import ErrorResponse
 from app.schemas.scenario import (
+    BundleEntryErrorRead,
+    BundleExportResponse,
+    BundleImportRequest,
+    BundleImportResponse,
+    ScenarioCopyRequest,
     ScenarioCreate,
+    ScenarioMoveRequest,
     ScenarioRead,
     ScenarioSummary,
     ScenarioUpdate,
@@ -183,3 +190,212 @@ def update_scenario(
 def delete_scenario(scenario_id: uuid.UUID, session: DbSession) -> None:
     """Delete a scenario."""
     scenario_service.delete_scenario(session, scenario_id)
+
+
+@scenarios_router.get(
+    "",
+    response_model=Page[ScenarioSummary],
+    summary="Search the scenario library",
+    description=(
+        "Searches across every suite by default. Filters combine with AND: "
+        "`language` must match exactly, `name` is a case-insensitive substring, "
+        "and `tag` may be repeated to require several tags at once. Ordered by "
+        "name then id, so paging stays stable even when two suites hold a "
+        "scenario with the same name."
+    ),
+    responses={
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Suite not found"},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "model": ErrorResponse,
+            "description": "Unsupported language or malformed parameter",
+        },
+    },
+)
+def search_scenarios(
+    session: DbSession,
+    pagination: PaginationParams,
+    suite_id: Annotated[
+        uuid.UUID | None, Query(description="Restrict to one suite. Must exist.")
+    ] = None,
+    language: Annotated[str | None, Query(description="Exact language tag, e.g. `hi-IN`.")] = None,
+    name: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=200,
+            description="Case-insensitive substring of the scenario name.",
+        ),
+    ] = None,
+    tag: Annotated[
+        list[str] | None,
+        Query(description="Require this tag. Repeat the parameter to require several."),
+    ] = None,
+) -> Page[ScenarioSummary]:
+    """Return a filtered page of scenarios."""
+    scenarios, total = scenario_service.search_scenarios(
+        session,
+        suite_id=suite_id,
+        language=language,
+        name_contains=name,
+        tags=tag,
+        limit=pagination.limit,
+        offset=pagination.offset,
+    )
+    return Page[ScenarioSummary](
+        items=[ScenarioSummary.model_validate(scenario) for scenario in scenarios],
+        total=total,
+        limit=pagination.limit,
+        offset=pagination.offset,
+    )
+
+
+@scenarios_router.post(
+    "/{scenario_id}/copy",
+    response_model=ScenarioRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Copy a scenario into another suite",
+    description=(
+        "Creates an independent scenario with a new id and its own timestamps; "
+        "the source is untouched. The specification is re-validated on the way "
+        "through, so a copy of an older stored document comes out normalised to "
+        "the current schema. Copying within the same suite is allowed and then "
+        "requires `new_name`."
+    ),
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorResponse,
+            "description": "Scenario or target suite not found",
+        },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": "Name already used in the target suite",
+        },
+    },
+)
+def copy_scenario(
+    scenario_id: uuid.UUID, payload: ScenarioCopyRequest, session: DbSession
+) -> ScenarioRead:
+    """Copy a scenario into the target suite."""
+    copy = scenario_service.copy_scenario(
+        session,
+        scenario_id,
+        target_suite_id=payload.target_suite_id,
+        new_name=payload.new_name,
+    )
+    return _to_read(copy)
+
+
+@scenarios_router.post(
+    "/{scenario_id}/move",
+    response_model=ScenarioRead,
+    summary="Move a scenario to another suite",
+    description=(
+        "Keeps the scenario's id, so anything already referencing it stays "
+        "valid; only its suite changes. Moving to the suite it already belongs "
+        "to is a no-op, which keeps a retried request safe. Supply `new_name` "
+        "when the destination already uses the name."
+    ),
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorResponse,
+            "description": "Scenario or target suite not found",
+        },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": "Name already used in the target suite",
+        },
+    },
+)
+def move_scenario(
+    scenario_id: uuid.UUID, payload: ScenarioMoveRequest, session: DbSession
+) -> ScenarioRead:
+    """Move a scenario into the target suite."""
+    moved = scenario_service.move_scenario(
+        session,
+        scenario_id,
+        target_suite_id=payload.target_suite_id,
+        new_name=payload.new_name,
+    )
+    return _to_read(moved)
+
+
+@suite_scenarios_router.post(
+    "/import",
+    response_model=BundleImportResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Import a scenario bundle into a suite",
+    description=(
+        "Validates the whole bundle before writing anything. Atomic by default: "
+        "one failed or duplicate entry abandons the import and `committed` is "
+        "false. Use `dry_run` to see exactly what would happen against a real "
+        "suite without writing. Existing scenarios are never overwritten - a "
+        "name collision is reported as a duplicate. Returns 200 rather than 201 "
+        "because the useful outcome is the report, and an abandoned import "
+        "creates nothing."
+    ),
+    responses={
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Suite not found"},
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": "A colliding name was created concurrently",
+        },
+        status.HTTP_413_CONTENT_TOO_LARGE: {
+            "model": ErrorResponse,
+            "description": "Bundle exceeds the size limit",
+        },
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "model": ErrorResponse,
+            "description": "Not a bundle, or unsafe/malformed YAML",
+        },
+    },
+)
+def import_bundle(
+    suite_id: uuid.UUID, payload: BundleImportRequest, session: DbSession
+) -> BundleImportResponse:
+    """Import a bundle, atomically by default."""
+    result = scenario_service.import_bundle(
+        session,
+        suite_id=suite_id,
+        content=payload.yaml,
+        dry_run=payload.dry_run,
+        atomic=payload.atomic,
+    )
+    return BundleImportResponse(
+        total=result.total,
+        valid=result.valid,
+        imported=result.imported,
+        failed=result.failed,
+        duplicates=result.duplicates,
+        entry_errors=[
+            BundleEntryErrorRead(
+                index=entry.index,
+                name=entry.name,
+                errors=[ValidationFieldError(**error.as_dict()) for error in entry.errors],
+            )
+            for entry in result.entry_errors
+        ],
+        dry_run=result.dry_run,
+        committed=result.committed,
+    )
+
+
+@suite_scenarios_router.get(
+    "/export",
+    response_model=BundleExportResponse,
+    summary="Export a suite as a scenario bundle",
+    description=(
+        "Returns every scenario in the suite as one re-importable document. "
+        "Output is deterministic - no ids, no timestamps, declared field order - "
+        "so exporting twice gives byte-identical YAML and a diff between two "
+        "exports shows only real changes. An empty suite exports an empty "
+        "`scenarios` list rather than failing."
+    ),
+    responses={
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Suite not found"}
+    },
+)
+def export_suite(suite_id: uuid.UUID, session: DbSession) -> BundleExportResponse:
+    """Export the suite's scenarios as a bundle."""
+    document = scenario_service.export_suite(session, suite_id)
+    _, count = scenario_service.list_scenarios(session, suite_id, limit=1, offset=0)
+    return BundleExportResponse(yaml=document, scenario_count=count)

@@ -14,7 +14,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from app.schemas.scenario_spec import ScenarioSpec
+from app.schemas.scenario_spec import ScenarioName, ScenarioSpec
 
 EXAMPLE_YAML = """\
 name: appointment_booking
@@ -49,6 +49,24 @@ audio:
 # Bounded at the schema layer as well as in the loader, so an oversized body is
 # rejected by request validation before any parsing work happens.
 YamlText = Annotated[str, StringConstraints(min_length=1, max_length=256 * 1024)]
+
+# A bundle holds many scenarios, so it gets the same cap as the loader applies
+# to a whole document rather than the single-scenario budget.
+BundleText = Annotated[str, StringConstraints(min_length=1, max_length=256 * 1024)]
+
+EXAMPLE_BUNDLE_YAML = """\nformat: bhashabench.scenario-bundle/v1
+suite:
+  name: Hindi appointment flows
+scenarios:
+  - name: appointment_booking
+    language: hi-IN
+    persona:
+      identity: Working professional
+    goal:
+      objective: Book an appointment for tomorrow.
+    expected_outcomes:
+      - Confirm appointment date
+"""
 
 
 class ScenarioCreate(BaseModel):
@@ -159,3 +177,113 @@ class ScenarioValidateResponse(BaseModel):
         default=None,
         description="The specification serialised back to canonical YAML. Null when invalid.",
     )
+
+
+class ScenarioCopyRequest(BaseModel):
+    """Payload for copying a scenario into a suite."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={"example": {"target_suite_id": "…", "new_name": "appointment_v2"}},
+    )
+
+    target_suite_id: uuid.UUID = Field(description="Suite to copy into. Must exist.")
+    new_name: ScenarioName | None = Field(
+        default=None,
+        description="Name for the copy. Required when copying within the same suite, "
+        "since the original already holds the name.",
+    )
+
+
+class ScenarioMoveRequest(BaseModel):
+    """Payload for moving a scenario between suites."""
+
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"example": {"target_suite_id": "…"}}
+    )
+
+    target_suite_id: uuid.UUID = Field(description="Suite to move into. Must exist.")
+    new_name: ScenarioName | None = Field(
+        default=None,
+        description="Rename while moving, for when the destination already uses the name.",
+    )
+
+
+class BundleImportRequest(BaseModel):
+    """Payload for importing a scenario bundle."""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {
+                "yaml": EXAMPLE_BUNDLE_YAML,
+                "dry_run": False,
+                "atomic": True,
+            }
+        },
+    )
+
+    yaml: BundleText = Field(description="The bundle document.")
+    dry_run: bool = Field(
+        default=False,
+        description="Validate and report what would happen without writing anything.",
+    )
+    atomic: bool = Field(
+        default=True,
+        description="All or nothing. When true (the default) a single failed or "
+        "duplicate entry abandons the whole import. Set false to import the "
+        "valid, non-colliding entries and have the rest reported.",
+    )
+
+
+class BundleEntryErrorRead(BaseModel):
+    """Validation failure for one entry in a bundle."""
+
+    index: int = Field(ge=0, description="Zero-based position in the `scenarios` list.")
+    name: str | None = Field(description="The entry's name, when it had a readable one.")
+    errors: list[ValidationFieldError] = Field(description="Field-level failures.")
+
+
+class BundleImportResponse(BaseModel):
+    """Result of an import, successful or not."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "total": 3,
+                "valid": 2,
+                "imported": 0,
+                "failed": 2,
+                "duplicates": ["appointment_booking"],
+                "entry_errors": [],
+                "dry_run": False,
+                "committed": False,
+            }
+        }
+    )
+
+    total: int = Field(ge=0, description="Entries the bundle contained.")
+    valid: int = Field(ge=0, description="Entries that passed schema validation.")
+    imported: int = Field(ge=0, description="Entries actually written.")
+    failed: int = Field(ge=0, description="Entries not imported, for any reason.")
+    duplicates: list[str] = Field(
+        description="Names already present in the target suite. Never overwritten."
+    )
+    entry_errors: list[BundleEntryErrorRead] = Field(description="Per-entry validation failures.")
+    dry_run: bool = Field(description="Whether this was a dry run.")
+    committed: bool = Field(
+        description="Whether anything was persisted. False for a dry run and for an "
+        "abandoned atomic import, so 'nothing to do' is distinguishable from "
+        "'nothing was done'."
+    )
+
+
+class BundleExportResponse(BaseModel):
+    """An exported bundle."""
+
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"yaml": EXAMPLE_BUNDLE_YAML, "scenario_count": 2}}
+    )
+
+    yaml: str = Field(description="The bundle document, ready to re-import.")
+    scenario_count: int = Field(ge=0, description="Scenarios included.")

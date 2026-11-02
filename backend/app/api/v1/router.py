@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1 import health, scenarios, suites
+from app.api.v1 import health, languages, scenarios, suites
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+api_router.include_router(languages.router)
 api_router.include_router(suites.router)
 
 # Order matters: the suite-nested router is mounted before the directly

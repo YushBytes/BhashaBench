@@ -634,18 +634,27 @@ class TestErrorEnvelope:
 class TestOpenApiSurface:
     """The documented surface must match what is implemented."""
 
-    def test_all_phase_two_paths_are_documented(self, client: TestClient) -> None:
+    def test_all_implemented_paths_are_documented(self, client: TestClient) -> None:
         paths = client.get("/openapi.json").json()["paths"]
 
         assert set(paths) == {
+            # Phase 1
             "/",
             "/health",
             "/api/v1/health",
+            # Phase 2
             "/api/v1/suites",
             "/api/v1/suites/{suite_id}",
             "/api/v1/suites/{suite_id}/scenarios",
             "/api/v1/scenarios/validate",
             "/api/v1/scenarios/{scenario_id}",
+            # Phase 3
+            "/api/v1/languages",
+            "/api/v1/scenarios",
+            "/api/v1/scenarios/{scenario_id}/copy",
+            "/api/v1/scenarios/{scenario_id}/move",
+            "/api/v1/suites/{suite_id}/scenarios/import",
+            "/api/v1/suites/{suite_id}/scenarios/export",
         }
 
     def test_scenario_spec_schema_is_published(self, client: TestClient) -> None:

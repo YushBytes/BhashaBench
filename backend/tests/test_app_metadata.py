@@ -36,9 +36,12 @@ class TestOpenApiDocument:
         """The documented surface must match exactly what is implemented.
 
         Phase 1 shipped three paths; Phase 2 added the suite and scenario
-        endpoints. Asserting the exact set - rather than a subset - is what
-        catches a route that was added without being documented, or one left
-        mounted after being removed.
+        endpoints; Phase 3 added library search, copy/move, bundle
+        import/export and the language catalogue.
+
+        Asserting the exact set - rather than a subset - is what catches a
+        route added without being documented, or one left mounted after being
+        removed.
         """
         paths = client.get("/openapi.json").json()["paths"]
 
@@ -53,6 +56,13 @@ class TestOpenApiDocument:
             "/api/v1/suites/{suite_id}/scenarios",
             "/api/v1/scenarios/validate",
             "/api/v1/scenarios/{scenario_id}",
+            # Phase 3
+            "/api/v1/languages",
+            "/api/v1/scenarios",
+            "/api/v1/scenarios/{scenario_id}/copy",
+            "/api/v1/scenarios/{scenario_id}/move",
+            "/api/v1/suites/{suite_id}/scenarios/import",
+            "/api/v1/suites/{suite_id}/scenarios/export",
         }
 
     def test_info_block_matches_settings(self, client: TestClient, settings: Settings) -> None:

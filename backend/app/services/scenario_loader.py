@@ -99,8 +99,13 @@ def _format_location(location: tuple[Any, ...]) -> str:
     return ".".join(str(part) for part in location) or "<root>"
 
 
-def _collect_errors(exc: ValidationError) -> list[FieldError]:
-    """Convert a Pydantic `ValidationError` into field-addressed errors."""
+def collect_validation_errors(exc: ValidationError) -> list[FieldError]:
+    """Convert a Pydantic `ValidationError` into field-addressed errors.
+
+    Public because the bundle importer validates scenario entries itself and
+    needs the same field-path rendering; importing a private helper across
+    modules would be a worse coupling than naming this one.
+    """
     return [
         FieldError(
             field=_format_location(error["loc"]),
@@ -254,7 +259,7 @@ def spec_from_yaml(content: str | bytes) -> ScenarioSpec:
     try:
         return ScenarioSpec.model_validate(document)
     except ValidationError as exc:
-        errors = _collect_errors(exc)
+        errors = collect_validation_errors(exc)
         summary = "; ".join(f"{error.field}: {error.message}" for error in errors[:5])
         if len(errors) > 5:
             summary += f" (and {len(errors) - 5} more)"

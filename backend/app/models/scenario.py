@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -39,6 +39,16 @@ class Scenario(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         # Scenario names are unique per suite, not globally: two suites may
         # each reasonably contain an "appointment_booking" scenario.
         UniqueConstraint("suite_id", "name", name="uq_scenarios_suite_id_name"),
+        # GIN index for JSONB containment, which is how tag filtering is
+        # expressed: `spec @> '{"tags": ["healthcare"]}'`. Without it that
+        # predicate is a sequential scan over every scenario. Indexing the
+        # whole `spec` document rather than `spec->'tags'` keeps the index
+        # usable for any future containment filter on the specification.
+        Index(
+            "ix_scenarios_spec_gin",
+            "spec",
+            postgresql_using="gin",
+        ),
     )
 
     suite_id: Mapped[uuid.UUID] = mapped_column(

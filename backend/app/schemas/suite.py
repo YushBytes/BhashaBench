@@ -70,3 +70,40 @@ class SuiteSummary(BaseModel):
     description: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class SuiteUpdate(BaseModel):
+    """Payload for updating a suite's editable metadata.
+
+    Both fields are optional so a caller can change one without restating the
+    other. `description` uses a sentinel rather than plain `None`, because
+    `None` cannot distinguish "leave it alone" from "clear it" - and a partial
+    update that silently erased a description would be a data-loss bug.
+    Send `description: null` to clear it explicitly; the router reads
+    `model_fields_set` to tell the two cases apart.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "example": {"name": "Hindi appointment flows", "description": "Updated scope."}
+        },
+    )
+
+    name: SuiteName | None = Field(default=None, description="New name. Must be unique.")
+    description: str | None = Field(
+        default=None, max_length=2000, description="New description; null clears it."
+    )
+
+
+class SuiteDeleteResult(BaseModel):
+    """What a suite deletion removed."""
+
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"suite_id": "…", "scenarios_deleted": 3}}
+    )
+
+    suite_id: uuid.UUID
+    scenarios_deleted: int = Field(
+        ge=0, description="Scenarios removed with the suite. Zero unless cascade was used."
+    )
