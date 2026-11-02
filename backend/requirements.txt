@@ -31,3 +31,9 @@ psycopg[binary]~=3.3.0
 # -- Scenario definitions (Phase 2) -------------------------------------------
 # Loaded exclusively with `yaml.safe_load`; never `yaml.load`.
 pyyaml~=6.0.0
+
+# -- Command-line interface (Phase 3) -----------------------------------------
+# Typer builds the CLI from type hints, which keeps the command signatures and
+# the validation in one place rather than duplicating argument parsing. It is
+# a thin layer over Click, already an indirect dependency via uvicorn.
+typer~=0.27.0

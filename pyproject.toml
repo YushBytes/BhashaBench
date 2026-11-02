@@ -12,13 +12,23 @@ authors = [{ name = "YushBytes" }]
 # kept intentionally empty to avoid two competing sources of truth.
 dependencies = []
 
+# The `bhashabench` command. Installing the project in editable mode
+# (`pip install -e .`) puts it on PATH; until then the CLI is reachable as
+# `python -m app.cli` from `backend/`, which is how CI and the test suite
+# invoke it.
+[project.scripts]
+bhashabench = "app.cli:main"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-# The backend is run as an application, not installed as a distribution.
-packages = []
+package-dir = { "" = "backend" }
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+include = ["app*"]
 
 # =============================================================================
 # Ruff - linting and formatting
