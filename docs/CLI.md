@@ -267,11 +267,11 @@ abandons the whole batch, so a half-applied library never has to be unpicked
 by hand. Existing scenarios are never overwritten — a name already in the
 target suite is reported as a duplicate and skipped.
 
-Export is deterministic: scenarios ordered by name, defaults materialised, no
-ids and no timestamps. Exporting the same suite twice gives byte-identical
-output, so a bundle committed to git produces a reviewable diff rather than
-noise, and a round trip through export → import reproduces the scenarios
-exactly.
+Export is deterministic: scenarios ordered by name, defaults materialised,
+mappings key-sorted, no ids and no timestamps. Exporting the same suite twice
+gives byte-identical output, so a bundle committed to git produces a reviewable
+diff rather than noise — and importing a bundle then exporting it reproduces
+the original file byte for byte.
 
 The bundle format is documented in
 [SCENARIO_FORMAT.md](SCENARIO_FORMAT.md#bundles-bulk-import-and-export).

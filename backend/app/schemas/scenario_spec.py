@@ -399,6 +399,26 @@ class ScenarioSpec(SpecModel):
         lowered = sorted({tag.strip().lower() for tag in value})
         return lowered
 
+    @field_validator("known_facts")
+    @classmethod
+    def _sort_known_facts(cls, value: dict[str, str]) -> dict[str, str]:
+        """Order the facts by key, so the canonical form is provenance-free.
+
+        `known_facts` is looked up by name, so its order carries no meaning.
+        But PostgreSQL `jsonb` does not preserve insertion order - it stores
+        keys sorted by length, then bytewise - so a scenario exported from the
+        database came back with its facts in a different order from the file it
+        was imported from. Both documents were valid and semantically equal,
+        and the diff between them was pure noise.
+
+        Sorting here, at validation, means the canonical serialisation of a
+        scenario depends only on the scenario and not on where it was read
+        from: a bundle built from files and the same bundle exported from the
+        database are byte-identical. That is the whole point of having a
+        canonical form.
+        """
+        return dict(sorted(value.items()))
+
     @field_validator("language")
     @classmethod
     def _validate_language(cls, value: str) -> str:

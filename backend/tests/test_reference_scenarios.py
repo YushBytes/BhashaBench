@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fastapi.testclient import TestClient
 
 from app.core import languages
 from app.schemas.scenario_spec import ScenarioSpec
@@ -177,3 +178,73 @@ class TestReferenceBundle:
         assert not row_fields & set(document)
         for entry in document["scenarios"]:
             assert not row_fields & set(entry)
+
+
+class TestDatabaseRoundTrip:
+    """The committed bundle must survive a trip through PostgreSQL unchanged.
+
+    This is the case the unit tests cannot reach: `scenarios.spec` is `jsonb`,
+    which does not preserve a mapping's insertion order - it stores keys sorted
+    by length, then bytewise. A scenario exported from the database therefore
+    came back with its `known_facts` in a different order from the file it was
+    imported from. Both documents were valid and meant the same thing, and the
+    diff between them was pure noise.
+
+    `ScenarioSpec` now sorts `known_facts` at validation, so the canonical form
+    depends on the scenario and not on where it was read from. These tests
+    exercise the real database to keep it that way.
+    """
+
+    def test_import_then_export_reproduces_the_file_byte_for_byte(
+        self, api_client: TestClient
+    ) -> None:
+        committed = BUNDLE_PATH.read_text(encoding="utf-8")
+        suite = api_client.post(
+            "/api/v1/suites",
+            json={"name": SUITE_NAME, "description": SUITE_DESCRIPTION},
+        )
+        assert suite.status_code == 201, suite.text
+        suite_id = suite.json()["id"]
+
+        imported = api_client.post(
+            f"/api/v1/suites/{suite_id}/scenarios/import", json={"yaml": committed}
+        )
+        assert imported.status_code == 200, imported.text
+        assert imported.json()["imported"] == len(SCENARIO_FILES)
+        assert imported.json()["failed"] == 0
+
+        exported = api_client.get(f"/api/v1/suites/{suite_id}/scenarios/export")
+
+        assert exported.status_code == 200, exported.text
+        assert exported.json()["yaml"] == committed
+
+    def test_known_facts_order_is_normalised_not_merely_stable(
+        self, api_client: TestClient
+    ) -> None:
+        """Authoring order must not leak into the stored canonical form.
+
+        Written with the facts deliberately out of order, so a test that only
+        compared an export against itself would pass while the defect stood.
+        """
+        suite_id = api_client.post("/api/v1/suites", json={"name": "Fact order"}).json()["id"]
+        authored = (
+            "name: fact_order\n"
+            "language: hi-IN\n"
+            "persona:\n"
+            "  identity: Caller\n"
+            "goal:\n"
+            "  objective: Ask a question.\n"
+            "known_facts:\n"
+            "  zulu: last\n"
+            "  alpha: first\n"
+            "  mike: middle\n"
+            "expected_outcomes:\n"
+            "  - Bot answers\n"
+        )
+
+        created = api_client.post(f"/api/v1/suites/{suite_id}/scenarios", json={"yaml": authored})
+        assert created.status_code == 201, created.text
+
+        stored = api_client.get(f"/api/v1/scenarios/{created.json()['id']}").json()
+
+        assert list(stored["spec"]["known_facts"]) == ["alpha", "mike", "zulu"]

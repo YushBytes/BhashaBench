@@ -67,7 +67,7 @@ expected_outcomes:
 | `language` | string | **yes** | — | BCP 47 tag from the supported set below. |
 | `persona` | mapping | **yes** | — | See below. |
 | `goal` | mapping | **yes** | — | See below. |
-| `known_facts` | mapping | no | `{}` | Max 50 entries. String values only. |
+| `known_facts` | mapping | no | `{}` | Max 50 entries. String values only. Keys are sorted on the way in. |
 | `expected_outcomes` | list | **yes** | — | 1–20 entries, no duplicates. |
 | `audio` | mapping | no | all defaults | See below. |
 | `constraints` | mapping | no | omitted | See below. |
@@ -249,6 +249,13 @@ result.
 range checks refuse them.
 
 **Whitespace is stripped** from every string field.
+
+**`known_facts` keys are sorted, and `tags` are lowercased and sorted.**
+Neither carries meaning in its authored order — facts are looked up by name —
+and PostgreSQL `jsonb` does not preserve insertion order anyway. Normalising
+at validation means a scenario's canonical form depends only on the scenario
+and not on whether it was read from a file or from the database, which is what
+makes a file-built bundle and an exported one byte-identical.
 
 ---
 
@@ -490,11 +497,16 @@ bhashabench export "$SUITE_ID" --output bundle.yaml
 ```
 
 Export is **deterministic and round-trippable**. Scenarios come out ordered by
-name, defaults are materialised, and no database identifier or timestamp is
-included — so exporting the same suite twice produces byte-identical output,
-and a bundle committed to git produces a reviewable diff rather than noise.
-Re-importing an exported bundle into an empty suite reproduces the original
-scenarios exactly; the test suite asserts both properties.
+name, defaults are materialised, mappings are key-sorted, and no database
+identifier or timestamp is included — so exporting the same suite twice
+produces byte-identical output, and a bundle committed to git produces a
+reviewable diff rather than noise.
+
+The round trip is byte-exact in both directions: importing
+`scenarios/bundles/indian_language_reference.yaml` and exporting the suite
+reproduces that file exactly, and a test asserts it against the real database.
+That holds only because the canonical form is independent of provenance — see
+the normalisation note above.
 
 Because ids are omitted, a bundle describes scenarios rather than rows. That
 is what makes it safe to move between environments.

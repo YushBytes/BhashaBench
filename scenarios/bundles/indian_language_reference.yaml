@@ -18,8 +18,8 @@ scenarios:
     max_turns: 15
   known_facts:
     patient_name: Rahul Sharma
-    preferred_time: 10 AM
     phone_last_four: '0042'
+    preferred_time: 10 AM
   expected_outcomes:
   - Confirm the appointment date
   - Confirm the appointment time
@@ -68,8 +68,8 @@ scenarios:
     max_turns: 20
   known_facts:
     account_last_four: 0083
-    registered_name: Anima Bhattacharya
     date_of_birth: '1949-03-11'
+    registered_name: Anima Bhattacharya
   expected_outcomes:
   - Verify the caller's identity
   - State the account balance
@@ -114,8 +114,8 @@ scenarios:
     objective: File a claim for a two-wheeler accident and get a claim reference.
     max_turns: 20
   known_facts:
-    policy_number: TW00418827
     incident_date: '2026-10-28'
+    policy_number: TW00418827
     vehicle_registration: KA-03-MN-4471
   expected_outcomes:
   - Confirm the policy number
@@ -156,9 +156,9 @@ scenarios:
     objective: Reschedule the delivery for Saturday morning and get a confirmation.
     max_turns: 16
   known_facts:
-    tracking_id: BB4471902
     pincode: '411045'
     preferred_slot: Saturday 9 AM to 12 PM
+    tracking_id: BB4471902
   expected_outcomes:
   - Confirm the tracking ID
   - Confirm the new delivery date
@@ -207,8 +207,8 @@ scenarios:
     max_turns: 18
   known_facts:
     consumer_number: 0471883
-    registered_name: Meena Lakshmi
     last_payment_month: September
+    registered_name: Meena Lakshmi
   expected_outcomes:
   - State the outstanding amount
   - Confirm the consumer number back to the caller
@@ -254,8 +254,8 @@ scenarios:
     max_turns: 12
   known_facts:
     order_id: PH7729
-    village_name: Chennaraopet
     phone_last_four: 0196
+    village_name: Chennaraopet
   expected_outcomes:
   - Confirm the order ID
   - State the current delivery status
