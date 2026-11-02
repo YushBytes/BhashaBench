@@ -7,8 +7,8 @@
 | **Repository** | <https://github.com/YushBytes/BhashaBench> (**public**, by the owner's explicit decision) |
 | **Branch** | `main` — the single authoritative branch |
 | **Base** | `main` @ `50405cf` (last pre-Phase-3 commit) |
-| **Commits in this phase** | **11** |
-| **HEAD** | `c1725e7` |
+| **Commits in this phase** | **11** implementation, fix and documentation commits (listed in §N), plus the commit that adds this report, plus any correction commits after it. `git log --oneline 50405cf..HEAD` is the authoritative count. |
+| **HEAD when the work was finished** | `c1725e7` — the last commit before this report. A report cannot name its own SHA. |
 | **Tracked files** | 117 (was 93 after Phase 2) |
 | **Tests** | **561 passing**, 0 failed, 0 skipped — on the host *and* in the container (was 246 after Phase 2) |
 | **API paths** | 14 (was 8) |
@@ -666,8 +666,9 @@ Eleven commits on `main`, base `50405cf`, oldest first:
 | `2258143` | `fix(scenarios): sort known_facts so the canonical form ignores provenance` |
 | `c1725e7` | `fix(ci): give the in-container test run the same configuration as the host` |
 
-49 files changed, 7151 insertions, 131 deletions. 24 files added, 25 modified,
-none deleted.
+Those eleven changed 49 files: 7151 insertions, 131 deletions, 24 files added,
+25 modified, none deleted. The report commit that follows them rewrites this
+file; `git diff --shortstat 50405cf..HEAD` is the authoritative total.
 
 **Documentation updated:** `README.md`, `CLAUDE.md`, `docs/CLI.md` (new),
 `docs/SCENARIO_FORMAT.md`, `docs/DATABASE.md`, `docs/ARCHITECTURE.md`,
