@@ -70,6 +70,14 @@ class ScenarioRecursionError(ScenarioSyntaxError):
 class ScenarioValidationError(ScenarioLoadError):
     """Input parsed as YAML but did not satisfy `ScenarioSpec`."""
 
+    HEADLINE = "scenario failed validation"
+    """The message without the embedded field summary.
+
+    A consumer that renders `.errors` as its own list - the CLI does - would
+    otherwise print every failure twice: once inside the message and again
+    underneath it.
+    """
+
     def __init__(self, message: str, errors: list[FieldError]) -> None:
         super().__init__(message)
         self.errors = errors
@@ -263,7 +271,9 @@ def spec_from_yaml(content: str | bytes) -> ScenarioSpec:
         summary = "; ".join(f"{error.field}: {error.message}" for error in errors[:5])
         if len(errors) > 5:
             summary += f" (and {len(errors) - 5} more)"
-        raise ScenarioValidationError(f"scenario failed validation - {summary}", errors) from exc
+        raise ScenarioValidationError(
+            f"{ScenarioValidationError.HEADLINE} - {summary}", errors
+        ) from exc
 
 
 def spec_from_file(path: Path) -> ScenarioSpec:

@@ -58,6 +58,25 @@ BUNDLE = yaml.safe_dump(
 )
 
 
+TWO_BAD_FIELDS = """name: two_bad
+language: fr-FR
+persona:
+  identity: Caller
+  speaking_style: shouty
+goal:
+  objective: Ask a question.
+expected_outcomes:
+  - Bot answers
+"""
+
+
+MONOLINGUAL_BLOCK = """\ncode_mixing:
+  secondary:
+    - en-IN
+  expected: false
+"""
+
+
 @pytest.fixture
 def scenario_file(tmp_path: Path) -> Path:
     """A valid scenario on disk."""
@@ -198,6 +217,37 @@ class TestValidateCommand:
         payload = json.loads(output)
         assert payload["valid"] is False
         assert any(error["field"] == "language" for error in payload["errors"])
+
+    def test_asserted_monolingual_is_not_shown_as_mixing(self, tmp_path: Path) -> None:
+        """`expected: false` is the opposite claim and must not read as mixing."""
+        path = tmp_path / "mono.yaml"
+        path.write_text(
+            SCENARIO + MONOLINGUAL_BLOCK,
+            encoding="utf-8",
+        )
+
+        code, output = invoke("validate", str(path))
+
+        assert code == ExitCode.OK
+        assert "none expected" in output
+        assert "hi-IN + en-IN" not in output
+
+    def test_each_failure_is_reported_once(self, tmp_path: Path) -> None:
+        """The embedded message summary must not be printed alongside the list.
+
+        `ScenarioValidationError` carries the first few failures inside its
+        message for consumers that have only a message to show. The CLI renders
+        `.errors` itself, so echoing the raw message too showed each failure
+        twice.
+        """
+        path = tmp_path / "two_bad.yaml"
+        path.write_text(TWO_BAD_FIELDS, encoding="utf-8")
+
+        _, output = invoke("validate", str(path))
+
+        assert output.count("fr-FR") == 1
+        assert output.count("persona.speaking_style") == 1
+        assert output.count("language:") == 1
 
     def test_malformed_yaml_exits_two(self, tmp_path: Path) -> None:
         path = tmp_path / "broken.yaml"
@@ -492,6 +542,23 @@ class TestSuiteCommands:
 
         assert code == ExitCode.FAILED
         assert "still contains" in output
+
+    def test_refusal_names_the_flag_and_not_the_query_parameter(
+        self, cli_db: Session, bundle_file: Path
+    ) -> None:
+        """The remedy has to be the one this front end actually accepts.
+
+        The same service refusal is surfaced over HTTP, where the opt-in is
+        `?cascade=true`. Printing that here would send a shell user looking for
+        a flag the CLI does not have.
+        """
+        suite_id = json.loads(invoke("suite", "create", "Worded", "--json")[1])["id"]
+        invoke("import", str(bundle_file), "--suite", suite_id)
+
+        _, output = invoke("suite", "delete", suite_id)
+
+        assert "--cascade" in output
+        assert "cascade=true" not in output
 
     def test_cascade_delete_removes_scenarios(self, cli_db: Session, bundle_file: Path) -> None:
         suite_id = json.loads(invoke("suite", "create", "Cascaded", "--json")[1])["id"]

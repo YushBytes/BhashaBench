@@ -27,3 +27,23 @@ class ConflictError(DomainError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
+
+
+class SuiteNotEmptyError(ConflictError):
+    """A suite still holds scenarios and was not asked to take them with it.
+
+    Carries the name and the count as fields rather than only inside a
+    message, because the remedy is spelled differently in each front end -
+    `?cascade=true` over HTTP, `--cascade` on the command line. A single
+    prescriptive message would be wrong in one of them, and telling a CLI user
+    to pass `cascade=true` sends them looking for a flag that does not exist.
+    """
+
+    def __init__(self, suite_name: str, scenario_count: int, remedy: str) -> None:
+        super().__init__(
+            f"suite '{suite_name}' still contains {scenario_count} scenario(s). "
+            f"Delete them first, or {remedy} to delete the suite and its "
+            "scenarios together."
+        )
+        self.suite_name = suite_name
+        self.scenario_count = scenario_count

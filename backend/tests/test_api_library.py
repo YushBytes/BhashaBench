@@ -343,6 +343,7 @@ class TestSuiteDelete:
         message = api_client.delete(f"/api/v1/suites/{suite_id}").json()["error"]["message"]
 
         assert "cascade=true" in message
+        assert "--cascade" not in message
 
     def test_cascade_deletes_the_suite_and_its_scenarios(self, api_client: TestClient) -> None:
         suite_id = make_suite(api_client, "Cascading")

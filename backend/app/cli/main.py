@@ -148,9 +148,7 @@ def validate_scenario(
                 }
             )
             raise typer.Exit(int(ExitCode.INVALID_INPUT)) from exc
-        typer.echo(f"error: {exc}", err=True)
-        print_field_errors(getattr(exc, "errors", []))
-        raise typer.Exit(int(ExitCode.INVALID_INPUT)) from exc
+        handle_load_error(exc)
 
     if as_json:
         emit_json({"valid": True, "scenario": spec.model_dump(mode="json")})
@@ -163,7 +161,14 @@ def validate_scenario(
         typer.echo(f"  tags:     {', '.join(spec.tags)}")
     if spec.code_mixing is not None:
         secondary = ", ".join(spec.code_mixing.secondary)
-        typer.echo(f"  mixing:   {spec.language} + {secondary}")
+        # `expected: false` asserts the caller stays monolingual, so printing
+        # "hi-IN + en-IN" there would state the opposite of what the scenario
+        # checks. The secondary languages are still named, because they are
+        # the ones being asserted absent.
+        if spec.code_mixing.expected:
+            typer.echo(f"  mixing:   {spec.language} + {secondary}")
+        else:
+            typer.echo(f"  mixing:   none expected ({secondary} asserted absent)")
     if show_normalized:
         typer.echo("")
         typer.echo(spec_to_yaml(spec))
@@ -376,7 +381,9 @@ def suite_delete(
     identifier = _parse_uuid(suite_id, "suite id")
 
     with _session() as session:
-        deleted = suite_service.delete_suite(session, identifier, cascade=cascade)
+        deleted = suite_service.delete_suite(
+            session, identifier, cascade=cascade, cascade_remedy="pass --cascade"
+        )
 
     if as_json:
         emit_json({"suite_id": str(identifier), "scenarios_deleted": deleted})

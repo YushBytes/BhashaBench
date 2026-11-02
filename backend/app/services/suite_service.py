@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models.suite import TestSuite
 from app.repositories import scenarios as scenario_repo
 from app.repositories import suites as suite_repo
-from app.services.errors import ConflictError, NotFoundError
+from app.services.errors import ConflictError, NotFoundError, SuiteNotEmptyError
 
 
 def create_suite(session: Session, *, name: str, description: str | None) -> TestSuite:
@@ -108,7 +108,13 @@ def update_suite(
     return suite
 
 
-def delete_suite(session: Session, suite_id: uuid.UUID, *, cascade: bool = False) -> int:
+def delete_suite(
+    session: Session,
+    suite_id: uuid.UUID,
+    *,
+    cascade: bool = False,
+    cascade_remedy: str = "retry with cascade",
+) -> int:
     """Delete a suite, refusing by default to take its scenarios with it.
 
     The database-level foreign key is ON DELETE CASCADE, so a bare DELETE
@@ -124,6 +130,10 @@ def delete_suite(session: Session, suite_id: uuid.UUID, *, cascade: bool = False
     Returns the number of scenarios deleted alongside it, so the caller can
     report what actually happened.
 
+    `cascade_remedy` is the phrase the refusal uses to tell the user how to
+    opt in. The service cannot know whether its caller is an HTTP client or a
+    shell, and a message naming the wrong mechanism is worse than a vague one.
+
     A scenario referenced by recorded call history cannot be deleted at all
     (`call_sessions.scenario_id` is ON DELETE RESTRICT); that surfaces as an
     IntegrityError and is reported as a conflict rather than a 500.
@@ -132,11 +142,7 @@ def delete_suite(session: Session, suite_id: uuid.UUID, *, cascade: bool = False
     scenario_count = scenario_repo.count_for_suite(session, suite_id)
 
     if scenario_count and not cascade:
-        raise ConflictError(
-            f"suite '{suite.name}' still contains {scenario_count} scenario(s). "
-            "Delete them first, or repeat the request with cascade=true to "
-            "delete the suite and its scenarios together."
-        )
+        raise SuiteNotEmptyError(suite.name, scenario_count, cascade_remedy)
 
     try:
         suite_repo.delete(session, suite)

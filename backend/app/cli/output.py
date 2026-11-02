@@ -19,6 +19,7 @@ from app.services.scenario_loader import (
     MAX_YAML_BYTES,
     FieldError,
     ScenarioLoadError,
+    ScenarioValidationError,
 )
 
 
@@ -132,8 +133,20 @@ def write_output(content: str, destination: Path | None) -> None:
 
 
 def handle_load_error(exc: ScenarioLoadError) -> None:
-    """Report a parser or validation failure and exit with code 2."""
-    typer.echo(f"error: {exc}", err=True)
+    """Report a parser or validation failure and exit with code 2.
+
+    A `ScenarioValidationError` already embeds the first few field errors in
+    its message, for consumers that have nothing but a message to show. The
+    CLI has room for the whole list, so here the headline is printed alone and
+    every failure listed beneath it - printing the message as-is and then the
+    list showed the first five twice.
+    """
+    if isinstance(exc, ScenarioValidationError):
+        typer.echo(f"error: {ScenarioValidationError.HEADLINE}:", err=True)
+        print_field_errors(exc.errors)
+    else:
+        typer.echo(f"error: {exc}", err=True)
+
     raise typer.Exit(int(ExitCode.INVALID_INPUT))
 
 

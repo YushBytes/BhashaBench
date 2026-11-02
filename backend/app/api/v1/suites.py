@@ -154,5 +154,7 @@ def delete_suite(
     ] = False,
 ) -> SuiteDeleteResult:
     """Delete a suite, with an explicit opt-in for taking its scenarios."""
-    deleted = suite_service.delete_suite(session, suite_id, cascade=cascade)
+    deleted = suite_service.delete_suite(
+        session, suite_id, cascade=cascade, cascade_remedy="repeat the request with cascade=true"
+    )
     return SuiteDeleteResult(suite_id=suite_id, scenarios_deleted=deleted)
