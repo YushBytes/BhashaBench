@@ -19,45 +19,36 @@ Design rules applied throughout:
 
 from __future__ import annotations
 
-import re
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
-SPEC_VERSION = 1
+from app.core import languages
+
+SPEC_VERSION = 2
 """Revision of this schema. Stored on every persisted scenario.
 
 Bump this when a change to the models below would alter the meaning of an
 already-stored document, so old rows can be identified and migrated.
+
+v1 -> v2 (Phase 3) added the optional `tags` and `code_mixing` fields. Both
+are optional with defaults, so a stored v1 document still validates against
+this schema unchanged - no data migration is needed, and a v1 row keeps its
+recorded `spec_version` until it is next written.
 """
 
-# BCP 47, restricted to the `language` or `language-REGION` shapes this project
-# actually uses (`hi`, `hi-IN`, `en-IN`). Deliberately not the full RFC 5646
-# grammar: accepting extensions and private-use subtags we cannot route to a
-# speech provider would be accepting input we cannot honour.
-_LANGUAGE_TAG = re.compile(r"^[a-z]{2,3}(-[A-Z]{2})?$")
-
-# Languages the platform targets. A tag outside this set is rejected with the
-# list in the message, so an author learns what is available rather than
-# discovering mid-run that nothing supports their choice.
-SUPPORTED_LANGUAGES: frozenset[str] = frozenset(
-    {
-        "hi-IN",  # Hindi
-        "ta-IN",  # Tamil
-        "te-IN",  # Telugu
-        "kn-IN",  # Kannada
-        "ml-IN",  # Malayalam
-        "mr-IN",  # Marathi
-        "bn-IN",  # Bengali
-        "gu-IN",  # Gujarati
-        "pa-IN",  # Punjabi
-        "or-IN",  # Odia
-        "as-IN",  # Assamese
-        "ur-IN",  # Urdu
-        "en-IN",  # Indian English
-    }
-)
+# Language validation is delegated to `app.core.languages`, the single source
+# of truth. `SUPPORTED_LANGUAGES` is re-exported here so that code importing it
+# from this module - as Phases 1 and 2 did - keeps working unchanged.
+SUPPORTED_LANGUAGES = languages.SUPPORTED_LANGUAGES
 
 # A short machine-friendly identifier: lowercase, digits, underscore, hyphen.
 ScenarioName = Annotated[
@@ -72,6 +63,21 @@ ScenarioName = Annotated[
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 LongText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+# The pattern accepts either case and `to_lower` normalises afterwards.
+# Pydantic applies `pattern` to the *raw* input, before `to_lower`, so a
+# lowercase-only pattern would reject `Healthcare` instead of accepting and
+# folding it - which is the opposite of the intent.
+Tag = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        to_lower=True,
+        min_length=1,
+        max_length=40,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$",
+    ),
+]
+
 FactKey = Annotated[
     str,
     StringConstraints(
@@ -194,6 +200,112 @@ class ConversationConstraints(SpecModel):
     )
 
 
+class SwitchTrigger(StrEnum):
+    """When the caller is expected to switch language mid-conversation.
+
+    Named triggers rather than free text, so a Phase 6 caller agent can act on
+    the value instead of having to interpret prose.
+    """
+
+    NUMBERS = "numbers"
+    """Digits, amounts and dates - very commonly spoken in English."""
+    TECHNICAL_TERMS = "technical_terms"
+    """Domain or product vocabulary with no settled local equivalent."""
+    PROPER_NOUNS = "proper_nouns"
+    """Names of people, places, brands."""
+    FRUSTRATION = "frustration"
+    """A caller who gives up on the regional language when the bot struggles."""
+    CLARIFICATION = "clarification"
+    """Repeating a misheard phrase in the other language."""
+    THROUGHOUT = "throughout"
+    """Habitual mixing with no particular trigger - ordinary urban speech."""
+
+
+class CodeMixing(SpecModel):
+    """How the caller mixes languages within the conversation.
+
+    Indian callers routinely switch language inside a single sentence -
+    Hinglish, Tanglish and their regional equivalents are ordinary speech, not
+    an edge case. A bot tested only on monolingual input will pass a benchmark
+    and still fail a real call.
+
+    The whole block is optional, so every Phase 2 scenario remains valid
+    unchanged. When present it records *intent*: which languages appear, how
+    often, and what prompts a switch. Nothing here detects language from audio
+    - that belongs to the speech phases. This is the authored expectation that
+    a caller agent will later perform and an evaluator will later score
+    against.
+    """
+
+    primary: str | None = Field(
+        default=None,
+        description="The dominant language. Defaults to the scenario's `language`; "
+        "if given it must match it.",
+    )
+    secondary: list[str] = Field(
+        min_length=1,
+        max_length=3,
+        description="Languages mixed into the primary one, most prominent first. "
+        "At least one - a code-mixing block with nothing to mix is meaningless.",
+    )
+    expected: bool = Field(
+        default=True,
+        description="Whether mixing is expected. Set false to assert the caller "
+        "stays monolingual, which is how a regression in a bot's regional-language "
+        "handling gets caught.",
+    )
+    switch_triggers: list[SwitchTrigger] = Field(
+        default_factory=list,
+        max_length=6,
+        description="What prompts a switch. Empty means unconstrained.",
+    )
+    secondary_ratio: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=0.9,
+        description="Rough share of words expected in the secondary languages. "
+        "Capped below 1.0 because at that point the primary language is "
+        "mislabelled rather than mixed.",
+    )
+    sample_utterances: list[ShortText] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Example mixed utterances, e.g. 'Mujhe kal ka appointment "
+        "chahiye at 10 AM'. Illustrative for authors and useful as few-shot "
+        "material later; not assertions.",
+    )
+
+    @field_validator("secondary")
+    @classmethod
+    def _validate_secondary(cls, value: list[str]) -> list[str]:
+        """Every secondary language must be in the catalogue, with no repeats."""
+        validated = [languages.validate_tag(tag) for tag in value]
+        duplicates = {tag for tag in validated if validated.count(tag) > 1}
+        if duplicates:
+            raise ValueError(f"duplicate secondary languages: {sorted(duplicates)}")
+        return validated
+
+    @field_validator("primary")
+    @classmethod
+    def _validate_primary(cls, value: str | None) -> str | None:
+        """Validate the tag when one is supplied."""
+        return None if value is None else languages.validate_tag(value)
+
+    @model_validator(mode="after")
+    def _primary_not_in_secondary(self) -> CodeMixing:
+        """A language cannot be mixed into itself."""
+        if self.primary is not None and self.primary in self.secondary:
+            raise ValueError(f"'{self.primary}' is both the primary and a secondary language")
+        return self
+
+    @model_validator(mode="after")
+    def _ratio_requires_expected_mixing(self) -> CodeMixing:
+        """A ratio above zero contradicts `expected: false`."""
+        if not self.expected and self.secondary_ratio:
+            raise ValueError("secondary_ratio must be 0 or omitted when expected is false")
+        return self
+
+
 class ScenarioSpec(SpecModel):
     """A complete, validated scenario definition.
 
@@ -260,21 +372,56 @@ class ScenarioSpec(SpecModel):
         default=None, description="Optional conversation limits."
     )
 
+    # Free-form labels for organising a growing library: a release name, a
+    # domain ("healthcare"), a risk level. Kept as a flat list rather than a
+    # separate table because they are only ever read with the scenario and
+    # filtered on exact match.
+    tags: list[Tag] = Field(
+        default_factory=list,
+        max_length=20,
+        description="Lowercase labels for filtering, e.g. ['healthcare', 'smoke'].",
+    )
+
+    code_mixing: CodeMixing | None = Field(
+        default=None,
+        description="How the caller mixes languages. Omit for a monolingual scenario.",
+    )
+
+    @field_validator("tags")
+    @classmethod
+    def _normalise_tags(cls, value: list[str]) -> list[str]:
+        """Lowercase, de-duplicate and sort, so filtering is predictable.
+
+        Sorted because two scenarios tagged the same way should serialise
+        identically regardless of the order their author typed them in - which
+        is what makes export deterministic.
+        """
+        lowered = sorted({tag.strip().lower() for tag in value})
+        return lowered
+
     @field_validator("language")
     @classmethod
     def _validate_language(cls, value: str) -> str:
-        """Require a well-formed tag drawn from the supported set."""
-        tag = value.strip()
-        if not _LANGUAGE_TAG.match(tag):
+        """Require a well-formed tag drawn from the catalogue."""
+        return languages.validate_tag(value)
+
+    @model_validator(mode="after")
+    def _check_code_mixing_against_primary(self) -> ScenarioSpec:
+        """Keep `code_mixing.primary` consistent with the scenario language.
+
+        Two fields naming a primary language could disagree, and a scenario
+        whose top-level language says Tamil while its code-mixing block says
+        Hindi has no single correct interpretation. Rather than silently
+        preferring one, `primary` may be omitted - in which case it defaults to
+        the scenario language - but if given it must match.
+        """
+        mixing = self.code_mixing
+        if mixing is not None and mixing.primary is not None and mixing.primary != self.language:
             raise ValueError(
-                f"'{tag}' is not a well-formed language tag; expected a form like 'hi-IN' or 'hi'"
+                f"code_mixing.primary ('{mixing.primary}') must match the scenario "
+                f"language ('{self.language}'), or be omitted to default to it"
             )
-        if tag not in SUPPORTED_LANGUAGES:
-            raise ValueError(
-                f"'{tag}' is not a supported language; supported tags are "
-                f"{sorted(SUPPORTED_LANGUAGES)}"
-            )
-        return tag
+        return self
 
     @field_validator("expected_outcomes")
     @classmethod

@@ -11,6 +11,8 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
+from app.schemas.scenario_spec import SPEC_VERSION
+
 VALID_YAML = """\
 name: appointment_booking
 description: Test whether a voice bot can book a doctor appointment.
@@ -220,7 +222,11 @@ class TestCreateScenario:
         assert body["name"] == "appointment_booking"
         assert body["language"] == "hi-IN"
         assert body["suite_id"] == suite["id"]
-        assert body["spec_version"] == 1
+        # Asserted against the constant rather than a literal: Phase 3 bumped
+        # the schema to v2 (adding optional `tags` and `code_mixing`), and a
+        # hardcoded number here would have to be chased on every future bump
+        # while proving nothing extra.
+        assert body["spec_version"] == SPEC_VERSION
 
     def test_persists_the_normalized_spec(self, api_client: TestClient) -> None:
         """Defaults must be materialised, not left absent."""
