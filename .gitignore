@@ -12,6 +12,26 @@ credentials.json
 service-account*.json
 secrets/
 
+# Private SSH keys, by their conventional filenames. These have no extension,
+# so the `*.pem` / `*.key` patterns above do not catch them. A pattern without
+# a slash matches at any depth, so these also cover nested copies such as
+# `.ssh/id_rsa`, `secrets/id_ed25519` or `deploy/id_ecdsa`.
+#
+# Public keys are deliberately NOT ignored: `id_rsa` does not match
+# `id_rsa.pub`, and a public key is safe to commit when a deployment genuinely
+# needs one.
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
+id_ed25519_sk
+
+# Generic credential files. `credentials.json` and `service-account*.json` are
+# already covered above; this adds the `creds*.json` family (creds.json,
+# creds-prod.json, creds_dev.json). Deliberately not a blanket `*.json`, which
+# would hide package.json, tsconfig.json, test fixtures and OpenAPI output.
+creds*.json
+
 # ---------------------------------------------------------------------------
 # Python
 # ---------------------------------------------------------------------------
