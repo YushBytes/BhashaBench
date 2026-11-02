@@ -21,9 +21,18 @@ name: appointment_booking
 # Optional. What this scenario is testing, for a human reading the results.
 description: Test whether a voice bot can book a doctor appointment in Hindi.
 
-# BCP 47 tag. Must be one of the supported Indian languages - see
-# SUPPORTED_LANGUAGES in backend/app/schemas/scenario_spec.py.
+# BCP 47 tag. Must be one of the 13 supported Indian languages - see
+# backend/app/core/languages.py, or run `bhashabench languages`.
 language: hi-IN
+
+# Optional, default empty. Labels for filtering the library:
+#   bhashabench scenario list --tag healthcare --tag reference
+# Normalised to lowercase, de-duplicated and sorted on the way in, so a tag
+# vocabulary cannot split on capitalisation. At most 20.
+tags:
+  - healthcare
+  - appointment
+  - reference
 
 # Who the simulated caller is. Phase 6 conditions the caller agent on this.
 persona:
@@ -73,6 +82,31 @@ audio:
   snr_db: 18
   # Optional, default 0. Range 0-30 percent.
   packet_loss_percent: 2
+
+# Optional, omitted entirely by default. How the caller mixes languages.
+#
+# A Hindi-speaking professional booking a clinic appointment says the time and
+# the medical terms in English without thinking about it. A bot tested only on
+# pure Hindi can pass this scenario and still fail the real call.
+code_mixing:
+  # Optional, defaults to the scenario's `language`. If given it must match.
+  primary: hi-IN
+  # Required, 1-3 supported tags, most prominent first.
+  secondary:
+    - en-IN
+  # Optional, default true. Set false to assert the caller stays monolingual.
+  expected: true
+  # Optional. Roughly what share of words are English. 0 to 0.9.
+  secondary_ratio: 0.3
+  # Optional. What prompts a switch: numbers, technical_terms, proper_nouns,
+  # frustration, clarification, throughout. At most 6.
+  switch_triggers:
+    - numbers
+    - technical_terms
+  # Optional. Illustrative for authors; not assertions. At most 10.
+  sample_utterances:
+    - Mujhe kal ka appointment chahiye at 10 AM
+    - Doctor available hai morning slot mein?
 
 # Optional, omitted entirely by default. Limits on how the conversation may
 # proceed. Phase 9 enforces these.

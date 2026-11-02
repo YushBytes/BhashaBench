@@ -1,0 +1,287 @@
+format: bhashabench.scenario-bundle/v1
+suite:
+  name: Indian language reference suite
+  description: Six reference scenarios, one per language, covering code-mixing, audio stress
+    and a monolingual control.
+scenarios:
+- name: appointment_booking
+  description: Test whether a voice bot can book a doctor appointment in Hindi.
+  language: hi-IN
+  persona:
+    identity: Working professional
+    speaking_style: polite
+    traits:
+    - impatient
+    - prefers short responses
+  goal:
+    objective: Book an appointment with a general physician for tomorrow morning.
+    max_turns: 15
+  known_facts:
+    patient_name: Rahul Sharma
+    preferred_time: 10 AM
+    phone_last_four: '0042'
+  expected_outcomes:
+  - Confirm the appointment date
+  - Confirm the appointment time
+  - Confirm the patient name
+  - State the clinic address
+  audio:
+    noise_profile: urban
+    snr_db: 18.0
+    packet_loss_percent: 2.0
+  constraints:
+    max_silence_seconds: 4.0
+    allow_interruptions: true
+    required_phrases:
+    - my name is Rahul
+    forbidden_phrases:
+    - cancel the appointment
+  tags:
+  - appointment
+  - healthcare
+  - reference
+  code_mixing:
+    primary: hi-IN
+    secondary:
+    - en-IN
+    expected: true
+    switch_triggers:
+    - numbers
+    - technical_terms
+    secondary_ratio: 0.3
+    sample_utterances:
+    - Mujhe kal ka appointment chahiye at 10 AM
+    - Doctor available hai morning slot mein?
+- name: bengali_balance_enquiry
+  description: An elderly caller checks a savings account balance and the date of the last
+    pension credit.
+  language: bn-IN
+  persona:
+    identity: Retired schoolteacher in Kolkata
+    speaking_style: elderly
+    traits:
+    - speaks slowly
+    - pauses mid-sentence
+    - asks for repetition
+  goal:
+    objective: Check the account balance and when the pension was last credited.
+    max_turns: 20
+  known_facts:
+    account_last_four: 0083
+    registered_name: Anima Bhattacharya
+    date_of_birth: '1949-03-11'
+  expected_outcomes:
+  - Verify the caller's identity
+  - State the account balance
+  - State the date of the last pension credit
+  - Offer to repeat the balance
+  audio:
+    noise_profile: indoor_fan
+    snr_db: 15.0
+    packet_loss_percent: 1.0
+  constraints:
+    max_silence_seconds: 8.0
+    allow_interruptions: false
+    required_phrases: []
+    forbidden_phrases:
+    - please hold
+  tags:
+  - accessibility
+  - banking
+  - elderly
+  code_mixing:
+    primary: bn-IN
+    secondary:
+    - en-IN
+    expected: true
+    switch_triggers:
+    - numbers
+    - proper_nouns
+    secondary_ratio: 0.15
+    sample_utterances:
+    - আমার balance কত আছে?
+    - Pension কবে জমা হয়েছে?
+- name: english_insurance_claim
+  description: Caller files a two-wheeler insurance claim entirely in Indian English.
+  language: en-IN
+  persona:
+    identity: Software engineer in Bengaluru
+    speaking_style: polite
+    traits:
+    - prefers short responses
+    - has the policy document open
+  goal:
+    objective: File a claim for a two-wheeler accident and get a claim reference.
+    max_turns: 20
+  known_facts:
+    policy_number: TW00418827
+    incident_date: '2026-10-28'
+    vehicle_registration: KA-03-MN-4471
+  expected_outcomes:
+  - Confirm the policy number
+  - Record the incident date
+  - Issue a claim reference number
+  - State the documents required next
+  audio:
+    noise_profile: clean
+    snr_db: 34.0
+    packet_loss_percent: 0.0
+  constraints:
+    max_silence_seconds: 5.0
+    allow_interruptions: false
+    required_phrases:
+    - policy number
+    forbidden_phrases: []
+  tags:
+  - control
+  - insurance
+  - monolingual
+  code_mixing:
+    primary: en-IN
+    secondary:
+    - hi-IN
+    expected: false
+    switch_triggers: []
+    sample_utterances: []
+- name: marathi_delivery_reschedule
+  description: Caller reschedules a missed parcel delivery after an earlier attempt failed.
+  language: mr-IN
+  persona:
+    identity: Office worker in Pune who missed two delivery attempts
+    speaking_style: brusque
+    traits:
+    - already annoyed
+    - wants a specific time slot
+  goal:
+    objective: Reschedule the delivery for Saturday morning and get a confirmation.
+    max_turns: 16
+  known_facts:
+    tracking_id: BB4471902
+    pincode: '411045'
+    preferred_slot: Saturday 9 AM to 12 PM
+  expected_outcomes:
+  - Confirm the tracking ID
+  - Confirm the new delivery date
+  - Confirm the new time slot
+  - Acknowledge the earlier failed attempts
+  audio:
+    noise_profile: urban
+    snr_db: 16.0
+    packet_loss_percent: 4.0
+  constraints:
+    max_silence_seconds: 4.0
+    allow_interruptions: true
+    required_phrases: []
+    forbidden_phrases:
+    - cancel the order
+  tags:
+  - frustration
+  - logistics
+  - rescheduling
+  code_mixing:
+    primary: mr-IN
+    secondary:
+    - hi-IN
+    - en-IN
+    expected: true
+    switch_triggers:
+    - frustration
+    - numbers
+    - clarification
+    secondary_ratio: 0.35
+    sample_utterances:
+    - माझं parcel दोनदा miss झालं आहे
+    - Saturday morning slot मिळेल का?
+- name: tamil_electricity_bill
+  description: Caller asks for an outstanding electricity bill amount and pays it, mixing
+    English for the account number and the amount.
+  language: ta-IN
+  persona:
+    identity: Small shop owner in Coimbatore
+    speaking_style: hurried
+    traits:
+    - interrupts
+    - repeats the account number
+  goal:
+    objective: Find out the pending bill amount and pay it with a saved card.
+    max_turns: 18
+  known_facts:
+    consumer_number: 0471883
+    registered_name: Meena Lakshmi
+    last_payment_month: September
+  expected_outcomes:
+  - State the outstanding amount
+  - Confirm the consumer number back to the caller
+  - Confirm the payment was taken
+  - State the due date
+  audio:
+    noise_profile: market
+    snr_db: 12.0
+    packet_loss_percent: 3.0
+  constraints:
+    max_silence_seconds: 3.5
+    allow_interruptions: true
+    required_phrases:
+    - consumer number
+    forbidden_phrases: []
+  tags:
+  - code-mixing
+  - payment
+  - utilities
+  code_mixing:
+    primary: ta-IN
+    secondary:
+    - en-IN
+    expected: true
+    switch_triggers:
+    - numbers
+    - technical_terms
+    secondary_ratio: 0.4
+    sample_utterances:
+    - Enakku current bill amount theriyanum
+    - Consumer number zero four seven one eight eight three
+    - Due date eppo irukku?
+- name: telugu_order_tracking
+  description: Caller on a poor rural connection asks where a pharmacy order has reached.
+  language: te-IN
+  persona:
+    identity: Farmer in a village near Warangal
+    speaking_style: neutral
+    traits:
+    - calls from an area with weak signal
+  goal:
+    objective: Find out when a medicine order will be delivered.
+    max_turns: 12
+  known_facts:
+    order_id: PH7729
+    village_name: Chennaraopet
+    phone_last_four: 0196
+  expected_outcomes:
+  - Confirm the order ID
+  - State the current delivery status
+  - State the expected delivery date
+  audio:
+    noise_profile: worst_case
+    snr_db: 6.0
+    packet_loss_percent: 18.0
+  constraints:
+    max_silence_seconds: 10.0
+    allow_interruptions: true
+    required_phrases: []
+    forbidden_phrases: []
+  tags:
+  - audio-stress
+  - logistics
+  - worst-case
+  code_mixing:
+    primary: te-IN
+    secondary:
+    - en-IN
+    expected: true
+    switch_triggers:
+    - numbers
+    - proper_nouns
+    secondary_ratio: 0.2
+    sample_utterances:
+    - నా order ఎక్కడ ఉంది?
+    - Delivery ఎప్పుడు అవుతుంది?

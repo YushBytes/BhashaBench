@@ -1,0 +1,67 @@
+# =============================================================================
+# BhashaBench scenario: bengali_balance_enquiry
+# =============================================================================
+# Bengali, with an elderly caller and a landline-quality line. The point of
+# this one is the combination: slow, hesitant speech over a noisy channel is
+# where end-of-turn detection fails and a bot starts talking over the caller.
+
+name: bengali_balance_enquiry
+description: >-
+  An elderly caller checks a savings account balance and the date of the last
+  pension credit.
+language: bn-IN
+
+tags:
+  - banking
+  - accessibility
+  - elderly
+
+persona:
+  identity: Retired schoolteacher in Kolkata
+  speaking_style: elderly
+  traits:
+    - speaks slowly
+    - pauses mid-sentence
+    - asks for repetition
+
+goal:
+  objective: Check the account balance and when the pension was last credited.
+  max_turns: 20
+
+known_facts:
+  account_last_four: "0083"
+  registered_name: Anima Bhattacharya
+  date_of_birth: "1949-03-11"
+
+expected_outcomes:
+  - Verify the caller's identity
+  - State the account balance
+  - State the date of the last pension credit
+  - Offer to repeat the balance
+
+audio:
+  noise_profile: indoor_fan
+  snr_db: 15
+  packet_loss_percent: 1
+
+code_mixing:
+  primary: bn-IN
+  secondary:
+    - en-IN
+  expected: true
+  secondary_ratio: 0.15
+  switch_triggers:
+    - numbers
+    - proper_nouns
+  sample_utterances:
+    - আমার balance কত আছে?
+    - Pension কবে জমা হয়েছে?
+
+constraints:
+  # Generous, because this caller pauses. A bot that treats a four-second
+  # pause as end-of-turn will cut her off, and that is the failure this
+  # scenario is built to catch.
+  max_silence_seconds: 8.0
+  allow_interruptions: false
+  forbidden_phrases:
+    - please hold

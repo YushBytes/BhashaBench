@@ -1,0 +1,60 @@
+# =============================================================================
+# BhashaBench scenario: english_insurance_claim
+# =============================================================================
+# Indian English, and the one scenario here that asserts the caller does NOT
+# code-mix (`expected: false`). It exists as a control: if a bot's regional
+# handling regresses and it starts answering in the wrong language, or if the
+# caller simulator starts mixing when it was told not to, this is the test
+# that notices.
+
+name: english_insurance_claim
+description: >-
+  Caller files a two-wheeler insurance claim entirely in Indian English.
+language: en-IN
+
+tags:
+  - insurance
+  - monolingual
+  - control
+
+persona:
+  identity: Software engineer in Bengaluru
+  speaking_style: polite
+  traits:
+    - prefers short responses
+    - has the policy document open
+
+goal:
+  objective: File a claim for a two-wheeler accident and get a claim reference.
+  max_turns: 20
+
+known_facts:
+  policy_number: "TW00418827"
+  incident_date: "2026-10-28"
+  vehicle_registration: KA-03-MN-4471
+
+expected_outcomes:
+  - Confirm the policy number
+  - Record the incident date
+  - Issue a claim reference number
+  - State the documents required next
+
+audio:
+  noise_profile: clean
+  snr_db: 34
+
+code_mixing:
+  primary: en-IN
+  secondary:
+    - hi-IN
+  # The assertion: this caller stays in English. `secondary` still has to name
+  # a language, because it records which one is being asserted *absent* - and
+  # `secondary_ratio` must be omitted, since a declared ratio alongside
+  # `expected: false` is a contradiction the schema rejects.
+  expected: false
+
+constraints:
+  max_silence_seconds: 5.0
+  allow_interruptions: false
+  required_phrases:
+    - policy number

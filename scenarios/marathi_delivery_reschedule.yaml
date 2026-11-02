@@ -1,0 +1,65 @@
+# =============================================================================
+# BhashaBench scenario: marathi_delivery_reschedule
+# =============================================================================
+# Marathi, with a frustrated caller on a second attempt. Frustration is listed
+# as a switch trigger because a caller who starts in Marathi often falls back
+# to English when the bot has already failed to understand once - which is
+# precisely when the bot can least afford another mis-recognition.
+
+name: marathi_delivery_reschedule
+description: >-
+  Caller reschedules a missed parcel delivery after an earlier attempt failed.
+language: mr-IN
+
+tags:
+  - logistics
+  - rescheduling
+  - frustration
+
+persona:
+  identity: Office worker in Pune who missed two delivery attempts
+  speaking_style: brusque
+  traits:
+    - already annoyed
+    - wants a specific time slot
+
+goal:
+  objective: Reschedule the delivery for Saturday morning and get a confirmation.
+  max_turns: 16
+
+known_facts:
+  tracking_id: "BB4471902"
+  pincode: "411045"
+  preferred_slot: Saturday 9 AM to 12 PM
+
+expected_outcomes:
+  - Confirm the tracking ID
+  - Confirm the new delivery date
+  - Confirm the new time slot
+  - Acknowledge the earlier failed attempts
+
+audio:
+  noise_profile: urban
+  snr_db: 16
+  packet_loss_percent: 4
+
+code_mixing:
+  primary: mr-IN
+  secondary:
+    - hi-IN
+    - en-IN
+  expected: true
+  secondary_ratio: 0.35
+  switch_triggers:
+    - frustration
+    - numbers
+    - clarification
+  sample_utterances:
+    - माझं parcel दोनदा miss झालं आहे
+    - Saturday morning slot मिळेल का?
+
+constraints:
+  max_silence_seconds: 4.0
+  allow_interruptions: true
+  forbidden_phrases:
+    - cancel the order

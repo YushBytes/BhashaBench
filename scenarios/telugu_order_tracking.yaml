@@ -1,0 +1,61 @@
+# =============================================================================
+# BhashaBench scenario: telugu_order_tracking
+# =============================================================================
+# Telugu under the worst audio this bench simulates. Everything else here is
+# deliberately simple - one clear goal, a short conversation - so that a
+# failure points at the channel rather than at the dialogue.
+
+name: telugu_order_tracking
+description: >-
+  Caller on a poor rural connection asks where a pharmacy order has reached.
+language: te-IN
+
+tags:
+  - logistics
+  - audio-stress
+  - worst-case
+
+persona:
+  identity: Farmer in a village near Warangal
+  speaking_style: neutral
+  traits:
+    - calls from an area with weak signal
+
+goal:
+  objective: Find out when a medicine order will be delivered.
+  max_turns: 12
+
+known_facts:
+  order_id: "PH7729"
+  village_name: Chennaraopet
+  phone_last_four: "0196"
+
+expected_outcomes:
+  - Confirm the order ID
+  - State the current delivery status
+  - State the expected delivery date
+
+audio:
+  # The point of this scenario. 6 dB SNR with 18 percent packet loss is a
+  # genuinely bad rural mobile call, not a synthetic extreme.
+  noise_profile: worst_case
+  snr_db: 6
+  packet_loss_percent: 18
+
+code_mixing:
+  primary: te-IN
+  secondary:
+    - en-IN
+  expected: true
+  secondary_ratio: 0.2
+  switch_triggers:
+    - numbers
+    - proper_nouns
+  sample_utterances:
+    - నా order ఎక్కడ ఉంది?
+    - Delivery ఎప్పుడు అవుతుంది?
+
+constraints:
+  # A dropped channel produces long silences that are not the caller thinking.
+  max_silence_seconds: 10.0
+  allow_interruptions: true

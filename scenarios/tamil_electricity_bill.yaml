@@ -1,0 +1,66 @@
+# =============================================================================
+# BhashaBench scenario: tamil_electricity_bill
+# =============================================================================
+# Tamil with heavy English mixing - "Tanglish". Account numbers, amounts and
+# the word "due date" are almost always said in English even by a speaker who
+# uses Tamil for everything else, and a bot whose ASR is tuned for pure Tamil
+# mis-hears exactly those tokens: the ones that decide whether the payment is
+# correct.
+
+name: tamil_electricity_bill
+description: >-
+  Caller asks for an outstanding electricity bill amount and pays it, mixing
+  English for the account number and the amount.
+language: ta-IN
+
+tags:
+  - utilities
+  - payment
+  - code-mixing
+
+persona:
+  identity: Small shop owner in Coimbatore
+  speaking_style: hurried
+  traits:
+    - interrupts
+    - repeats the account number
+
+goal:
+  objective: Find out the pending bill amount and pay it with a saved card.
+  max_turns: 18
+
+known_facts:
+  consumer_number: "0471883"
+  registered_name: Meena Lakshmi
+  last_payment_month: September
+
+expected_outcomes:
+  - State the outstanding amount
+  - Confirm the consumer number back to the caller
+  - Confirm the payment was taken
+  - State the due date
+
+audio:
+  noise_profile: market
+  snr_db: 12
+  packet_loss_percent: 3
+
+code_mixing:
+  primary: ta-IN
+  secondary:
+    - en-IN
+  expected: true
+  secondary_ratio: 0.4
+  switch_triggers:
+    - numbers
+    - technical_terms
+  sample_utterances:
+    - Enakku current bill amount theriyanum
+    - Consumer number zero four seven one eight eight three
+    - Due date eppo irukku?
+
+constraints:
+  max_silence_seconds: 3.5
+  allow_interruptions: true
+  required_phrases:
+    - consumer number
