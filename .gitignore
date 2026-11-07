@@ -121,6 +121,22 @@ audio_storage/
 *.log
 logs/
 
+# One narrow exception to `*.wav`, kept narrow on purpose. The blanket rule
+# above exists to stop captured call audio - which may carry a real person's
+# voice - from ever being committed, and it stays. The files below are the
+# opposite of that: synthesised by
+# `backend/tests/fixtures/audio/generate.py`, deterministic, under 35 KB each,
+# and containing no speech at all.
+#
+# They have to be tracked, or `pytest` cannot pass from a clean clone - the
+# blanket rule silently excluded them, which is exactly the kind of omission
+# that only shows up on somebody else's machine.
+#
+# Scoped to this one directory, so a stray recording anywhere else in the
+# repository is still ignored. Do not broaden it, and never add a recording of
+# a real call here - see that directory's README.
+!backend/tests/fixtures/audio/*.wav
+
 # ---------------------------------------------------------------------------
 # Editors and OS
 # ---------------------------------------------------------------------------
