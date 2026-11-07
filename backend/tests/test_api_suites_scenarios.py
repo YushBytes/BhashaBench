@@ -658,6 +658,9 @@ class TestOpenApiSurface:
             # Phase 4
             "/api/v1/transcription",
             "/api/v1/transcription/providers",
+            # Phase 5
+            "/api/v1/speech/generate",
+            "/api/v1/speech/providers",
         }
 
     def test_scenario_spec_schema_is_published(self, client: TestClient) -> None:

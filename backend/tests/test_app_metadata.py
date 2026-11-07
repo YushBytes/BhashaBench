@@ -38,7 +38,8 @@ class TestOpenApiDocument:
         Phase 1 shipped three paths; Phase 2 added the suite and scenario
         endpoints; Phase 3 added library search, copy/move, bundle
         import/export and the language catalogue; Phase 4 added batch
-        transcription and provider capabilities.
+        transcription and provider capabilities; Phase 5 added speech synthesis
+        and its provider capabilities.
 
         Asserting the exact set - rather than a subset - is what catches a
         route added without being documented, or one left mounted after being
@@ -72,6 +73,9 @@ class TestOpenApiDocument:
             # Phase 4
             "/api/v1/transcription",
             "/api/v1/transcription/providers",
+            # Phase 5
+            "/api/v1/speech/generate",
+            "/api/v1/speech/providers",
         }
 
     def test_info_block_matches_settings(self, client: TestClient, settings: Settings) -> None:

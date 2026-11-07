@@ -65,6 +65,46 @@ def _wav(*, sample_rate: int = 8000, channels: int = 1, frames: int = 800) -> by
     return buffer.getvalue()
 
 
+def _streaming_wav(
+    *,
+    frames: int,
+    sample_rate: int = 8000,
+    channels: int = 1,
+    width: int = 2,
+    data_size: int = 0xFFFFFFFF,
+) -> bytes:
+    """Build a WAV whose size fields say "length unknown".
+
+    Written by hand rather than with the stdlib `wave` writer, because that
+    writer always back-fills the real length - which is precisely why this
+    header shape never showed up in an offline fixture.
+    """
+    import struct
+
+    samples = bytes([0x00, 0x01]) * frames * channels
+    body = (
+        b"WAVE"
+        + b"fmt "
+        + struct.pack(
+            "<IHHIIHH",
+            16,
+            1,
+            channels,
+            sample_rate,
+            sample_rate * channels * width,
+            channels * width,
+            width * 8,
+        )
+        + b"data"
+        + struct.pack("<I", data_size)
+        + samples
+    )
+    # A sentinel data size goes with a sentinel RIFF size; a zero data size
+    # does not, or `wave` cannot find the WAVE chunk at all.
+    riff_size = 0xFFFFFFFF if data_size == 0xFFFFFFFF else len(body)
+    return b"RIFF" + struct.pack("<I", riff_size) + body
+
+
 # ---------------------------------------------------------------------------
 # Format detection
 # ---------------------------------------------------------------------------
@@ -154,6 +194,57 @@ class TestInspection:
             audio_tools.inspect(
                 b"\x00\x00\x00", declared=AudioEncoding.PCM_S16LE, sample_rate_hz=8000
             )
+
+    def test_a_streaming_wav_header_is_accepted_and_measured_from_its_bytes(self) -> None:
+        """A writer that does not know the final length puts `0xFFFFFFFF` in the
+        RIFF and `data` size fields. That is ordinary, valid WAV - and the
+        truncation check above used to reject it.
+
+        Found by the first live Gnani Timbre call, not by any mock: a fixture
+        built with the stdlib `wave` writer always knows its own length, so no
+        amount of offline testing produces this header.
+        """
+        metadata = audio_tools.inspect(_streaming_wav(frames=35200, sample_rate=8000))
+        assert metadata.encoding is AudioEncoding.WAV
+        assert metadata.sample_rate_hz == 8000
+        assert metadata.channels == 1
+        assert metadata.bit_depth == 16
+        # Measured from the bytes present, not from the sentinel.
+        assert metadata.duration_seconds == pytest.approx(4.4)
+
+    @pytest.mark.parametrize(
+        ("sample_rate", "channels", "frames"),
+        [(8000, 1, 8000), (16000, 1, 1600), (48000, 2, 4800), (22050, 1, 2205)],
+    )
+    def test_a_streaming_header_is_measured_at_any_rate_or_channel_count(
+        self, sample_rate: int, channels: int, frames: int
+    ) -> None:
+        """The sentinel check works in bytes, so it must not depend on the
+        block alignment."""
+        metadata = audio_tools.inspect(
+            _streaming_wav(frames=frames, sample_rate=sample_rate, channels=channels)
+        )
+        assert metadata.sample_rate_hz == sample_rate
+        assert metadata.channels == channels
+        assert metadata.duration_seconds == pytest.approx(frames / sample_rate)
+
+    def test_a_zero_length_data_chunk_is_accepted_without_a_duration(self) -> None:
+        """The other streaming convention. Rate and channels are readable; the
+        length is not, so none is claimed rather than one being invented."""
+        metadata = audio_tools.inspect(_streaming_wav(frames=4000, data_size=0))
+        assert metadata.sample_rate_hz == 8000
+        assert metadata.channels == 1
+        assert metadata.duration_seconds is None
+
+    def test_a_truncated_file_is_still_rejected_despite_the_sentinel_allowance(
+        self, audio_fixtures: Path
+    ) -> None:
+        """The allowance must not have reopened the hole it sits next to: a
+        *plausible* declared length with bytes missing is still a damaged file.
+        """
+        payload = (audio_fixtures / "truncated.wav").read_bytes()
+        with pytest.raises(InvalidAudioError, match="truncated"):
+            audio_tools.inspect(payload)
 
     def test_compressed_containers_report_size_but_not_duration(self) -> None:
         """Duration would need decoding, which this phase deliberately avoids."""
