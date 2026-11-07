@@ -19,17 +19,25 @@ Run them deliberately:
 These calls cost money and count against your quota. The fixtures used are the
 shortest committed ones - a single second of audio - for exactly that reason.
 
-**Status in this repository: never executed.** No credential has been issued
-to BhashaBench, so the Prisma adapter is contract-verified and not
-transport-verified. See `docs/PROVIDERS.md`.
+**Status in this repository: partially executed, 2026-11-07.**
+
+Verified against the live service: authentication with a real key, one real
+batch request, and the response parsing into a `TranscriptionResult` carrying a
+provider `request_id`.
+
+Still unverified: the streaming endpoint, and the nine non-Hindi languages.
+Recognition accuracy is **not** verified by any test here and cannot be - the
+committed fixtures are synthesised tones with no reviewed ground truth. See
+`docs/PROVIDERS.md` for the per-capability table.
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
+import httpx2
 import pytest
 
 from app.transcription.models import (
@@ -68,20 +76,63 @@ def _missing_prerequisite() -> str | None:
     return None
 
 
-@pytest.fixture(scope="module")
-def live_provider() -> GnaniPrismaProvider:
-    """A real Prisma adapter, or a loud skip explaining what is missing."""
+@pytest.fixture
+def live_provider() -> Iterator[GnaniPrismaProvider]:
+    """A real Prisma adapter, or a loud skip explaining what is missing.
+
+    **Function-scoped, and that is load-bearing.** It was module-scoped, which
+    broke the second test in the module with `RuntimeError: Event loop is
+    closed` - a failure that looks like an authentication problem in the
+    output and is nothing of the kind.
+
+    The mechanism: the adapter lazily builds one `httpx2.AsyncClient`, whose
+    connection pool holds a keep-alive socket bound to whichever event loop
+    first used it. Each test here calls `asyncio.run`, which *closes* its loop
+    on return. A second test sharing the provider then reuses that client, and
+    httpcore tries to release the pooled connection against a dead loop.
+
+    One provider per test means one client per loop, which is the invariant
+    that actually matters. The cost is a TLS handshake per test, which is
+    irrelevant here and is exactly what a shared pool is for in production.
+
+    Reproduced against a local HTTP server, with no provider calls: shared
+    provider plus two `asyncio.run` calls fails on the second; a fresh
+    provider per call passes both.
+    """
     reason = _missing_prerequisite()
     if reason:
         pytest.skip(reason, allow_module_level=True)
 
-    return GnaniPrismaProvider(
+    yield GnaniPrismaProvider(
         api_key=os.environ["GNANI_API_KEY"],
         base_url=os.getenv("GNANI_API_BASE_URL", contract.DEFAULT_BASE_URL),
         model=os.getenv("GNANI_STT_MODEL", contract.DEFAULT_MODEL),
         # Generous but bounded: a live endpoint is slower than a mock, and a
         # hung test is worse than a failed one.
         timeout_seconds=60.0,
+        # Keep-alive disabled, which is the other half of the loop problem.
+        #
+        # The adapter cannot be closed in this fixture's teardown: by then
+        # `asyncio.run` has closed the loop its client belongs to, and
+        # `aclose()` from a fresh loop raises "Event loop is closed". Leaving
+        # the socket to the garbage collector is not an option either - the
+        # resulting ResourceWarning reaches pytest as
+        # `PytestUnraisableExceptionWarning`, and `filterwarnings = ["error"]`
+        # turns it into a failing exit code even though the test itself passed.
+        # That is exactly what happened on the first run of this fixture.
+        #
+        # With no pooled connections there is nothing left bound to the loop:
+        # httpx closes the connection when the response completes, inside the
+        # test's own loop. Measured against a local server - one request then
+        # drop and collect: default client 1 ResourceWarning, this client 0.
+        #
+        # Correct here precisely because each live test makes a single request,
+        # so pooling buys nothing. Production keeps the default pooling, and
+        # the adapter is untouched - this uses its existing `client` seam.
+        client=httpx2.AsyncClient(
+            timeout=httpx2.Timeout(60.0),
+            limits=httpx2.Limits(max_keepalive_connections=0),
+        ),
     )
 
 
@@ -144,6 +195,12 @@ class TestLiveBatch:
             api_key="definitely-not-a-valid-key-000000",
             base_url=os.getenv("GNANI_API_BASE_URL", contract.DEFAULT_BASE_URL),
             timeout_seconds=60.0,
+            # Same reason as the `live_provider` fixture: no pooled connection
+            # may outlive this test's event loop.
+            client=httpx2.AsyncClient(
+                timeout=httpx2.Timeout(60.0),
+                limits=httpx2.Limits(max_keepalive_connections=0),
+            ),
         )
         with pytest.raises(AuthenticationError):
             asyncio.run(
