@@ -1,5 +1,11 @@
 """Bounded retry with exponential backoff.
 
+Shared by both provider subsystems - speech-to-text (Phase 4) and
+text-to-speech (Phase 5). It lives under `transcription/` for historical
+reasons and is deliberately *not* duplicated: when a third provider family
+arrives, this and `redaction.py` should be promoted to a shared package rather
+than copied a third time.
+
 Three properties matter more than the algorithm.
 
 **Only transient failures are retried.** The decision comes from the error's
@@ -96,8 +102,15 @@ async def call_with_retry[T](
     correlation_id: str | None = None,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     rand: Callable[[], float] = random.random,
+    retryable_base: type[Exception] | tuple[type[Exception], ...] = TranscriptionError,
 ) -> tuple[T, int]:
     """Run `operation`, retrying transient failures per `policy`.
+
+    `retryable_base` is the error family to inspect. It defaults to
+    `TranscriptionError` so Phase 4 callers are unchanged; Phase 5's
+    speech-synthesis errors pass their own base. The loop only ever asks an
+    error whether it is `retryable`, so one implementation serves both
+    subsystems rather than each growing its own copy of this arithmetic.
 
     `operation` must be a zero-argument coroutine factory, called afresh on
     each attempt - passing a single awaitable would fail on the second attempt,
@@ -114,7 +127,7 @@ async def call_with_retry[T](
         asyncio.CancelledError: propagated untouched. Cancellation is not a
             provider failure and must never be retried.
     """
-    last_error: TranscriptionError | None = None
+    last_error: Exception | None = None
 
     for attempt in range(1, policy.max_attempts + 1):
         try:
@@ -123,7 +136,7 @@ async def call_with_retry[T](
             # Must come before TranscriptionError: swallowing cancellation
             # here would leave a cancelled request running to completion.
             raise
-        except TranscriptionError as exc:
+        except retryable_base as exc:
             last_error = exc
 
             if not exc.retryable:
