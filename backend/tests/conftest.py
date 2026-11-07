@@ -32,9 +32,12 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.deps import get_database_probe
+from app.api.v1.transcription import get_service_factory
 from app.core.config import AppEnv, Settings, get_settings
 from app.db.session import get_db
 from app.main import create_app
+from app.services.transcription_service import TranscriptionService
+from app.transcription.providers.fake import FakeTranscriptionProvider
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -48,6 +51,113 @@ reports the same concrete reason."""
 # ---------------------------------------------------------------------------
 # Settings / app fixtures (no database required)
 # ---------------------------------------------------------------------------
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Register Phase 4 markers.
+
+    Declared here rather than in `pyproject.toml`/`pytest.ini` on purpose.
+    `--strict-markers` requires registration, but `tests/test_tooling.py`
+    asserts the host and container pytest configurations hold the same keys
+    with the same whitespace-split values - and a marker line like
+    `live: needs credentials` splits into words on one side and stays one
+    string on the other. Registering in code keeps both configs identical and
+    still satisfies strict markers.
+    """
+    config.addinivalue_line(
+        "markers",
+        "live: makes real, billable provider calls. Deselected unless "
+        "TRANSCRIPTION_LIVE_TESTS=true and a credential is present.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Transcription fixtures (Phase 4) - no database, no network, no credentials
+# ---------------------------------------------------------------------------
+
+AUDIO_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "audio"
+
+
+@pytest.fixture(scope="session")
+def audio_fixtures() -> Path:
+    """Directory holding the committed audio fixtures."""
+    return AUDIO_FIXTURES
+
+
+@pytest.fixture(scope="session")
+def wav_8k(audio_fixtures: Path) -> bytes:
+    """A one-second 8 kHz mono WAV - the ordinary batch happy path."""
+    return (audio_fixtures / "tone_8k_mono.wav").read_bytes()
+
+
+@pytest.fixture(scope="session")
+def wav_16k(audio_fixtures: Path) -> bytes:
+    """A one-second 16 kHz mono WAV."""
+    return (audio_fixtures / "tone_16k_mono.wav").read_bytes()
+
+
+@pytest.fixture(scope="session")
+def raw_pcm_8k(audio_fixtures: Path) -> bytes:
+    """Headerless 8 kHz mono PCM, for the streaming path."""
+    return (audio_fixtures / "raw_8k_mono.pcm").read_bytes()
+
+
+@pytest.fixture
+def fake_provider() -> FakeTranscriptionProvider:
+    """An offline provider with default scripted behaviour."""
+    return FakeTranscriptionProvider()
+
+
+@pytest.fixture
+def transcription_settings() -> Settings:
+    """Settings that select the offline fake and retry fast.
+
+    Backoff is driven to zero so retry-path tests do not spend real seconds
+    sleeping; `tests/test_transcription_retry.py` asserts the delay arithmetic
+    separately with an injected clock.
+    """
+    return Settings(
+        app_env=AppEnv.TEST,
+        app_version="0.1.0",
+        secret_key="test-secret-key-not-used-for-anything",
+        database_url="postgresql+psycopg://test:test@localhost:5432/test",
+        transcription_provider="fake",
+        transcription_max_attempts=3,
+        transcription_initial_backoff_seconds=0.0,
+        transcription_max_backoff_seconds=0.0,
+        _env_file=None,
+    )
+
+
+@pytest.fixture
+def transcription_service(
+    fake_provider: FakeTranscriptionProvider, transcription_settings: Settings
+) -> TranscriptionService:
+    """A service wired to the offline fake."""
+    return TranscriptionService(fake_provider, settings=transcription_settings)
+
+
+@pytest.fixture
+def transcription_client(
+    transcription_settings: Settings, fake_provider: FakeTranscriptionProvider
+) -> Iterator[TestClient]:
+    """HTTP client whose transcription routes use the offline fake.
+
+    Overrides the service dependency rather than the provider registry, so the
+    test drives the real route, the real request parsing and the real error
+    handlers - only the vendor call is replaced.
+    """
+    app = create_app(settings=transcription_settings)
+    app.dependency_overrides[get_settings] = lambda: transcription_settings
+    app.dependency_overrides[get_database_probe] = lambda: (
+        lambda: (True, "Connected; SELECT 1 succeeded.")
+    )
+    # One override covers both the HTTP and the WebSocket route.
+    app.dependency_overrides[get_service_factory] = lambda: (
+        lambda: TranscriptionService(fake_provider, settings=transcription_settings)
+    )
+    with TestClient(app) as client:
+        yield client
 
 
 @pytest.fixture

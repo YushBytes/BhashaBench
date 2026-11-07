@@ -655,6 +655,9 @@ class TestOpenApiSurface:
             "/api/v1/scenarios/{scenario_id}/move",
             "/api/v1/suites/{suite_id}/scenarios/import",
             "/api/v1/suites/{suite_id}/scenarios/export",
+            # Phase 4
+            "/api/v1/transcription",
+            "/api/v1/transcription/providers",
         }
 
     def test_scenario_spec_schema_is_published(self, client: TestClient) -> None:

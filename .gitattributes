@@ -20,3 +20,15 @@ Dockerfile      text eol=lf
 *.ico binary
 *.wav binary
 *.mp3 binary
+
+# Audio fixtures (Phase 4). `*.pcm` matters most: headerless PCM would
+# otherwise fall under `* text=auto`, leaving git's binary heuristic to decide
+# whether to rewrite CRLF inside sample data. The heuristic usually gets it
+# right, which is exactly what makes the failure rare and hard to diagnose -
+# a corrupted fixture only looks like a mysteriously failing audio test.
+*.pcm  binary
+*.raw  binary
+*.ogg  binary
+*.flac binary
+*.aac  binary
+*.m4a  binary

@@ -37,11 +37,17 @@ class TestOpenApiDocument:
 
         Phase 1 shipped three paths; Phase 2 added the suite and scenario
         endpoints; Phase 3 added library search, copy/move, bundle
-        import/export and the language catalogue.
+        import/export and the language catalogue; Phase 4 added batch
+        transcription and provider capabilities.
 
         Asserting the exact set - rather than a subset - is what catches a
         route added without being documented, or one left mounted after being
         removed.
+
+        The transcription WebSocket at `/api/v1/transcription/stream` is
+        deliberately absent: OpenAPI 3.1 has no way to describe a WebSocket,
+        so it is documented in `docs/PROVIDERS.md` instead. A path appearing
+        here that is not in that set is still a failure.
         """
         paths = client.get("/openapi.json").json()["paths"]
 
@@ -63,6 +69,9 @@ class TestOpenApiDocument:
             "/api/v1/scenarios/{scenario_id}/move",
             "/api/v1/suites/{suite_id}/scenarios/import",
             "/api/v1/suites/{suite_id}/scenarios/export",
+            # Phase 4
+            "/api/v1/transcription",
+            "/api/v1/transcription/providers",
         }
 
     def test_info_block_matches_settings(self, client: TestClient, settings: Settings) -> None:
