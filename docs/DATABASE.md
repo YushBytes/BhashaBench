@@ -309,3 +309,15 @@ Phase 3 added the `tags` and `code_mixing` fields without a data migration:
 they live inside the existing JSONB document and are optional with defaults,
 so no existing row had to be rewritten. The only schema change was the
 index.
+
+**Phase 4 added no tables, columns or migrations**, and that was a decision
+rather than an omission. Speech-to-text is stateless here: a transcript
+belongs to a conversation turn, and deciding *which* turn is conversation
+orchestration — Phase 9. Adding a `transcripts` table now would mean guessing
+its foreign keys before anything writes to it, and a table written by nothing
+is schema guesswork that a later phase has to undo.
+
+Two consequences worth knowing. The transcription endpoints open no session,
+so they keep working with PostgreSQL down. And `TestRun`, `CallSession` and
+`ConversationTurn` remain foundational schema with nothing writing to them —
+exactly as after Phase 2.

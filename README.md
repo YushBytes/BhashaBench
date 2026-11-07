@@ -6,7 +6,7 @@ An automated testing and benchmarking platform for Indian-language voice
 bots — simulated callers, realistic audio degradation and automated
 conversation scoring.
 
-> ### Project status: Phase 3 of 15 complete
+> ### Project status: Phases 1–3 of 15 complete; Phase 4 awaiting review
 >
 > **Phase 1 — Foundation.** FastAPI backend, health endpoints, Next.js status
 > shell, Docker Compose stack, test and lint toolchain.
@@ -20,13 +20,21 @@ conversation scoring.
 > 13-language catalogue with structured code-mixing annotations; bulk YAML
 > import and deterministic export; and the `bhashabench` CLI.
 >
-> **No calls are placed, no speech is processed and no scores are produced
-> yet.** Telephony, speech services, audio degradation, caller simulation and
-> automated evaluation arrive in later phases — see
-> [the roadmap](docs/DEVELOPMENT_ROADMAP.md). The `TestRun`, `CallSession` and
-> `ConversationTurn` tables exist as foundational schema only; nothing writes
-> to them. Nothing in this README should be read as a claim that an
-> unimplemented feature works.
+> **Phase 4 — Speech to text.** *Implemented, awaiting owner review — not
+> approved.* A provider-independent `TranscriptionProvider` interface with a
+> Gnani Prisma adapter (batch and streaming) and an offline fake, audio
+> validation, bounded retry and credential redaction. **The adapter is
+> verified against Gnani's published contract, not against the live service:**
+> no credential has been issued to this repository, so authentication and real
+> requests are unverified. See [docs/PROVIDERS.md](docs/PROVIDERS.md).
+>
+> **No calls are placed and no scores are produced yet.** Telephony, text to
+> speech, audio degradation, caller simulation and automated evaluation arrive
+> in later phases — see [the roadmap](docs/DEVELOPMENT_ROADMAP.md). The
+> `TestRun`, `CallSession` and `ConversationTurn` tables exist as foundational
+> schema only; nothing writes to them, and Phase 4 persists no transcript.
+> Nothing in this README should be read as a claim that an unimplemented
+> feature works.
 
 ---
 
@@ -80,13 +88,14 @@ explicit criteria.
 
 ## What BhashaBench will do
 
-Scenario definitions landed in Phase 2. Nothing else below is implemented
-yet; each item names the phase that delivers it.
+Scenario definitions landed in Phase 2 and speech to text in Phase 4.
+Nothing else below is implemented yet; each item names the phase that
+delivers it.
 
 | Capability | What it does | Phase |
 |------------|--------------|-------|
 | ~~Scenario definitions~~ | **Done (Phase 2).** Declare a persona, a language, an objective and success criteria in YAML | 2 |
-| Speech to text | Transcribe bot audio via Gnani Prisma, with code-mixing support | 4 |
+| ~~Speech to text~~ | **Done (Phase 4), pending review.** Transcribe bot audio via Gnani Prisma — batch and streaming, behind a provider-independent interface | 4 |
 | Text to speech | Synthesise caller speech via Gnani Timbre, matched to the persona | 5 |
 | Simulated callers | An AI caller that pursues a goal rather than replaying a script, driven by Gnani Evon | 6 |
 | Audio degradation | Background noise, packet loss, jitter and telephony codecs, applied from a fixed seed | 7 |
@@ -178,16 +187,23 @@ BhashaBench/
 │   │   ├── core/languages.py  the 13-language catalogue, single source
 │   │   ├── api/               HTTP layer
 │   │   │   ├── deps.py        injectable dependencies
-│   │   │   └── v1/            versioned routes (health, suites, scenarios, languages)
+│   │   │   └── v1/            versioned routes (health, suites, scenarios,
+│   │   │                       languages, transcription)
 │   │   ├── cli/               the `bhashabench` command-line interface
 │   │   ├── db/                declarative base, engine, session dependency
 │   │   ├── models/            SQLAlchemy ORM models (5 tables)
 │   │   ├── repositories/      every SQL statement lives here
 │   │   ├── schemas/           response models, error envelope, scenario spec
-│   │   ├── services/          health, scenario loader, bundles, suite + scenario logic
+│   │   ├── services/          health, scenario loader, bundles, suite +
+│   │   │                      scenario logic, transcription
+│   │   ├── transcription/     speech-to-text subsystem (Phase 4): domain
+│   │   │   │                  models, errors, audio, retry, redaction
+│   │   │   └── providers/     Gnani Prisma + offline fake. The only place a
+│   │   │                      vendor's wire format may appear.
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 561 tests across 12 modules
+│   ├── tests/                 954 tests across 19 modules
+│   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
 │   └── Dockerfile             multi-stage: development / production
@@ -345,7 +361,8 @@ their phase lands.
 
 | Variable | Phase |
 |----------|-------|
-| `GNANI_API_KEY`, `GNANI_API_BASE_URL` | 4–6 |
+| `TRANSCRIPTION_PROVIDER`, `TRANSCRIPTION_TIMEOUT_SECONDS`, `TRANSCRIPTION_MAX_ATTEMPTS`, `TRANSCRIPTION_MAX_UPLOAD_BYTES`, `TRANSCRIPTION_LIVE_TESTS` | 4 |
+| `GNANI_API_KEY`, `GNANI_API_BASE_URL`, `GNANI_STT_MODEL` | 4–6 |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | 8 |
 | `PUBLIC_BASE_URL` | 8 |
 | `ALLOWED_BOT_NUMBERS`, `MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS` | 8 |
@@ -425,7 +442,8 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite has **561 tests** in twelve modules:
+The backend suite has **954 tests** in nineteen modules. 939 run by
+default; the 15 live provider tests are deselected unless you opt in:
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -441,6 +459,13 @@ The backend suite has **561 tests** in twelve modules:
 | `test_cli.py` | 65 | Argument parsing, exit codes and output for every command through Typer's `CliRunner`, plus that no connection string reaches the terminal on a database outage |
 | `test_reference_scenarios.py` | 40 | Every committed scenario in `scenarios/` validates and round-trips, the set covers six languages and the documented audio and code-mixing cases, and the generated bundle is not stale |
 | `test_tooling.py` | 8 | That the host and container pytest configurations enforce the same things, so the second run corroborates the first instead of decorating it |
+| `test_transcription_core.py` | 104 | Audio format detection from content, WAV header parsing, size/duration/channel limits, filename safety, the retry policy's arithmetic and what it refuses to retry, the provider registry |
+| `test_transcription_prisma.py` | 81 | The Gnani Prisma adapter against its published contract: request shape, every documented status, response normalisation, malformed responses, language and mode mapping |
+| `test_transcription_api.py` | 83 | The service layer and the real FastAPI routes - batch upload, provider capabilities, the WebSocket lifecycle, error-to-status mapping, structured logging |
+| `test_transcription_security.py` | 53 | Credential redaction, no secret in a response/log/stream frame, path traversal, capped uploads, temp-file cleanup, repository hygiene |
+| `test_transcription_streaming.py` | 38 | Prisma's WebSocket protocol: 1024-byte framing, event mapping, ordering, malformed frames, cancellation, bounded buffering |
+| `test_audio_fixtures.py` | 19 | The committed fixtures still match their generator byte for byte, and still claim no speech and no expected transcript |
+| `test_transcription_live.py` | 15 | **Opt-in, billable.** Real Gnani Prisma calls. Skipped unless `TRANSCRIPTION_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
 
 ```bash
 pytest
@@ -468,7 +493,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-====================== 561 passed in 19.54s ======================
+================= 939 passed, 15 skipped in 30.05s ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -546,6 +571,9 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 | `GET` | `/api/v1/scenarios` | Searches the whole library. `suite_id`, `language`, `name`, repeatable `tag`, `limit`, `offset` |
 | `POST` | `/api/v1/scenarios/{scenario_id}/copy` | 201. Copies into another suite with a new id. Takes `{"target_suite_id": ..., "new_name": ...}` |
 | `POST` | `/api/v1/scenarios/{scenario_id}/move` | Moves to another suite, keeping the id |
+| `POST` | `/api/v1/transcription` | Transcribes one uploaded audio file (`multipart/form-data`). Container identified from content, not from the declared type |
+| `GET` | `/api/v1/transcription/providers` | Every registered provider with its capabilities, limitations and documentation gaps - including ones missing a credential |
+| `WS` | `/api/v1/transcription/stream` | Streaming transcription. Send PCM frames, receive `started` / `final_transcript` / `completed` events. Not in the OpenAPI document - OpenAPI 3.1 cannot describe a WebSocket; see [docs/PROVIDERS.md](docs/PROVIDERS.md) |
 | `POST` | `/api/v1/suites/{suite_id}/scenarios/import` | Bulk import from a bundle. Takes `{"yaml": ..., "dry_run": ..., "atomic": ...}` |
 | `GET` | `/api/v1/suites/{suite_id}/scenarios/export` | The suite as a deterministic, re-importable bundle |
 
@@ -613,7 +641,7 @@ documentation. Full detail in
 | 1 | Project foundation | ✅ Complete |
 | 2 | Database & scenario engine | ✅ Complete |
 | 3 | Scenario library & tooling | ✅ Complete |
-| 4 | Speech to text (Gnani Prisma) | ⬜ Not started |
+| 4 | Speech to text (Gnani Prisma) | 🟨 Implemented, awaiting review |
 | 5 | Text to speech (Gnani Timbre) | ⬜ Not started |
 | 6 | AI caller simulation (Gnani Evon) | ⬜ Not started |
 | 7 | Audio degradation pipeline | ⬜ Not started |

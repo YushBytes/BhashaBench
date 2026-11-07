@@ -75,12 +75,13 @@ reasoning behind its score.
 
 ---
 
-## 3. Implemented today (Phases 1–3)
+## 3. Implemented today (Phases 1–4)
 
 ### 3.1 Backend — `backend/app/`
 
 A layered FastAPI application. The layering exists so that logic is testable
 without HTTP and so provider integrations in phases 4–8 have an obvious home.
+Phase 4 took that home: `app/transcription/` (see §3.2b).
 
 Repositories hold every SQL statement and never commit; services own the
 transaction boundary and raise domain errors (`NotFoundError`,
@@ -204,6 +205,48 @@ its scenarios, no database identifiers. Export is deterministic so a bundle
 committed to git diffs cleanly, and import is atomic by default so a failed
 batch never leaves a half-populated suite.
 
+### 3.2b The transcription subsystem (Phase 4)
+
+The first external provider integration, and the template for the four that
+follow.
+
+```
+api/v1/transcription.py          HTTP + WebSocket transport
+services/transcription_service.py   business rules, provider-agnostic
+transcription/registry.py        which provider, built from settings
+transcription/base.py            the TranscriptionProvider protocol
+transcription/providers/         one adapter per vendor
+```
+
+Three decisions worth recording.
+
+**The provider boundary is absolute.** Nothing above
+`transcription/providers/` may import a vendor module or name a vendor field.
+The service layer has never heard of `audio_file` or
+`detected_language_code`. This is what will let Phase 11 benchmark a second
+engine without touching evaluation code, and it is enforced by review rather
+than by tooling, so it has to be stated.
+
+**Capabilities are declared data, not discovered behaviour.**
+`ProviderCapabilities` states which languages a provider transcribes, whether
+it streams interim results, whether it reports confidence. The service refuses
+an impossible request with a precise message instead of forwarding it and
+translating a vendor error. Gnani Prisma covers ten of the catalogue's
+thirteen languages, so Urdu, Odia and Assamese are authorable and not
+transcribable — a fact the API publishes rather than discovers.
+
+**These handlers are `async def`, and that is not a reversal of §5's
+synchronous-session decision.** Database handlers stay synchronous so FastAPI
+runs them in a worker thread. The transcription handlers touch no database —
+Phase 4 persists nothing — and are entirely network-bound, so the event loop
+is the right place for them. The streaming handler could not be synchronous at
+all: it interleaves receiving client audio with forwarding provider events.
+
+**Nothing is persisted.** Deciding which conversation turn a transcript
+belongs to is orchestration (Phase 9). A table written by nothing would be
+schema guesswork, so the subsystem is a pure function of its input and the
+endpoints work with PostgreSQL down.
+
 ### 3.3 Frontend — `frontend/`
 
 Next.js App Router with TypeScript and Tailwind CSS. Phase 1 ships a
@@ -273,6 +316,19 @@ touching the orchestrator; and no code outside the adapter needs a credential.
 Adapters are written in the phase that integrates them, against real provider
 documentation. No endpoint path, auth scheme or payload shape is guessed
 in advance.
+
+Phase 4 made `TranscriptionProvider` real (see §3.2b). It also made the rule
+above concrete in an unglamorous way: where Gnani's documentation is silent or
+self-contradictory, the gap is recorded in `DOCUMENTATION_GAPS` and the
+capability is declared **unsupported** rather than guessed. Three of Prisma's
+four output modes are unsupported for exactly this reason — their literal wire
+values are described in prose but never quoted, and `code-mix` versus
+`code_mix` is not a coin worth flipping in a benchmark.
+
+One consequence to carry into Phase 5 and beyond: an adapter whose request
+shape matches the documentation is *contract-verified*, which is not the same
+as *transport-verified*. A mocked transport cannot disagree with you. Each
+provider phase should state which of the two it achieved.
 
 ### 4.3 Reproducibility
 

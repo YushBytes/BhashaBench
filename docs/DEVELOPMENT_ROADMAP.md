@@ -4,9 +4,10 @@ BhashaBench is being built in 15 controlled phases. Each phase is a reviewable
 increment: it ends with working code, passing tests and updated documentation.
 A phase is not started until the previous one is approved.
 
-**Current status: Phases 1, 2 and 3 complete. Phases 4–15 not started.**
+**Current status: Phases 1, 2 and 3 complete. Phase 4 is implemented and
+awaiting owner review. Phases 5–15 not started.**
 
-Nothing in phases 4–15 is implemented. Where this document describes a
+Nothing in phases 5–15 is implemented. Where this document describes a
 component in the present tense, read it as the *intended* design for that
 phase, not as existing behaviour.
 
@@ -19,7 +20,7 @@ phase, not as existing behaviour.
 | 1 | Project Foundation | ✅ Complete |
 | 2 | Database & Scenario Engine | ✅ Complete |
 | 3 | Scenario Library & Tooling | ✅ Complete |
-| 4 | Gnani Prisma — Speech to Text | ⬜ Not started |
+| 4 | Gnani Prisma — Speech to Text | 🟨 Implemented, awaiting review |
 | 5 | Gnani Timbre — Text to Speech | ⬜ Not started |
 | 6 | AI Caller Simulation (Gnani Evon) | ⬜ Not started |
 | 7 | Audio Degradation Pipeline | ⬜ Not started |
@@ -134,17 +135,59 @@ library is now complete enough to drive those.
 
 ---
 
-## Phase 4 — Gnani Prisma (Speech to Text)
+## Phase 4 — Gnani Prisma (Speech to Text) 🟨
 
-- Thin client around the Prisma STT API, isolated behind a
-  `TranscriptionProvider` protocol.
-- Streaming and batch transcription paths.
-- Language and code-mixing configuration per scenario.
-- Retry with backoff, typed errors, and redaction of credentials from logs.
-- Tests against recorded fixtures — no network calls in CI.
+**Status: implemented, awaiting owner review. Not approved.**
 
-**Exit criteria.** A fixture audio file transcribes end to end, and the
-provider can be swapped for a fake in tests.
+**Delivered.**
+
+- **Provider-independent interface.** `TranscriptionProvider` protocol with
+  `ProviderCapabilities` as declared metadata, so a limitation is published
+  rather than discovered from a failed request. Nothing above
+  `app/transcription/providers/` references a vendor field name.
+- **Gnani Prisma adapter.** Batch (`POST /stt/v3`, multipart) and streaming
+  (`wss://.../stt/v3/stream`, 1024-byte PCM frames), built against the
+  contract published at docs.gnani.ai and isolated in
+  `providers/prisma_contract.py`.
+- **Offline fake provider.** Implements the same interface and can be scripted
+  into every failure the real adapter produces. The default test suite needs
+  no credential and makes no network call.
+- **Audio validation.** Container identified from content, not from a declared
+  MIME type or extension; WAV headers parsed with the standard library; size,
+  duration, sample-rate and channel limits. No decoding and no conversion —
+  resampling belongs to Phase 7.
+- **Bounded retry.** Exponential backoff with full jitter, a ceiling that also
+  bounds a provider's `Retry-After`, and permanent failures never retried.
+  Streaming is never retried automatically.
+- **Credential redaction** in the adapters and again at the HTTP and WebSocket
+  boundaries. Structured logging that records transcript *length*, never
+  transcript text.
+- **Three endpoints**: `POST /api/v1/transcription`,
+  `GET /api/v1/transcription/providers`, and the
+  `/api/v1/transcription/stream` WebSocket.
+- 954 tests, up from 561. 15 of them are opt-in live provider tests.
+
+**Verified language support.** Prisma documents ten of BhashaBench's thirteen
+catalogue languages. Urdu, Odia and Assamese have no speech model: a scenario
+may be authored in them and no transcript can be produced. The request is
+refused explicitly rather than transcribed as a neighbouring language.
+
+**Exit criteria.** A fixture audio file transcribes end to end through the
+provider interface, and the provider can be swapped for a fake in tests —
+**met against the fake and against the documented contract**. Not yet met
+against the live service: see below.
+
+**Honest limitation.** No Gnani credential has been issued to this repository,
+so the adapter is *contract-verified* and not *transport-verified*.
+Authentication, a real batch request and a real streaming request are all
+**unverified**. The live suite exists and is deselected
+(`TRANSCRIPTION_LIVE_TESTS`); running it is the remaining step. See
+`docs/PROVIDERS.md`.
+
+**Deliberately not in this phase.** Prisma's asynchronous batch-jobs pipeline
+for long or many files; the three output modes whose literal wire values the
+vendor does not publish; automatic language detection; any persistence of
+transcripts.
 
 ---
 
