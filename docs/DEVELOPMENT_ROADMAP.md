@@ -4,8 +4,7 @@ BhashaBench is being built in 15 controlled phases. Each phase is a reviewable
 increment: it ends with working code, passing tests and updated documentation.
 A phase is not started until the previous one is approved.
 
-**Current status: Phases 1, 2 and 3 complete. Phases 4 and 5 are implemented
-and awaiting owner review. Phases 6–15 not started.**
+**Current status: Phases 1–5 complete. Phases 6–15 not started.**
 
 Nothing in phases 6–15 is implemented. Where this document describes a
 component in the present tense, read it as the *intended* design for that
@@ -20,8 +19,8 @@ phase, not as existing behaviour.
 | 1 | Project Foundation | ✅ Complete |
 | 2 | Database & Scenario Engine | ✅ Complete |
 | 3 | Scenario Library & Tooling | ✅ Complete |
-| 4 | Gnani Prisma — Speech to Text | 🟨 Implemented, awaiting review |
-| 5 | Gnani Timbre — Text to Speech | 🟨 Implemented, awaiting review |
+| 4 | Gnani Prisma — Speech to Text | ✅ Complete |
+| 5 | Gnani Timbre — Text to Speech | ✅ Complete |
 | 6 | AI Caller Simulation (Gnani Evon) | ⬜ Not started |
 | 7 | Audio Degradation Pipeline | ⬜ Not started |
 | 8 | Twilio Telephony & Media Streaming | ⬜ Not started |
@@ -135,9 +134,9 @@ library is now complete enough to drive those.
 
 ---
 
-## Phase 4 — Gnani Prisma (Speech to Text) 🟨
+## Phase 4 — Gnani Prisma (Speech to Text) ✅
 
-**Status: implemented, awaiting owner review. Not approved.**
+**Status: complete. Approved by the owner on 2026-11-07.**
 
 **Delivered.**
 
@@ -200,9 +199,9 @@ transcripts.
 
 ---
 
-## Phase 5 — Gnani Timbre (Text to Speech) 🟨
+## Phase 5 — Gnani Timbre (Text to Speech) ✅
 
-**Status: implemented, awaiting owner review. Not approved.**
+**Status: complete. Approved by the owner on 2026-11-07, after live verification.**
 
 **Delivered.**
 
@@ -231,18 +230,24 @@ transcripts.
 `auto` and `hi-en`. Urdu, Odia and Assamese cannot be spoken, and there is no
 Tamil-English code-mixed value - `hi-en` is the only one documented.
 
-**Live verification, 2026-11-07.** One real call. Verified: authentication,
-that the shared key carries the TTS scope, that the request is accepted, and
-that the audio is decodable - 8 kHz mono 16-bit PCM, 4.400 s, requested rate
-honoured.
+**Live verification, 2026-11-07. Two real calls, both informative.**
 
-That one call also found a bug no mock could: Timbre writes a *streaming* WAV
-header with `0xFFFFFFFF` size fields, which our Phase 4 truncation check read
-as a damaged file and rejected. Fixed and verified byte-for-byte offline; the
-full path has not been re-confirmed live.
+Verified live: authentication, that the shared key carries the TTS scope, that
+the request is accepted, that the audio is decodable - 8 kHz mono 16-bit PCM,
+4.400 s, requested rate honoured - and, after the fix below, that the **full
+adapter path** returns a valid result.
 
-**Not evaluated.** Pronunciation, prosody and intelligibility. Nobody has
-listened to the audio, and no automated test can judge it.
+The first call found a bug no mock could: Timbre writes a *streaming* WAV header
+with `0xFFFFFFFF` size fields, which our Phase 4 truncation check read as a
+damaged file and rejected. The inspector now separates that sentinel from a
+plausible-but-short declaration, so a genuinely truncated file is still refused -
+checked in both directions against the real artefact. The second call confirmed
+the corrected path end to end.
+
+**Not evaluated.** Pronunciation, prosody and intelligibility. The generated
+WAV was saved locally for listening, but nobody has listened to it, and no
+automated test can judge it. "Synthesis verified" means the pipe works and the
+audio is well-formed - not that the Tamil sounds right.
 
 **Exit criteria.** A persona utterance synthesises to a playable, correctly
 formatted audio artefact - **met**, against the live service and against the

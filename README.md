@@ -6,7 +6,7 @@ An automated testing and benchmarking platform for Indian-language voice
 bots — simulated callers, realistic audio degradation and automated
 conversation scoring.
 
-> ### Project status: Phases 1–3 of 15 complete; Phases 4–5 awaiting review
+> ### Project status: Phases 1–5 of 15 complete
 >
 > **Phase 1 — Foundation.** FastAPI backend, health endpoints, Next.js status
 > shell, Docker Compose stack, test and lint toolchain.
@@ -20,8 +20,8 @@ conversation scoring.
 > 13-language catalogue with structured code-mixing annotations; bulk YAML
 > import and deterministic export; and the `bhashabench` CLI.
 >
-> **Phase 4 — Speech to text.** *Implemented, awaiting owner review — not
-> approved.* A provider-independent `TranscriptionProvider` interface with a
+> **Phase 4 — Speech to text.** A provider-independent
+> `TranscriptionProvider` interface with a
 > Gnani Prisma adapter (batch and streaming) and an offline fake, audio
 > validation, bounded retry and credential redaction.
 >
@@ -32,15 +32,16 @@ conversation scoring.
 > truth, so no accuracy claim is made anywhere. Per-capability table in
 > [docs/PROVIDERS.md](docs/PROVIDERS.md).
 >
-> **Phase 5 — Text to speech.** *Implemented, awaiting owner review — not
-> approved.* A provider-independent `SynthesisProvider` interface with a Gnani
-> Timbre adapter (13 voices, 10 languages, telephony-rate audio) and an offline
-> fake. `POST /api/v1/speech/generate` returns binary audio.
+> **Phase 5 — Text to speech.** A provider-independent `SynthesisProvider`
+> interface with a Gnani Timbre adapter (13 voices, 10 languages,
+> telephony-rate audio) and an offline fake. `POST /api/v1/speech/generate`
+> returns binary audio.
 >
 > **Live-verified against Gnani on 2026-11-07:** authentication, that the
-> shared key carries the TTS scope, the request shape, and that the audio is
-> decodable (8 kHz mono 16-bit, 4.400 s). **Not evaluated:** pronunciation and
-> prosody — nobody has listened to it, and no automated test can judge it.
+> shared key carries the TTS scope, the request shape, the full adapter path,
+> and that the audio is decodable (8 kHz mono 16-bit, 4.400 s). **Not
+> evaluated:** pronunciation and prosody — nobody has listened to it, and no
+> automated test can judge it.
 >
 > **No calls are placed and no scores are produced yet.** Telephony, audio
 > degradation, caller simulation and automated evaluation arrive
@@ -109,8 +110,8 @@ delivers it.
 | Capability | What it does | Phase |
 |------------|--------------|-------|
 | ~~Scenario definitions~~ | **Done (Phase 2).** Declare a persona, a language, an objective and success criteria in YAML | 2 |
-| ~~Speech to text~~ | **Done (Phase 4), pending review.** Transcribe bot audio via Gnani Prisma — batch and streaming, behind a provider-independent interface | 4 |
-| ~~Text to speech~~ | **Done (Phase 5), pending review.** Synthesise caller speech via Gnani Timbre - 13 voices, 10 languages, telephony-rate audio | 5 |
+| ~~Speech to text~~ | **Done (Phase 4).** Transcribe bot audio via Gnani Prisma — batch and streaming, behind a provider-independent interface | 4 |
+| ~~Text to speech~~ | **Done (Phase 5).** Synthesise caller speech via Gnani Timbre - 13 voices, 10 languages, telephony-rate audio | 5 |
 | Simulated callers | An AI caller that pursues a goal rather than replaying a script, driven by Gnani Evon | 6 |
 | Audio degradation | Background noise, packet loss, jitter and telephony codecs, applied from a fixed seed | 7 |
 | Live telephony | Outbound calls with Twilio bidirectional media streaming and barge-in handling | 8 |
@@ -665,8 +666,8 @@ documentation. Full detail in
 | 1 | Project foundation | ✅ Complete |
 | 2 | Database & scenario engine | ✅ Complete |
 | 3 | Scenario library & tooling | ✅ Complete |
-| 4 | Speech to text (Gnani Prisma) | 🟨 Implemented, awaiting review |
-| 5 | Text to speech (Gnani Timbre) | 🟨 Implemented, awaiting review |
+| 4 | Speech to text (Gnani Prisma) | ✅ Complete |
+| 5 | Text to speech (Gnani Timbre) | ✅ Complete |
 | 6 | AI caller simulation (Gnani Evon) | ⬜ Not started |
 | 7 | Audio degradation pipeline | ⬜ Not started |
 | 8 | Twilio telephony & media streaming | ⬜ Not started |

@@ -1,3 +1,11 @@
+> **Superseded — historical record.** This is the Phase 3 report, kept for the
+> record. Phases 4 (Gnani Prisma, speech to text) and 5 (Gnani Timbre, text to
+> speech) have since been completed and approved. Its forward-looking
+> statements, including "Phase 4 has not started", were true when written on
+> 2026-11-03 and are not current. For the project's present state see
+> [`docs/DEVELOPMENT_ROADMAP.md`](docs/DEVELOPMENT_ROADMAP.md), and for provider
+> verification status see [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
+
 # Phase 3 — Scenario Library & Tooling: Completion Report
 
 | | |
@@ -18,7 +26,7 @@
 > Phase 2's report is preserved in git history. This document replaces it to
 > describe the current phase.
 
-> **Phase 4 has not started.** No Gnani Prisma, Timbre or Evon client exists,
+> **Phase 4 had not started when this was written.** No Gnani Prisma, Timbre or Evon client existed,
 > no telephony, no audio processing, no scoring. Nothing in this report should
 > be read as a claim that an unimplemented feature works.
 

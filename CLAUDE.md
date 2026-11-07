@@ -9,16 +9,15 @@ BhashaBench is an automated testing and benchmarking platform for
 Indian-language voice bots. It is being built in **15 controlled phases**; see
 `docs/DEVELOPMENT_ROADMAP.md`.
 
-**Phases 1, 2 and 3 are complete.** Phases 4 and 5 are implemented and
-awaiting owner review — not approved. Phase 6 has not started.
+**Phases 1 to 5 are complete.** Phase 6 has not started.
 
 | Phase | Status |
 |-------|--------|
 | 1 — Project foundation | ✅ Complete |
 | 2 — Database & scenario engine | ✅ Complete |
 | 3 — Scenario library & tooling | ✅ Complete |
-| 4 — Speech to text (Gnani Prisma) | 🟨 Implemented, awaiting review |
-| 5 — Text to speech (Gnani Timbre) | 🟨 Implemented, awaiting review |
+| 4 — Speech to text (Gnani Prisma) | ✅ Complete |
+| 5 — Text to speech (Gnani Timbre) | ✅ Complete |
 | 6–15 | ⬜ Not started |
 
 ## The two rules that matter most

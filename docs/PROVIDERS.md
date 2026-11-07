@@ -14,7 +14,8 @@ routinely conflated — in particular, what a *mocked* test proves from what a
 *real* API call proves.
 
 **Last live verification: 2026-11-07**, against `https://api.vachana.ai`
-with a real API key. Three Gnani API calls total.
+with a real API key. Four Gnani API calls in total across both phases: three
+for Prisma recognition, one for Timbre synthesis.
 
 | Capability | Status | How it was established |
 |------------|--------|------------------------|
@@ -35,10 +36,10 @@ with a real API key. Three Gnani API calls total.
 | Official API contract | ✅ **Verified** | [docs.gnani.ai](https://docs.gnani.ai/api/TTS/tts-inference), transcribed into `timbre_contract.py` and asserted by tests |
 | Real API authentication | ✅ **Verified** | **Live call.** HTTP 200 from `api.vachana.ai`; no 401/402/403 |
 | TTS scope on the shared key | ✅ **Verified** | **Live call.** The same `GNANI_API_KEY` that works for Prisma was accepted by Timbre — a 403 would have proved the opposite |
-| Real synthesis request | ✅ **Verified** | **Live call.** `POST /api/v1/tts/inference` accepted, 70,400 bytes of PCM returned |
+| Real synthesis request | ✅ **Verified** | **Live call.** `POST /api/v1/tts/inference` accepted; a 70,444-byte WAV carrying 70,400 bytes of PCM |
 | Real audio decodability | ✅ **Verified** | **Live call.** 8 kHz, mono, 16-bit PCM, 4.400 s, parsed by the stdlib `wave` reader |
 | Requested sample rate honoured | ✅ **Verified** | **Live call.** 8 kHz requested, 8 kHz returned |
-| Adapter end-to-end after the header fix | ❌ **Not re-confirmed live** | The one live call exposed a bug in our WAV validator (below). The fix is verified byte-for-byte offline against the real header; one more call would confirm the whole path |
+| Adapter end-to-end after the WAV header fix | ✅ **Verified live** | **Live call.** The full path - request, binary response, sentinel header, measurement - returns a valid `SpeechResult`. Confirmed after the fix |
 | Pronunciation / prosody / intelligibility | ⚠️ **Not evaluated** | Nobody has listened to the audio. No automated test can judge this |
 | Streaming synthesis (SSE / WebSocket) | ⬜ **Not implemented** | Documented by the vendor; nothing consumes a stream before Phase 9 |
 
@@ -73,16 +74,28 @@ establishes **nothing** about pronunciation, prosody, stress, intelligibility
 or accent — those need a person listening, and nobody has. Do not read
 "synthesis verified" as "the Tamil sounds right".
 
-**What the live call cost us, and what it bought.** One call. It found a bug
-that 379 offline tests could not: Timbre writes a *streaming* WAV header with
-`0xFFFFFFFF` in the RIFF and `data` size fields, the ordinary convention for a
-writer that does not know the final length. Our WAV inspector - added in Phase
-4 to catch truncated uploads - read that as a file declaring 2.1 billion frames
-and holding 35,200, and rejected every synthesised utterance as truncated. The
-inspector now distinguishes the sentinel from a plausible-but-short declaration,
-so a real truncated upload is still refused. No fixture could have caught this:
-the stdlib `wave` writer always back-fills the true length, so an offline
-fixture never has this header.
+**What the live calls cost, and what they bought.** Two calls to Timbre.
+
+The first found a bug that 379 offline tests could not: Timbre writes a
+*streaming* WAV header with `0xFFFFFFFF` in the RIFF and `data` size fields, the
+ordinary convention for a writer that does not know the final length. Our WAV
+inspector - added in Phase 4 to catch truncated uploads - read that as a file
+declaring 2.1 billion frames and holding 35,200, and rejected every synthesised
+utterance as truncated. No fixture could have caught it: the stdlib `wave`
+writer always back-fills the true length, so an offline fixture never carries
+that header.
+
+The second, after the fix, confirmed the whole path. The saved artefact was then
+inspected three independent ways - by hand with `struct`, by the stdlib `wave`
+reader, and by our own inspector - all agreeing on 8 kHz, mono, 16-bit, 4.400 s.
+It also carries real signal rather than silence: peak amplitude 25,917 of
+32,767, 98.3% of samples non-zero, which rules out the failure mode where a
+provider returns a correctly-formed empty file.
+
+The sentinel rule was then checked in both directions against that same real
+artefact: with the sentinel in place it is accepted and measured; with the
+sentinel replaced by an honest size and the tail cut off, it is still rejected
+as truncated. The allowance did not reopen the hole beside it.
 
 ---
 
