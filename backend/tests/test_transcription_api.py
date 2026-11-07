@@ -742,6 +742,176 @@ class TestStreamEndpoint:
         assert types[-1] in {"completed", "failed"}
 
 
+class TestResourceCleanup:
+    """Every request must release its provider client, on both paths.
+
+    `get_service_factory` builds a new service, provider and HTTP client per
+    request, so a request that does not close its own leaves a connection pool
+    to the garbage collector. The dependency closes it in a `finally`; these
+    tests pin that down, because a leak is invisible until the process runs out
+    of sockets.
+    """
+
+    def test_the_provider_is_closed_after_a_successful_request(
+        self,
+        transcription_client: TestClient,
+        fake_provider: FakeTranscriptionProvider,
+        wav_8k: bytes,
+    ) -> None:
+        assert not fake_provider.closed
+        assert _upload(transcription_client, wav_8k).status_code == 200
+        assert fake_provider.closed, "a successful request must still close the client"
+
+    def test_the_provider_is_closed_after_a_validation_failure(
+        self,
+        transcription_client: TestClient,
+        fake_provider: FakeTranscriptionProvider,
+        wav_8k: bytes,
+    ) -> None:
+        """The handler raised before reaching the provider; cleanup still runs."""
+        assert _upload(transcription_client, wav_8k, language="fr-FR").status_code == 422
+        assert fake_provider.closed
+
+    def test_the_provider_is_closed_after_a_provider_failure(
+        self,
+        transcription_client: TestClient,
+        fake_provider: FakeTranscriptionProvider,
+        wav_8k: bytes,
+    ) -> None:
+        fake_provider.script.failures = [auth_failure()]
+        assert _upload(transcription_client, wav_8k).status_code == 502
+        assert fake_provider.closed
+
+    def test_the_provider_is_closed_after_retries_are_exhausted(
+        self,
+        transcription_client: TestClient,
+        fake_provider: FakeTranscriptionProvider,
+        wav_8k: bytes,
+    ) -> None:
+        fake_provider.script.failures = [unavailable_failure()] * 5
+        assert _upload(transcription_client, wav_8k).status_code == 502
+        assert fake_provider.closed
+        # Retry behaviour is untouched by the cleanup change.
+        assert len(fake_provider.script.calls) == 3
+
+    def test_the_provider_is_closed_after_an_unexpected_exception(
+        self,
+        transcription_settings: Settings,
+        fake_provider: FakeTranscriptionProvider,
+        wav_8k: bytes,
+    ) -> None:
+        """The path most likely to leak: an error nobody anticipated."""
+        from app.api.deps import get_database_probe
+        from app.api.v1.transcription import get_service_factory
+        from app.core.config import get_settings
+        from app.main import create_app
+
+        async def explode(*_: object, **__: object) -> None:
+            raise RuntimeError("unexpected")
+
+        fake_provider.transcribe_batch = explode  # type: ignore[method-assign]
+
+        app = create_app(settings=transcription_settings)
+        app.dependency_overrides[get_settings] = lambda: transcription_settings
+        app.dependency_overrides[get_database_probe] = lambda: lambda: (True, "ok")
+        app.dependency_overrides[get_service_factory] = lambda: (
+            lambda: TranscriptionService(fake_provider, settings=transcription_settings)
+        )
+
+        client = TestClient(app, raise_server_exceptions=False)
+        response = client.post(
+            "/api/v1/transcription",
+            files={"audio": ("call.wav", wav_8k, "audio/wav")},
+            data={"language": "hi-IN"},
+        )
+        assert response.status_code == 500
+        assert fake_provider.closed
+
+    def test_the_capability_endpoint_leaves_no_client_open(
+        self, transcription_client: TestClient
+    ) -> None:
+        """`describe_providers` constructs every provider to read static
+        metadata. The Prisma client is lazy, so nothing should be built."""
+        from app.core.config import AppEnv
+        from app.transcription.providers.prisma import GnaniPrismaProvider
+        from app.transcription.registry import build_provider
+
+        settings = Settings(
+            app_env=AppEnv.TEST,
+            secret_key="test-secret-key-not-used-for-anything",
+            transcription_provider="prisma",
+            gnani_api_key="k" * 24,
+            _env_file=None,
+        )
+        provider = build_provider(settings)
+        assert isinstance(provider, GnaniPrismaProvider)
+        _ = provider.capabilities
+        assert provider._client is None, "reading capabilities must open no client"
+
+        assert transcription_client.get("/api/v1/transcription/providers").status_code == 200
+
+    def test_closing_twice_is_harmless(self) -> None:
+        """The WebSocket route and the dependency could both fire on a future
+        refactor; `close` must be idempotent."""
+        from app.transcription.providers.prisma import GnaniPrismaProvider
+
+        provider = GnaniPrismaProvider(api_key="k" * 24)
+        asyncio.run(provider.close())
+        asyncio.run(provider.close())
+
+    def test_an_owned_http_client_is_actually_closed(self) -> None:
+        """The fake records a flag; this asserts the real adapter releases a
+        real `httpx2.AsyncClient`.
+
+        This is the production path: the registry builds the provider without
+        injecting a client, so the provider owns the one it creates lazily.
+        """
+        from app.transcription.providers.prisma import GnaniPrismaProvider
+
+        provider = GnaniPrismaProvider(api_key="k" * 24)
+        client = provider._http  # force the lazy client into existence
+        assert not client.is_closed
+
+        asyncio.run(provider.close())
+
+        assert client.is_closed
+        assert provider._client is None, "a closed client must not be reused"
+
+    def test_an_injected_client_is_left_open_because_the_caller_owns_it(self) -> None:
+        """Closing a client you were handed would pull it out from under
+        whoever is still using it - tests and the live fixture both inject one.
+        """
+        import httpx2
+
+        from app.transcription.providers.prisma import GnaniPrismaProvider
+
+        client = httpx2.AsyncClient(
+            transport=httpx2.MockTransport(lambda _: httpx2.Response(200, json={}))
+        )
+        provider = GnaniPrismaProvider(api_key="k" * 24, client=client)
+
+        asyncio.run(provider.close())
+
+        assert not client.is_closed, "an injected client is the injector's to close"
+
+    def test_the_registry_builds_a_provider_that_owns_its_client(self) -> None:
+        """Ties the ownership rule to the path the API actually takes, so the
+        two tests above cannot both pass while production still leaks.
+        """
+        from app.core.config import AppEnv
+        from app.transcription.registry import build_provider
+
+        settings = Settings(
+            app_env=AppEnv.TEST,
+            secret_key="test-secret-key-not-used-for-anything",
+            transcription_provider="prisma",
+            gnani_api_key="k" * 24,
+            _env_file=None,
+        )
+        provider = build_provider(settings)
+        assert provider._owns_client is True  # type: ignore[attr-defined]
+
+
 class TestBackpressure:
     def test_the_audio_queue_is_bounded(self) -> None:
         """An unbounded queue would let one client store a whole call in RAM."""

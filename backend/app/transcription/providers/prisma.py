@@ -73,10 +73,17 @@ def _ms(seconds: float) -> float:
 class GnaniPrismaProvider:
     """`TranscriptionProvider` backed by Gnani Prisma.
 
-    One instance owns one pooled `httpx2.AsyncClient`. It is built by the
-    registry from settings and cached for the process lifetime, because
-    rebuilding a client per request discards the connection pool and pays a
-    TLS handshake on every transcription.
+    One instance owns one pooled `httpx2.AsyncClient`, created on first use and
+    released by `close()`.
+
+    Note what the current wiring does and does not give you: the API builds a
+    provider per request (`get_service_factory`), so the pool is not in fact
+    reused across requests and each transcription pays a TLS handshake. The
+    pooling is real within one instance - the streaming path and any caller
+    that reuses a provider benefit - but a process-wide pool needs one provider
+    per process, closed in the application lifespan. Recorded here rather than
+    claimed, so the docstring does not promise an optimisation the wiring
+    withholds.
     """
 
     def __init__(

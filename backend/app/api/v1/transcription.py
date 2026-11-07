@@ -95,13 +95,41 @@ def get_service_factory(settings: SettingsDep) -> Callable[[], TranscriptionServ
 ServiceFactoryDep = Annotated[Callable[[], TranscriptionService], Depends(get_service_factory)]
 
 
-def get_transcription_service(factory: ServiceFactoryDep) -> TranscriptionService:
-    """Build the configured transcription service for a request.
+async def get_transcription_service(
+    factory: ServiceFactoryDep,
+) -> AsyncIterator[TranscriptionService]:
+    """Provide a transcription service for one request, and close it after.
 
-    Per-request rather than a cached singleton: `Settings` is already cached
-    and the Prisma adapter builds its HTTP client lazily, so this is cheap.
+    A dependency with `yield` rather than a plain `return`, for the same reason
+    `get_db` is one: the teardown has to run whether the handler returned or
+    raised, and putting a `try/finally` in each route means the next route
+    added can forget it. FastAPI runs the code after `yield` once the response
+    is complete, on both paths.
+
+    **What is being closed, and why it is safe.** `get_service_factory` builds
+    a *new* service, provider and `httpx2.AsyncClient` per call, so the client
+    closed here belongs to this request alone - there is no shared pool to pull
+    out from under a concurrent request. Without this, every transcription left
+    a client and its connection pool to the garbage collector.
+
+    The WebSocket route does not use this dependency and closes its own
+    service: it needs the service to outlive dependency resolution for the
+    whole life of the socket, and it has to catch `ConfigurationError` *after*
+    `accept()` so the error can be reported as a frame.
+
+    Worth recording honestly: because the provider is per-request, its
+    connection pool is never reused between requests, so each transcription
+    pays a fresh TLS handshake to the provider - which lands inside the
+    `latency_ms` this API reports. Closing is still strictly better than
+    leaking. The real fix is one provider per process, closed in the
+    application lifespan; that is a deliberate change to the dependency graph
+    and belongs in its own commit, not smuggled into a leak fix.
     """
-    return factory()
+    service = factory()
+    try:
+        yield service
+    finally:
+        await service.close()
 
 
 ServiceDep = Annotated[TranscriptionService, Depends(get_transcription_service)]
