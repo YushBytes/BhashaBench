@@ -4,9 +4,9 @@ BhashaBench is being built in 15 controlled phases. Each phase is a reviewable
 increment: it ends with working code, passing tests and updated documentation.
 A phase is not started until the previous one is approved.
 
-**Current status: Phases 1 and 2 complete. Phases 3–15 not started.**
+**Current status: Phases 1, 2 and 3 complete. Phases 4–15 not started.**
 
-Nothing in phases 3–15 is implemented. Where this document describes a
+Nothing in phases 4–15 is implemented. Where this document describes a
 component in the present tense, read it as the *intended* design for that
 phase, not as existing behaviour.
 
