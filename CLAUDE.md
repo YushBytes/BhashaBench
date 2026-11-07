@@ -9,8 +9,8 @@ BhashaBench is an automated testing and benchmarking platform for
 Indian-language voice bots. It is being built in **15 controlled phases**; see
 `docs/DEVELOPMENT_ROADMAP.md`.
 
-**Phases 1, 2 and 3 are complete.** Phase 4 is implemented and awaiting
-owner review — not approved. Phase 5 has not started.
+**Phases 1, 2 and 3 are complete.** Phases 4 and 5 are implemented and
+awaiting owner review — not approved. Phase 6 has not started.
 
 | Phase | Status |
 |-------|--------|
@@ -18,7 +18,8 @@ owner review — not approved. Phase 5 has not started.
 | 2 — Database & scenario engine | ✅ Complete |
 | 3 — Scenario library & tooling | ✅ Complete |
 | 4 — Speech to text (Gnani Prisma) | 🟨 Implemented, awaiting review |
-| 5–15 | ⬜ Not started |
+| 5 — Text to speech (Gnani Timbre) | 🟨 Implemented, awaiting review |
+| 6–15 | ⬜ Not started |
 
 ## The two rules that matter most
 
@@ -33,16 +34,15 @@ owner review — not approved. Phase 5 has not started.
 ## Phase discipline
 
 Do not implement functionality belonging to a future phase, even if it seems
-convenient. A pull request that does will be asked to split. Phase 5+ work —
-text-to-speech, caller simulation, audio degradation, telephony,
-orchestration, evaluation — is explicitly out of scope until its phase. In
-particular, do not add Gnani Timbre or Evon clients, and do not invent their
-endpoints or credentials.
+convenient. A pull request that does will be asked to split. Phase 6+ work —
+caller simulation, audio degradation, telephony, orchestration, evaluation —
+is explicitly out of scope until its phase. In particular, do not add a Gnani
+Evon client, and do not invent its endpoints or credentials.
 
-Phase 4 added the Gnani **Prisma** speech-to-text adapter. Every constant it
-sends is transcribed from the vendor's published documentation into
-`app/transcription/providers/prisma_contract.py`. **Never add a provider
-constant you cannot cite.** Where the vendor's documentation is silent or
+Phases 4 and 5 added the Gnani **Prisma** (speech-to-text) and **Timbre**
+(text-to-speech) adapters. Every constant either sends is transcribed from the
+vendor's published documentation into `prisma_contract.py` or
+`timbre_contract.py`. **Never add a provider constant you cannot cite.** Where the vendor's documentation is silent or
 self-contradictory, the honest record goes in `DOCUMENTATION_GAPS` and the
 capability is declared unsupported — three of Prisma's four output modes are
 unsupported for exactly this reason, because their literal wire values are
@@ -70,6 +70,12 @@ transcription/ the speech-to-text subsystem (Phase 4):
 transcription/providers/
                one adapter per vendor - the ONLY place a vendor's wire
                format may appear
+speech/        the text-to-speech subsystem (Phase 5), same shape.
+               Reuses transcription/{redaction,retry,audio} rather than
+               copying them; promote those three to a shared package when a
+               third provider family arrives.
+speech/providers/
+               one adapter per vendor, same rule
 ```
 
 - Route handlers stay thin. No `select()` in a route, no HTTP concepts in a
@@ -136,6 +142,21 @@ client passed in via `client=` belongs to its injector and is left open. If you
 ever make the provider process-wide, move the close into the lifespan and
 delete the per-request one; do not do both.
 
+**Report only what the bytes establish.** A synthesis result's
+`sample_rate_hz`, `channels` and `duration_seconds` are read from the returned
+audio, never copied from the request - and the requested rate is kept alongside
+so a provider that ignored it is visible. For a container we cannot inspect
+without a decoder (MP3, OGG) they stay `None`, and the API omits the header
+rather than echoing the request back as if it were a measurement.
+
+**A WAV with `0xFFFFFFFF` size fields is valid, not truncated.** That is the
+convention for a writer that does not know the final length, and Timbre uses it
+for every utterance. `app/transcription/audio.py` treats the sentinel as
+"length unknown" and measures from the bytes present, while still rejecting a
+*plausible* declared length with bytes missing. Do not collapse those two cases
+again - the first live call was what found it, because the stdlib `wave` writer
+always back-fills the true length and so no fixture ever has that header.
+
 **Live provider tests are function-scoped and disable keep-alive.** Each drives
 its own `asyncio.run`, which closes its loop; a pooled connection outliving
 that loop fails the *next* test with `RuntimeError: Event loop is closed`, and
@@ -198,7 +219,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # whole suite (964 tests, 15 live ones deselected)
+pytest                                  # whole suite (1327 tests, 41 live ones deselected)
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

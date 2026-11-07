@@ -4,10 +4,10 @@ BhashaBench is being built in 15 controlled phases. Each phase is a reviewable
 increment: it ends with working code, passing tests and updated documentation.
 A phase is not started until the previous one is approved.
 
-**Current status: Phases 1, 2 and 3 complete. Phase 4 is implemented and
-awaiting owner review. Phases 5–15 not started.**
+**Current status: Phases 1, 2 and 3 complete. Phases 4 and 5 are implemented
+and awaiting owner review. Phases 6–15 not started.**
 
-Nothing in phases 5–15 is implemented. Where this document describes a
+Nothing in phases 6–15 is implemented. Where this document describes a
 component in the present tense, read it as the *intended* design for that
 phase, not as existing behaviour.
 
@@ -21,7 +21,7 @@ phase, not as existing behaviour.
 | 2 | Database & Scenario Engine | ✅ Complete |
 | 3 | Scenario Library & Tooling | ✅ Complete |
 | 4 | Gnani Prisma — Speech to Text | 🟨 Implemented, awaiting review |
-| 5 | Gnani Timbre — Text to Speech | ⬜ Not started |
+| 5 | Gnani Timbre — Text to Speech | 🟨 Implemented, awaiting review |
 | 6 | AI Caller Simulation (Gnani Evon) | ⬜ Not started |
 | 7 | Audio Degradation Pipeline | ⬜ Not started |
 | 8 | Twilio Telephony & Media Streaming | ⬜ Not started |
@@ -166,6 +166,7 @@ library is now complete enough to drive those.
   `GET /api/v1/transcription/providers`, and the
   `/api/v1/transcription/stream` WebSocket.
 - 964 tests, up from 561. 15 of them are opt-in live provider tests.
+  (1327 after Phase 5.)
 
 **Verified language support.** Prisma documents ten of BhashaBench's thirteen
 catalogue languages. Urdu, Odia and Assamese have no speech model: a scenario
@@ -199,16 +200,58 @@ transcripts.
 
 ---
 
-## Phase 5 — Gnani Timbre (Text to Speech)
+## Phase 5 — Gnani Timbre (Text to Speech) 🟨
 
-- `SynthesisProvider` client for Timbre TTS.
-- Voice, language and prosody selection driven by the scenario persona.
-- Audio caching keyed by text and voice, so repeated runs do not
-  re-synthesise.
-- Output normalised to the sample rate and encoding telephony requires.
+**Status: implemented, awaiting owner review. Not approved.**
+
+**Delivered.**
+
+- **Provider-independent interface.** `SynthesisProvider` protocol with
+  `SynthesisCapabilities` as declared metadata, mirroring Phase 4. Nothing
+  above `app/speech/providers/` references a vendor field name.
+- **Gnani Timbre adapter.** `POST /api/v1/tts/inference`, built against the
+  contract published at docs.gnani.ai and isolated in `timbre_contract.py`.
+  Handles a **binary** response: a 200 with an empty body or a JSON error is
+  caught rather than handed on as audio.
+- **13 documented voices** with the character each is catalogued for, so a
+  voice can be matched to a scenario persona rather than guessed from a name.
+- **Offline fake provider** that returns a real, parsable WAV - not a
+  placeholder byte string, so the measurement path is actually exercised.
+- **Audio verification.** Sample rate, channels and duration are read from the
+  returned audio, never echoed back from the request, and the requested rate is
+  retained alongside so a provider that ignored it is visible.
+- **Bounded retry**, reusing Phase 4's policy; 400/401/402/403 never retried.
+- **Serialised calls.** The owner reports a one-active-request limit; it is not
+  in any vendor page consulted, so the adapter serialises conservatively.
+- **Two endpoints**: `POST /api/v1/speech/generate` (returns binary audio with
+  `X-Speech-*` metadata headers) and `GET /api/v1/speech/providers`.
+- 1327 tests, up from 964. 26 of the new ones are opt-in live tests.
+
+**Verified language support.** The same ten languages Prisma recognises, plus
+`auto` and `hi-en`. Urdu, Odia and Assamese cannot be spoken, and there is no
+Tamil-English code-mixed value - `hi-en` is the only one documented.
+
+**Live verification, 2026-11-07.** One real call. Verified: authentication,
+that the shared key carries the TTS scope, that the request is accepted, and
+that the audio is decodable - 8 kHz mono 16-bit PCM, 4.400 s, requested rate
+honoured.
+
+That one call also found a bug no mock could: Timbre writes a *streaming* WAV
+header with `0xFFFFFFFF` size fields, which our Phase 4 truncation check read
+as a damaged file and rejected. Fixed and verified byte-for-byte offline; the
+full path has not been re-confirmed live.
+
+**Not evaluated.** Pronunciation, prosody and intelligibility. Nobody has
+listened to the audio, and no automated test can judge it.
 
 **Exit criteria.** A persona utterance synthesises to a playable, correctly
-formatted audio artefact.
+formatted audio artefact - **met**, against the live service and against the
+fake.
+
+**Deliberately not in this phase.** Timbre's SSE and WebSocket streaming
+transports; voice cloning; audio caching (nothing repeats a request until
+Phase 9 drives a conversation); the three output modes whose literal wire
+values the vendor does not publish; any persistence of generated audio.
 
 ---
 

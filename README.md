@@ -6,7 +6,7 @@ An automated testing and benchmarking platform for Indian-language voice
 bots — simulated callers, realistic audio degradation and automated
 conversation scoring.
 
-> ### Project status: Phases 1–3 of 15 complete; Phase 4 awaiting review
+> ### Project status: Phases 1–3 of 15 complete; Phases 4–5 awaiting review
 >
 > **Phase 1 — Foundation.** FastAPI backend, health endpoints, Next.js status
 > shell, Docker Compose stack, test and lint toolchain.
@@ -32,8 +32,18 @@ conversation scoring.
 > truth, so no accuracy claim is made anywhere. Per-capability table in
 > [docs/PROVIDERS.md](docs/PROVIDERS.md).
 >
-> **No calls are placed and no scores are produced yet.** Telephony, text to
-> speech, audio degradation, caller simulation and automated evaluation arrive
+> **Phase 5 — Text to speech.** *Implemented, awaiting owner review — not
+> approved.* A provider-independent `SynthesisProvider` interface with a Gnani
+> Timbre adapter (13 voices, 10 languages, telephony-rate audio) and an offline
+> fake. `POST /api/v1/speech/generate` returns binary audio.
+>
+> **Live-verified against Gnani on 2026-11-07:** authentication, that the
+> shared key carries the TTS scope, the request shape, and that the audio is
+> decodable (8 kHz mono 16-bit, 4.400 s). **Not evaluated:** pronunciation and
+> prosody — nobody has listened to it, and no automated test can judge it.
+>
+> **No calls are placed and no scores are produced yet.** Telephony, audio
+> degradation, caller simulation and automated evaluation arrive
 > in later phases — see [the roadmap](docs/DEVELOPMENT_ROADMAP.md). The
 > `TestRun`, `CallSession` and `ConversationTurn` tables exist as foundational
 > schema only; nothing writes to them, and Phase 4 persists no transcript.
@@ -100,7 +110,7 @@ delivers it.
 |------------|--------------|-------|
 | ~~Scenario definitions~~ | **Done (Phase 2).** Declare a persona, a language, an objective and success criteria in YAML | 2 |
 | ~~Speech to text~~ | **Done (Phase 4), pending review.** Transcribe bot audio via Gnani Prisma — batch and streaming, behind a provider-independent interface | 4 |
-| Text to speech | Synthesise caller speech via Gnani Timbre, matched to the persona | 5 |
+| ~~Text to speech~~ | **Done (Phase 5), pending review.** Synthesise caller speech via Gnani Timbre - 13 voices, 10 languages, telephony-rate audio | 5 |
 | Simulated callers | An AI caller that pursues a goal rather than replaying a script, driven by Gnani Evon | 6 |
 | Audio degradation | Background noise, packet loss, jitter and telephony codecs, applied from a fixed seed | 7 |
 | Live telephony | Outbound calls with Twilio bidirectional media streaming and barge-in handling | 8 |
@@ -204,9 +214,11 @@ BhashaBench/
 │   │   │   │                  models, errors, audio, retry, redaction
 │   │   │   └── providers/     Gnani Prisma + offline fake. The only place a
 │   │   │                      vendor's wire format may appear.
+│   │   ├── speech/            text-to-speech subsystem (Phase 5), same shape
+│   │   │   └── providers/     Gnani Timbre + offline fake
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 964 tests across 19 modules
+│   ├── tests/                 1327 tests across 23 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -366,7 +378,9 @@ their phase lands.
 | Variable | Phase |
 |----------|-------|
 | `TRANSCRIPTION_PROVIDER`, `TRANSCRIPTION_TIMEOUT_SECONDS`, `TRANSCRIPTION_MAX_ATTEMPTS`, `TRANSCRIPTION_MAX_UPLOAD_BYTES`, `TRANSCRIPTION_LIVE_TESTS` | 4 |
-| `GNANI_API_KEY`, `GNANI_API_BASE_URL`, `GNANI_STT_MODEL` | 4–6 |
+| `GNANI_API_KEY`, `GNANI_API_BASE_URL` | 4–6 |
+| `GNANI_STT_MODEL` | 4 |
+| `SPEECH_PROVIDER`, `SPEECH_TIMEOUT_SECONDS`, `SPEECH_MAX_ATTEMPTS`, `SPEECH_MAX_TEXT_CHARS`, `SPEECH_LIVE_TESTS`, `GNANI_TTS_MODEL`, `GNANI_TTS_VOICE` | 5 |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | 8 |
 | `PUBLIC_BASE_URL` | 8 |
 | `ALLOWED_BOT_NUMBERS`, `MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS` | 8 |
@@ -446,8 +460,8 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite has **964 tests** in nineteen modules. 949 run by
-default; the 15 live provider tests are deselected unless you opt in:
+The backend suite has **1327 tests** in twenty-three modules. 1286 run by
+default; the 41 live provider tests are deselected unless you opt in:
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -463,13 +477,17 @@ default; the 15 live provider tests are deselected unless you opt in:
 | `test_cli.py` | 65 | Argument parsing, exit codes and output for every command through Typer's `CliRunner`, plus that no connection string reaches the terminal on a database outage |
 | `test_reference_scenarios.py` | 40 | Every committed scenario in `scenarios/` validates and round-trips, the set covers six languages and the documented audio and code-mixing cases, and the generated bundle is not stale |
 | `test_tooling.py` | 8 | That the host and container pytest configurations enforce the same things, so the second run corroborates the first instead of decorating it |
-| `test_transcription_core.py` | 104 | Audio format detection from content, WAV header parsing, size/duration/channel limits, filename safety, the retry policy's arithmetic and what it refuses to retry, the provider registry |
+| `test_transcription_core.py` | 111 | Audio format detection from content, WAV header parsing, size/duration/channel limits, filename safety, the retry policy's arithmetic and what it refuses to retry, the provider registry |
 | `test_transcription_prisma.py` | 81 | The Gnani Prisma adapter against its published contract: request shape, every documented status, response normalisation, malformed responses, language and mode mapping |
 | `test_transcription_api.py` | 93 | The service layer and the real FastAPI routes - batch upload, provider capabilities, the WebSocket lifecycle, error-to-status mapping, structured logging |
 | `test_transcription_security.py` | 53 | Credential redaction, no secret in a response/log/stream frame, path traversal, capped uploads, temp-file cleanup, repository hygiene |
 | `test_transcription_streaming.py` | 38 | Prisma's WebSocket protocol: 1024-byte framing, event mapping, ordering, malformed frames, cancellation, bounded buffering |
 | `test_audio_fixtures.py` | 19 | The committed fixtures still match their generator byte for byte, and still claim no speech and no expected transcript |
 | `test_transcription_live.py` | 15 | **Opt-in, billable.** Real Gnani Prisma calls. Skipped unless `TRANSCRIPTION_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
+| `test_speech_timbre.py` | 132 | The Gnani Timbre adapter against its published contract: JSON body, every documented status and both error shapes, binary-response handling, the streaming WAV header, serialisation, client ownership |
+| `test_speech_core.py` | 121 | The Timbre contract constants, voice catalogue, domain models, registry and service rules - including that a tag the model ignores is refused rather than spoken aloud |
+| `test_speech_api.py` | 77 | The real FastAPI speech routes: binary response and its media types, `X-Speech-*` headers, error mapping, provider capabilities, cleanup on every exit path, security |
+| `test_speech_live.py` | 26 | **Opt-in, billable.** Real Gnani Timbre calls. Skipped unless `SPEECH_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
 
 ```bash
 pytest
@@ -497,7 +515,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================= 949 passed, 15 skipped in 29.42s ================
+================ 1286 passed, 41 skipped in 35.15s ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -577,6 +595,8 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 | `POST` | `/api/v1/scenarios/{scenario_id}/move` | Moves to another suite, keeping the id |
 | `POST` | `/api/v1/transcription` | Transcribes one uploaded audio file (`multipart/form-data`). Container identified from content, not from the declared type |
 | `GET` | `/api/v1/transcription/providers` | Every registered provider with its capabilities, limitations and documentation gaps - including ones missing a credential |
+| `POST` | `/api/v1/speech/generate` | Synthesises text to speech and returns the **binary audio** with its media type. Metadata travels in `X-Speech-*` headers; a measurement header is present only when it could be verified from the audio |
+| `GET` | `/api/v1/speech/providers` | Every synthesis provider with its voices, languages, audio formats, speed range and documentation gaps |
 | `WS` | `/api/v1/transcription/stream` | Streaming transcription. Send PCM frames, receive `started` / `final_transcript` / `completed` events. Not in the OpenAPI document - OpenAPI 3.1 cannot describe a WebSocket; see [docs/PROVIDERS.md](docs/PROVIDERS.md) |
 | `POST` | `/api/v1/suites/{suite_id}/scenarios/import` | Bulk import from a bundle. Takes `{"yaml": ..., "dry_run": ..., "atomic": ...}` |
 | `GET` | `/api/v1/suites/{suite_id}/scenarios/export` | The suite as a deterministic, re-importable bundle |
@@ -646,7 +666,7 @@ documentation. Full detail in
 | 2 | Database & scenario engine | ✅ Complete |
 | 3 | Scenario library & tooling | ✅ Complete |
 | 4 | Speech to text (Gnani Prisma) | 🟨 Implemented, awaiting review |
-| 5 | Text to speech (Gnani Timbre) | ⬜ Not started |
+| 5 | Text to speech (Gnani Timbre) | 🟨 Implemented, awaiting review |
 | 6 | AI caller simulation (Gnani Evon) | ⬜ Not started |
 | 7 | Audio degradation pipeline | ⬜ Not started |
 | 8 | Twilio telephony & media streaming | ⬜ Not started |
