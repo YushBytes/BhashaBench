@@ -27,6 +27,25 @@ from app.services.scenario_loader import (
     ScenarioTooLargeError,
     ScenarioValidationError,
 )
+from app.services.transcription_service import classify
+from app.transcription.errors import (
+    AudioTooLargeError,
+    AuthenticationError,
+    ConfigurationError,
+    InvalidAudioError,
+    MalformedProviderResponseError,
+    ProviderUnavailableError,
+    RateLimitError,
+    StreamClosedError,
+    TranscriptionCancelledError,
+    TranscriptionError,
+    TranscriptionTimeoutError,
+    UnsupportedFormatError,
+)
+from app.transcription.errors import (
+    UnsupportedLanguageError as ProviderUnsupportedLanguageError,
+)
+from app.transcription.redaction import redact
 
 logger = logging.getLogger("bhashabench")
 
@@ -40,9 +59,46 @@ Implemented so far:
 * **Phase 2** - PostgreSQL persistence via Alembic migrations, and the
   scenario engine: YAML authoring, strict validation and CRUD for test suites
   and scenarios.
+* **Phase 3** - the scenario library: cross-suite search, suite editing, copy
+  and move, a 13-language catalogue, YAML bundles and the `bhashabench` CLI.
+* **Phase 4** - speech to text behind a provider-independent interface, with a
+  Gnani Prisma adapter and an offline fake. Nothing is persisted.
 
-Telephony, speech services, audio degradation, caller simulation and automated
+Telephony, text to speech, audio degradation, caller simulation and automated
 evaluation are **not** implemented - see `docs/DEVELOPMENT_ROADMAP.md`.
+"""
+
+
+_TRANSCRIPTION_STATUS: dict[type[TranscriptionError], int] = {
+    # A credential problem is ours, not the caller's: BhashaBench's own API is
+    # unauthenticated in this phase, so returning 401 would tell a client to
+    # fix credentials they do not have. 502 says "the upstream rejected us",
+    # which is what actually happened.
+    AuthenticationError: status.HTTP_502_BAD_GATEWAY,
+    ConfigurationError: status.HTTP_500_INTERNAL_SERVER_ERROR,
+    # Caller-fixable input problems.
+    InvalidAudioError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    ProviderUnsupportedLanguageError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    UnsupportedFormatError: status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+    AudioTooLargeError: status.HTTP_413_CONTENT_TOO_LARGE,
+    # Upstream conditions, passed through with the status that describes our
+    # relationship to the provider rather than the provider's own code.
+    RateLimitError: status.HTTP_429_TOO_MANY_REQUESTS,
+    ProviderUnavailableError: status.HTTP_502_BAD_GATEWAY,
+    MalformedProviderResponseError: status.HTTP_502_BAD_GATEWAY,
+    StreamClosedError: status.HTTP_502_BAD_GATEWAY,
+    TranscriptionTimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
+    # 499 is not in the RFCs - it is nginx's de-facto "client closed request",
+    # and the closest honest answer when the caller abandoned the work.
+    TranscriptionCancelledError: 499,
+}
+"""Transcription error type -> HTTP status.
+
+Exact types, not `isinstance` walks: `AuthenticationError` and
+`RateLimitError` are siblings, and a subclass added later should have to
+choose its status deliberately rather than inherit a surprising one. Anything
+absent falls back to 502, which is the honest default for "the provider leg of
+this request failed".
 """
 
 
@@ -119,6 +175,33 @@ def register_exception_handlers(app: FastAPI) -> None:
         return _error_response(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "scenario_validation_error", str(exc)
         )
+
+    # -- Phase 4 transcription errors -----------------------------------------
+    # One handler for the whole family, mapping by type rather than by a
+    # status code the adapter chose. A provider's 401 and a provider's
+    # unreachable socket are both failures of ours to report honestly, and
+    # neither should surface as the provider's own status code: a client
+    # calling BhashaBench must not have to guess whether a 401 means *their*
+    # credentials or ours.
+
+    @app.exception_handler(TranscriptionError)
+    async def handle_transcription_error(
+        _request: Request, exc: TranscriptionError
+    ) -> JSONResponse:
+        status_code = _TRANSCRIPTION_STATUS.get(type(exc), status.HTTP_502_BAD_GATEWAY)
+        if isinstance(exc, ConfigurationError):
+            # A misconfigured server, not a bad request. Logged because
+            # somebody has to fix the deployment.
+            logger.error(
+                "Transcription provider is misconfigured: %s",
+                exc,
+                extra={"provider": exc.provider},
+            )
+        # Redacted here, at the outermost boundary, as well as inside the
+        # adapters. The adapters are the first line of defence; this is the one
+        # that still holds when a future provider's adapter forgets, because
+        # every transcription error leaves the process through this function.
+        return _error_response(status_code, classify(exc), redact(exc))
 
     @app.exception_handler(Exception)
     async def handle_unexpected_error(_request: Request, exc: Exception) -> JSONResponse:

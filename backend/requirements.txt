@@ -32,6 +32,23 @@ psycopg[binary]~=3.3.0
 # Loaded exclusively with `yaml.safe_load`; never `yaml.load`.
 pyyaml~=6.0.0
 
+# -- Speech-to-text providers (Phase 4) ---------------------------------------
+# `httpx2` (not `httpx`) is the HTTP client this project standardises on: it is
+# what Starlette 1.10+ requires for its TestClient, and running one client
+# library rather than two keeps the transport behaviour in tests identical to
+# production. Previously a dev-only dependency; the Prisma batch adapter now
+# imports it at runtime.
+httpx2~=2.16.0
+# WebSocket *client*, for Prisma's streaming endpoint. Already present
+# transitively, but declared explicitly: an adapter that depends on another
+# package's transitive dependency breaks the day that package drops it.
+websockets~=17.4
+# Parses `multipart/form-data`, which is how audio is uploaded to
+# `POST /api/v1/transcription` and how the Prisma REST contract accepts it.
+# FastAPI raises at import time without it, so it is a hard runtime dependency
+# rather than an optional extra.
+python-multipart~=0.0.20
+
 # -- Command-line interface (Phase 3) -----------------------------------------
 # Typer builds the CLI from type hints, which keeps the command signatures and
 # the validation in one place rather than duplicating argument parsing. It is

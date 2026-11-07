@@ -5,11 +5,12 @@ defaults below, a `.env` file at the repository root, and real process
 environment variables. This lets Docker Compose and CI override anything
 without a file on disk.
 
-Only the settings that Phase 1 actually uses are modelled here. Credentials
-for third-party providers (Gnani, Twilio) and the run-safety limits are
-declared in `.env.example` so the configuration surface is visible, but they
-are deliberately not fields yet: a setting that nothing reads is dead code,
-and the request shapes those integrations need are not yet known.
+Only settings that something actually reads are modelled here. A setting that
+nothing consumes is dead code, so a variable stays in `.env.example` - where it
+documents the configuration surface - until the phase that uses it arrives.
+Phase 4 promotes the Gnani speech-to-text settings to real fields; Timbre
+(Phase 5), Twilio (Phase 8) and the run-safety limits are still declared only
+in `.env.example`.
 """
 
 from __future__ import annotations
@@ -27,6 +28,13 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 
 PLACEHOLDER_SECRET = "replace-with-a-generated-secret"
+
+# Duplicated from `app.transcription.providers.prisma_contract` on purpose:
+# `app.core` is the base of the import graph and must not depend on a vendor
+# adapter. The two are asserted equal by the test suite, so the duplication
+# cannot drift silently.
+PRISMA_DEFAULT_BASE_URL = "https://api.vachana.ai"
+PRISMA_DEFAULT_MODEL = "prisma-v3.0"
 
 
 class AppEnv(StrEnum):
@@ -79,6 +87,102 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"],
         description="Browser origins permitted to call the API.",
     )
+
+    # -- Transcription (Phase 4) ---------------------------------------------
+    # Only what the Prisma integration reads. Phase 5's Timbre settings and
+    # Phase 8's Twilio settings stay in `.env.example` until their phase, for
+    # the reason given in this module's docstring.
+    transcription_provider: str = Field(
+        default="fake",
+        description=(
+            "Which speech-to-text provider to use: 'prisma' or 'fake'. "
+            "Defaults to the offline fake so a checkout with no credentials "
+            "still starts and still runs its tests."
+        ),
+    )
+    transcription_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        le=600,
+        description="Per-request timeout for a provider call.",
+    )
+    transcription_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description=(
+            "Total attempts per batch transcription, including the first. "
+            "1 disables retrying. Streaming is never retried automatically."
+        ),
+    )
+    transcription_initial_backoff_seconds: float = Field(
+        default=0.5, ge=0, le=60, description="First retry delay before jitter."
+    )
+    transcription_max_backoff_seconds: float = Field(
+        default=8.0,
+        ge=0,
+        le=300,
+        description="Ceiling on any retry delay, including a provider's Retry-After.",
+    )
+    transcription_max_upload_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        gt=0,
+        description=(
+            "Largest audio payload accepted for batch transcription. The "
+            "effective limit is the lower of this and the provider's own."
+        ),
+    )
+    gnani_api_key: str = Field(
+        default="",
+        description=(
+            "Gnani platform API key, sent as the X-API-Key-ID header. Empty by "
+            "default: an unset credential must fail loudly at provider "
+            "construction, not resolve to something that looks like a key."
+        ),
+    )
+    gnani_api_base_url: str = Field(
+        default=PRISMA_DEFAULT_BASE_URL,
+        description="Gnani REST base URL. The documented default is api.vachana.ai.",
+    )
+    gnani_stt_model: str = Field(
+        default=PRISMA_DEFAULT_MODEL,
+        description="Prisma model identifier, e.g. 'prisma-v3.0'.",
+    )
+    transcription_live_tests: bool = Field(
+        default=False,
+        description=(
+            "Opt in to tests that make real, billable provider calls. Off by "
+            "default so CI can never spend money or need a credential."
+        ),
+    )
+
+    @field_validator("transcription_provider", mode="before")
+    @classmethod
+    def _normalise_provider(cls, value: object) -> object:
+        """Fold case and whitespace so `PRISMA` and ` prisma ` both work.
+
+        Membership is not checked here: the registry owns the list of valid
+        names, and duplicating it would let the two disagree.
+        """
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @field_validator("gnani_api_base_url", mode="before")
+    @classmethod
+    def _require_http_scheme(cls, value: object) -> object:
+        """Reject a base URL that is not HTTP(S).
+
+        The adapter derives its WebSocket URL from this value by swapping the
+        scheme, so a malformed one breaks both transports. Catching it here
+        turns a confusing connection error into a configuration error.
+        """
+        if isinstance(value, str) and value.strip():
+            url = value.strip().rstrip("/")
+            if not url.startswith(("http://", "https://")):
+                raise ValueError(
+                    f"GNANI_API_BASE_URL must start with http:// or https://, got '{url}'"
+                )
+            return url
+        return value
 
     @field_validator("cors_origins", mode="before")
     @classmethod

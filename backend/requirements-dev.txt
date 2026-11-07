@@ -4,8 +4,10 @@
 -r requirements.txt
 
 pytest~=9.2.0
-# `httpx2` (not `httpx`) is the transport Starlette 1.10+ requires for
-# `fastapi.testclient.TestClient`; using the older `httpx` raises a
-# StarletteDeprecationWarning, which this suite treats as an error.
-httpx2~=2.16.0
 ruff~=0.17.0
+
+# `httpx2` moved to requirements.txt in Phase 4: the Prisma adapter imports it
+# at runtime, so it is no longer test-only. It remains the transport
+# Starlette 1.10+ requires for `fastapi.testclient.TestClient` - the older
+# `httpx` raises a StarletteDeprecationWarning, which this suite treats as an
+# error.

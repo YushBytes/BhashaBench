@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1 import health, languages, scenarios, suites
+from app.api.v1 import health, languages, scenarios, suites, transcription
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -21,3 +21,7 @@ api_router.include_router(suites.router)
 # prefixes do not overlap, so routing is unambiguous either way.
 api_router.include_router(scenarios.suite_scenarios_router)
 api_router.include_router(scenarios.scenarios_router)
+
+# Phase 4. Mounted last because it is the newest surface, not because of any
+# routing constraint - `/transcription` overlaps nothing above.
+api_router.include_router(transcription.router)
