@@ -38,6 +38,11 @@ _PCM_S16_BYTES_PER_SAMPLE = 2
 # Enough to carry every signature below plus the WAV `fmt ` chunk.
 _SNIFF_BYTES = 64
 
+# The value a WAV writer puts in the RIFF and `data` size fields when it does
+# not yet know how long the stream will be. Gnani Timbre uses it for every
+# synthesised utterance.
+_WAV_UNKNOWN_SIZE = 0xFFFFFFFF
+
 MIME_TYPES: dict[AudioEncoding, str] = {
     AudioEncoding.WAV: "audio/wav",
     AudioEncoding.MP3: "audio/mpeg",
@@ -108,6 +113,22 @@ def _inspect_wav(audio: bytes) -> tuple[int | None, int | None, int | None, floa
     verified against the bytes really present, which is what `readframes`
     returns - bounded, because the payload is already in memory under the
     caller's size cap.
+
+    **Two different reasons the declared count can exceed the real one**, and
+    only one of them is a damaged file:
+
+    * The writer knew the length and the bytes are missing - a truncated
+      upload. Rejected.
+    * The writer did *not* know the length when it wrote the header, so it
+      filled the RIFF and `data` size fields with the `0xFFFFFFFF` sentinel.
+      This is the ordinary convention for streamed or generated WAV and the
+      file is perfectly good; the real length is simply the bytes present.
+      Accepted, and measured from those bytes.
+
+    Gnani Timbre does exactly the second thing. Treating it as truncation
+    rejected every synthesised utterance - found by the first live call, not
+    by any amount of mocking, because a fixture built with the stdlib `wave`
+    writer always knows its own length.
     """
     try:
         with wave.open(io.BytesIO(audio), "rb") as handle:
@@ -126,13 +147,29 @@ def _inspect_wav(audio: bytes) -> tuple[int | None, int | None, int | None, floa
             "the WAV header declares zero channels or a zero sample width"
         ) from exc
 
-    if actual_frames < declared_frames:
+    block_align = channels * sample_width
+    # The `0xFFFFFFFF` sentinel, expressed as a frame count. `wave` divides the
+    # declared byte size by the block alignment, so the comparison is made back
+    # in bytes to stay independent of channels and sample width.
+    #
+    # The other streaming convention - a `data` size of zero - needs no branch
+    # here: it yields `declared_frames == 0`, the truncation comparison cannot
+    # fire, and the file is accepted with its rate and channels read but no
+    # duration. "Accepted, length unknown" is the honest outcome, and claiming
+    # a duration would mean reading past the chunk `wave` was told about.
+    length_is_unknown = declared_frames * block_align >= _WAV_UNKNOWN_SIZE - block_align
+
+    if length_is_unknown:
+        frames = actual_frames
+    elif actual_frames < declared_frames:
         raise InvalidAudioError(
             f"the WAV header declares {declared_frames} frames but only "
             f"{actual_frames} are present; the file is truncated"
         )
+    else:
+        frames = declared_frames
 
-    duration = declared_frames / sample_rate if sample_rate and declared_frames else None
+    duration = frames / sample_rate if sample_rate and frames else None
     return sample_rate, channels, sample_width * 8, duration
 
 
