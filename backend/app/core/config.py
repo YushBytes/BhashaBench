@@ -8,9 +8,9 @@ without a file on disk.
 Only settings that something actually reads are modelled here. A setting that
 nothing consumes is dead code, so a variable stays in `.env.example` - where it
 documents the configuration surface - until the phase that uses it arrives.
-Phase 4 promotes the Gnani speech-to-text settings to real fields; Timbre
-(Phase 5), Twilio (Phase 8) and the run-safety limits are still declared only
-in `.env.example`.
+Phase 4 promoted the Gnani speech-to-text settings to real fields and Phase 5
+the text-to-speech ones; Twilio (Phase 8) and the run-safety limits are still
+declared only in `.env.example`.
 """
 
 from __future__ import annotations
@@ -35,6 +35,11 @@ PLACEHOLDER_SECRET = "replace-with-a-generated-secret"
 # cannot drift silently.
 PRISMA_DEFAULT_BASE_URL = "https://api.vachana.ai"
 PRISMA_DEFAULT_MODEL = "prisma-v3.0"
+
+# Likewise duplicated from `app.speech.providers.timbre_contract`, and likewise
+# asserted equal by the test suite so the duplication cannot drift.
+TIMBRE_DEFAULT_MODEL = "timbre-v3.0"
+TIMBRE_DEFAULT_VOICE = "Kalpana"
 
 
 class AppEnv(StrEnum):
@@ -155,6 +160,84 @@ class Settings(BaseSettings):
             "default so CI can never spend money or need a credential."
         ),
     )
+
+    # -- Speech synthesis (Phase 5) ------------------------------------------
+    # No second credential: Gnani documents one key and one `X-API-Key-ID`
+    # header across the platform, so Timbre reads `gnani_api_key` and
+    # `gnani_api_base_url` above. A separate TTS key setting would be a
+    # variable nobody could fill in.
+    speech_provider: str = Field(
+        default="fake",
+        description=(
+            "Which text-to-speech provider to use: 'timbre' or 'fake'. "
+            "Defaults to the offline fake so a checkout with no credentials "
+            "still starts and still runs its tests."
+        ),
+    )
+    speech_timeout_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        le=600,
+        description=(
+            "Per-request timeout for a synthesis call. Higher than the "
+            "transcription default: rendering a long utterance takes longer "
+            "than recognising a short one."
+        ),
+    )
+    speech_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description=(
+            "Total attempts per synthesis, including the first. 1 disables "
+            "retrying. Only transient failures are retried; a 401, 402, 403 or "
+            "a rejected parameter never is."
+        ),
+    )
+    speech_initial_backoff_seconds: float = Field(
+        default=0.5, ge=0, le=60, description="First retry delay before jitter."
+    )
+    speech_max_backoff_seconds: float = Field(
+        default=8.0,
+        ge=0,
+        le=300,
+        description="Ceiling on any retry delay, including a provider's Retry-After.",
+    )
+    speech_max_text_chars: int = Field(
+        default=5000,
+        gt=0,
+        description=(
+            "Longest text accepted for synthesis. BhashaBench's own bound - the "
+            "provider publishes no limit of its own, so one request could "
+            "otherwise cost an unbounded amount."
+        ),
+    )
+    gnani_tts_model: str = Field(
+        default=TIMBRE_DEFAULT_MODEL,
+        description="Timbre model identifier, e.g. 'timbre-v3.0'.",
+    )
+    gnani_tts_voice: str = Field(
+        default=TIMBRE_DEFAULT_VOICE,
+        description=(
+            "Default voice when a request names none. Sent explicitly rather "
+            "than relying on an undeclared provider default, so a run stays "
+            "reproducible."
+        ),
+    )
+    speech_live_tests: bool = Field(
+        default=False,
+        description=(
+            "Opt in to tests that make real, billable synthesis calls. Off by "
+            "default, separately from the transcription flag, so enabling one "
+            "does not silently enable the other."
+        ),
+    )
+
+    @field_validator("speech_provider", mode="before")
+    @classmethod
+    def _normalise_speech_provider(cls, value: object) -> object:
+        """Fold case and whitespace, as for the transcription provider."""
+        return value.strip().lower() if isinstance(value, str) else value
 
     @field_validator("transcription_provider", mode="before")
     @classmethod

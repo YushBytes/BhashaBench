@@ -28,6 +28,20 @@ from app.services.scenario_loader import (
     ScenarioValidationError,
 )
 from app.services.transcription_service import classify
+from app.speech.errors import (
+    InvalidTextError,
+    MalformedSpeechResponseError,
+    SpeechAuthenticationError,
+    SpeechConfigurationError,
+    SpeechError,
+    SpeechProviderUnavailableError,
+    SpeechRateLimitError,
+    SpeechTimeoutError,
+    UnsupportedAudioConfigError,
+    UnsupportedSpeechLanguageError,
+    UnsupportedVoiceError,
+)
+from app.speech.service import classify as classify_speech
 from app.transcription.errors import (
     AudioTooLargeError,
     AuthenticationError,
@@ -63,9 +77,12 @@ Implemented so far:
   and move, a 13-language catalogue, YAML bundles and the `bhashabench` CLI.
 * **Phase 4** - speech to text behind a provider-independent interface, with a
   Gnani Prisma adapter and an offline fake. Nothing is persisted.
+* **Phase 5** - text to speech behind a `SynthesisProvider` interface, with a
+  Gnani Timbre adapter and an offline fake. Returns binary audio; nothing is
+  persisted.
 
-Telephony, text to speech, audio degradation, caller simulation and automated
-evaluation are **not** implemented - see `docs/DEVELOPMENT_ROADMAP.md`.
+Telephony, audio degradation, caller simulation and automated evaluation are
+**not** implemented - see `docs/DEVELOPMENT_ROADMAP.md`.
 """
 
 
@@ -100,6 +117,28 @@ choose its status deliberately rather than inherit a surprising one. Anything
 absent falls back to 502, which is the honest default for "the provider leg of
 this request failed".
 """
+
+
+_SPEECH_STATUS: dict[type[SpeechError], int] = {
+    # Same reasoning as the transcription map: a provider credential problem is
+    # ours, not the caller's, so it is a 502 rather than a 401 the caller
+    # cannot act on. 402 and 403 arrive as the same class and get the same
+    # treatment - and a 403 here is worth noticing, because a key that works
+    # for Prisma need not carry the Timbre scope.
+    SpeechAuthenticationError: status.HTTP_502_BAD_GATEWAY,
+    SpeechConfigurationError: status.HTTP_500_INTERNAL_SERVER_ERROR,
+    # Caller-fixable input problems.
+    InvalidTextError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    UnsupportedVoiceError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    UnsupportedSpeechLanguageError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    UnsupportedAudioConfigError: status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+    # Upstream conditions.
+    SpeechRateLimitError: status.HTTP_429_TOO_MANY_REQUESTS,
+    SpeechProviderUnavailableError: status.HTTP_502_BAD_GATEWAY,
+    MalformedSpeechResponseError: status.HTTP_502_BAD_GATEWAY,
+    SpeechTimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
+}
+"""Speech error type -> HTTP status. Exact types, defaulting to 502."""
 
 
 def _error_response(status_code: int, error_type: str, message: str) -> JSONResponse:
@@ -202,6 +241,19 @@ def register_exception_handlers(app: FastAPI) -> None:
         # that still holds when a future provider's adapter forgets, because
         # every transcription error leaves the process through this function.
         return _error_response(status_code, classify(exc), redact(exc))
+
+    # -- Phase 5 speech-synthesis errors --------------------------------------
+
+    @app.exception_handler(SpeechError)
+    async def handle_speech_error(_request: Request, exc: SpeechError) -> JSONResponse:
+        status_code = _SPEECH_STATUS.get(type(exc), status.HTTP_502_BAD_GATEWAY)
+        if isinstance(exc, SpeechConfigurationError):
+            logger.error(
+                "Speech provider is misconfigured: %s", exc, extra={"provider": exc.provider}
+            )
+        # Redacted at the boundary as well as in the adapter, for the reason
+        # given on the transcription handler.
+        return _error_response(status_code, classify_speech(exc), redact(exc))
 
     @app.exception_handler(Exception)
     async def handle_unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
