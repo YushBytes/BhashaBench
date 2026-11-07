@@ -129,6 +129,20 @@ decision belongs to whoever still holds the audio.
 scripted transcripts; publishing those as measurements is precisely what rule
 one forbids.
 
+**A provider closes only a client it created.** `get_service_factory` builds a
+new provider per request, so `get_transcription_service` is a `yield`
+dependency that closes it in a `finally` - the same shape as `get_db`. A
+client passed in via `client=` belongs to its injector and is left open. If you
+ever make the provider process-wide, move the close into the lifespan and
+delete the per-request one; do not do both.
+
+**Live provider tests are function-scoped and disable keep-alive.** Each drives
+its own `asyncio.run`, which closes its loop; a pooled connection outliving
+that loop fails the *next* test with `RuntimeError: Event loop is closed`, and
+an orphaned socket reaches pytest as `PytestUnraisableExceptionWarning`, which
+`filterwarnings = ["error"]` turns into a failing exit code even when the test
+passed. Both have happened. Keep one provider per test.
+
 ### Front ends share services, not messages
 
 The API and the CLI both call `services/`. A domain error that suggests a
@@ -184,7 +198,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # whole suite (954 tests, 15 live ones deselected)
+pytest                                  # whole suite (964 tests, 15 live ones deselected)
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

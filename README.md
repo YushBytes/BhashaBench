@@ -23,10 +23,14 @@ conversation scoring.
 > **Phase 4 — Speech to text.** *Implemented, awaiting owner review — not
 > approved.* A provider-independent `TranscriptionProvider` interface with a
 > Gnani Prisma adapter (batch and streaming) and an offline fake, audio
-> validation, bounded retry and credential redaction. **The adapter is
-> verified against Gnani's published contract, not against the live service:**
-> no credential has been issued to this repository, so authentication and real
-> requests are unverified. See [docs/PROVIDERS.md](docs/PROVIDERS.md).
+> validation, bounded retry and credential redaction.
+>
+> **Live-verified against Gnani on 2026-11-07:** authentication, a real batch
+> request, and response parsing. **Not verified:** real streaming, and
+> streaming provider behaviour. **Recognition accuracy is not independently
+> benchmarked** — the test fixtures are synthesised tones with no ground
+> truth, so no accuracy claim is made anywhere. Per-capability table in
+> [docs/PROVIDERS.md](docs/PROVIDERS.md).
 >
 > **No calls are placed and no scores are produced yet.** Telephony, text to
 > speech, audio degradation, caller simulation and automated evaluation arrive
@@ -202,7 +206,7 @@ BhashaBench/
 │   │   │                      vendor's wire format may appear.
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 954 tests across 19 modules
+│   ├── tests/                 964 tests across 19 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -442,7 +446,7 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite has **954 tests** in nineteen modules. 939 run by
+The backend suite has **964 tests** in nineteen modules. 949 run by
 default; the 15 live provider tests are deselected unless you opt in:
 
 | Module | Tests | Covers |
@@ -461,7 +465,7 @@ default; the 15 live provider tests are deselected unless you opt in:
 | `test_tooling.py` | 8 | That the host and container pytest configurations enforce the same things, so the second run corroborates the first instead of decorating it |
 | `test_transcription_core.py` | 104 | Audio format detection from content, WAV header parsing, size/duration/channel limits, filename safety, the retry policy's arithmetic and what it refuses to retry, the provider registry |
 | `test_transcription_prisma.py` | 81 | The Gnani Prisma adapter against its published contract: request shape, every documented status, response normalisation, malformed responses, language and mode mapping |
-| `test_transcription_api.py` | 83 | The service layer and the real FastAPI routes - batch upload, provider capabilities, the WebSocket lifecycle, error-to-status mapping, structured logging |
+| `test_transcription_api.py` | 93 | The service layer and the real FastAPI routes - batch upload, provider capabilities, the WebSocket lifecycle, error-to-status mapping, structured logging |
 | `test_transcription_security.py` | 53 | Credential redaction, no secret in a response/log/stream frame, path traversal, capped uploads, temp-file cleanup, repository hygiene |
 | `test_transcription_streaming.py` | 38 | Prisma's WebSocket protocol: 1024-byte framing, event mapping, ordering, malformed frames, cancellation, bounded buffering |
 | `test_audio_fixtures.py` | 19 | The committed fixtures still match their generator byte for byte, and still claim no speech and no expected transcript |
@@ -493,7 +497,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================= 939 passed, 15 skipped in 30.05s ================
+================= 949 passed, 15 skipped in 29.42s ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

@@ -165,7 +165,7 @@ library is now complete enough to drive those.
 - **Three endpoints**: `POST /api/v1/transcription`,
   `GET /api/v1/transcription/providers`, and the
   `/api/v1/transcription/stream` WebSocket.
-- 954 tests, up from 561. 15 of them are opt-in live provider tests.
+- 964 tests, up from 561. 15 of them are opt-in live provider tests.
 
 **Verified language support.** Prisma documents ten of BhashaBench's thirteen
 catalogue languages. Urdu, Odia and Assamese have no speech model: a scenario
@@ -177,12 +177,20 @@ provider interface, and the provider can be swapped for a fake in tests —
 **met against the fake and against the documented contract**. Not yet met
 against the live service: see below.
 
-**Honest limitation.** No Gnani credential has been issued to this repository,
-so the adapter is *contract-verified* and not *transport-verified*.
-Authentication, a real batch request and a real streaming request are all
-**unverified**. The live suite exists and is deselected
-(`TRANSCRIPTION_LIVE_TESTS`); running it is the remaining step. See
-`docs/PROVIDERS.md`.
+**Live verification, 2026-11-07.** Three real calls were made against
+`api.vachana.ai` with a real key. Verified live: **authentication**, a **real
+batch request**, and **response parsing** into a `TranscriptionResult` with a
+provider `request_id`.
+
+Still **not verified**: real streaming transcription, and streaming provider
+behaviour - the WebSocket adapter has never spoken to Gnani, and its framing
+and event mapping rest on the vendor's published example alone.
+
+**Recognition accuracy is not independently benchmarked**, and no test here
+claims otherwise. The committed fixtures are synthesised tones with no reviewed
+ground truth, so the live result means "the pipe works", not "the model is
+good". Quality benchmarking is Phase 11 and needs licensed, transcribed
+speech. Per-capability detail is in `docs/PROVIDERS.md`.
 
 **Deliberately not in this phase.** Prisma's asynchronous batch-jobs pipeline
 for long or many files; the three output modes whose literal wire values the

@@ -8,23 +8,47 @@ supports, and how to run the integration with or without credentials.
 ## Verification status — read this first
 
 The repository's first rule is never to claim something works when it does
-not. For a provider integration that means distinguishing two things that are
-routinely conflated:
+not. For a provider integration that means separating claims that are
+routinely conflated — in particular, what a *mocked* test proves from what a
+*real* API call proves.
 
-| Claim | Gnani Prisma | Evidence |
-|-------|--------------|----------|
-| Adapter implemented | ✅ Yes | `app/transcription/providers/prisma.py` |
-| Wire contract verified against official documentation | ✅ Yes | [docs.gnani.ai](https://docs.gnani.ai); transcribed into `prisma_contract.py` |
-| Authentication verified against the live service | ❌ **No** | No credential has been issued to this repository |
-| Real batch request verified | ❌ **No** | `TRANSCRIPTION_LIVE_TESTS` has never been enabled here |
-| Real streaming request verified | ❌ **No** | As above |
+**Last live verification: 2026-11-07**, against `https://api.vachana.ai`
+with a real API key. Three Gnani API calls total.
 
-**The adapter is contract-verified, not transport-verified.** Every request
-shape, header name, field name and status code it uses is transcribed from
-Gnani's published documentation, and 81 tests assert the adapter matches it.
-None of that proves Gnani agrees — a mocked transport cannot disagree with the
-fixture that produced it. The first person with a real API key should run the
-live suite (below) and update this table.
+| Capability | Status | How it was established |
+|------------|--------|------------------------|
+| Prisma adapter implementation | ✅ **Verified** | `app/transcription/providers/prisma.py`; 81 mocked adapter tests |
+| Official API contract | ✅ **Verified** | [docs.gnani.ai](https://docs.gnani.ai), transcribed into `prisma_contract.py` and asserted by tests |
+| Real API authentication | ✅ **Verified** | **Live call.** A real key accepted by the live service; no 401/402/403 |
+| Real batch transcription request | ✅ **Verified** | **Live call.** `POST /stt/v3` accepted, non-error response |
+| Real transcription response parsing | ✅ **Verified** | **Live call.** The live response normalised into a `TranscriptionResult` carrying a provider `request_id` |
+| Real streaming transcription | ❌ **Not verified** | No live WebSocket session has been opened |
+| Streaming provider behaviour | ❌ **Not verified** | Framing, event sequence and the absence of partial results are asserted against the *documentation* only |
+| Recognition accuracy / language quality | ⚠️ **Not independently benchmarked** | See below — no test makes any accuracy claim |
+
+### What "verified" does and does not mean here
+
+**Mocked vs. real.** The 223 offline transcription tests use
+`httpx2.MockTransport` and a stubbed WebSocket. They prove the adapter sends
+what the documentation describes and normalises every documented response —
+they cannot prove Gnani agrees, because a mock cannot disagree with the fixture
+that produced it. Only the rows marked **Live call** above involved the real
+service.
+
+**Accuracy is not verified, and cannot be by the current fixtures.** The
+committed audio fixtures are synthesised 440 Hz tones, digital silence and
+deliberately malformed files. They contain **no speech**, so they have **no
+reviewed ground truth**, and no test asserts that any particular words come
+back. Nothing in this repository measures word error rate, per-language
+quality, or code-mixing handling. Treat the live result as "the pipe works",
+not "the model is good" — benchmarking recognition quality is Phase 11's job
+and needs licensed, transcribed speech.
+
+**Still open on the streaming path.** The WebSocket adapter has never spoken to
+Gnani. Its framing (1024 bytes), event mapping and the documented absence of
+interim results are all taken from the vendor's published example. Running
+`-k test_a_stream_completes_with_a_terminal_event` from the live suite is the
+next verification step.
 
 ---
 
@@ -65,6 +89,32 @@ Phase 11 benchmark a second engine without touching the evaluation code.
 Nothing in `app/services/` or `app/api/` changes. There is deliberately no
 plugin discovery mechanism: "which engine produced this score?" must always be
 answerable by reading the source.
+
+### Client lifecycle
+
+`get_service_factory` builds a **new** service, provider and
+`httpx2.AsyncClient` per request. `get_transcription_service` is therefore a
+dependency with `yield` that closes the service in a `finally`, so the client
+is released whether the handler returned or raised. Without that, every
+transcription left a connection pool to the garbage collector.
+
+The WebSocket route does not use that dependency: it needs the service to
+outlive dependency resolution for the life of the socket, and it must catch a
+`ConfigurationError` *after* `accept()` so the error can be reported as a
+frame. It closes its own service in its own `finally`.
+
+Ownership is explicit. A provider closes only a client it created itself; a
+client passed in through the `client=` parameter belongs to whoever passed it
+(tests and the live fixture both do this) and is left open. Three tests pin
+that contract down, including one asserting the registry-built provider — the
+production path — does own its client.
+
+**Known trade-off.** Because the provider is per-request, its connection pool
+is never reused between requests, so each transcription pays a fresh TLS
+handshake — and that lands inside the `latency_ms` this API reports. Closing is
+still strictly better than leaking. The improvement is one provider per
+process closed in the application lifespan; that is a deliberate change to the
+dependency graph and has not been made.
 
 ### Not persisted
 
@@ -513,8 +563,23 @@ that reason. `TestLiveLanguageCoverage` makes ten calls; run it deliberately.
 
 What they verify that nothing else can: that the key authenticates, that
 Gnani accepts the request shape, that the documented framing works, and that
-no partial events arrive. After a successful run, update the verification
-table at the top of this document.
+no partial events arrive. After a run, update the verification table at the
+top of this document.
+
+**Run so far (2026-11-07):** `test_a_fixture_file_transcribes_end_to_end` and
+`test_authentication_succeeds_with_the_configured_key`, both passing — three
+calls in total, including one against an earlier fixture defect. The streaming
+and ten-language tests have **not** been run.
+
+A note on the fixture, because it bit once: `live_provider` is
+**function-scoped** and injects a client with keep-alive disabled. Each test
+drives its own `asyncio.run`, which closes its event loop on return; a shared
+provider's pooled connection then belongs to a dead loop, and the second test
+in the module fails with `RuntimeError: Event loop is closed` — which reads
+like an authentication failure and is not one. A pooled socket surviving the
+loop also reaches pytest as `PytestUnraisableExceptionWarning`, which
+`filterwarnings = ["error"]` turns into a failing exit code even when the test
+itself passed. One provider per test, no keep-alive, no orphaned socket.
 
 ### Audio fixtures
 
