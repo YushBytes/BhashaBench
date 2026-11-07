@@ -129,7 +129,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # whole suite (551 tests)
+pytest                                  # whole suite (561 tests)
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

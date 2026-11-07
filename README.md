@@ -187,7 +187,7 @@ BhashaBench/
 │   │   ├── services/          health, scenario loader, bundles, suite + scenario logic
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 551 tests across 11 modules
+│   ├── tests/                 561 tests across 12 modules
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
 │   └── Dockerfile             multi-stage: development / production
@@ -425,7 +425,7 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite has **551 tests** in eleven modules:
+The backend suite has **561 tests** in twelve modules:
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -439,7 +439,8 @@ The backend suite has **551 tests** in eleven modules:
 | `test_bundle.py` | 39 | Bundle parsing and building: per-entry error collection, duplicate rejection, the 500-entry cap, byte-identical round-trips, no ids or timestamps in output |
 | `test_api_library.py` | 74 | Search, filters, pagination and ordering; suite `PATCH` and guarded `DELETE`; copy and move; import dry-run and atomicity; export round-trip |
 | `test_cli.py` | 65 | Argument parsing, exit codes and output for every command through Typer's `CliRunner`, plus that no connection string reaches the terminal on a database outage |
-| `test_reference_scenarios.py` | 38 | Every committed scenario in `scenarios/` validates and round-trips, the set covers six languages and the documented audio and code-mixing cases, and the generated bundle is not stale |
+| `test_reference_scenarios.py` | 40 | Every committed scenario in `scenarios/` validates and round-trips, the set covers six languages and the documented audio and code-mixing cases, and the generated bundle is not stale |
+| `test_tooling.py` | 8 | That the host and container pytest configurations enforce the same things, so the second run corroborates the first instead of decorating it |
 
 ```bash
 pytest
@@ -467,7 +468,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-====================== 551 passed in 22.99s ======================
+====================== 561 passed in 19.54s ======================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

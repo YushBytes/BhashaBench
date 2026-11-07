@@ -122,7 +122,7 @@ Phase 2; this phase is everything around them.
 - **Reference scenarios.** Six languages in `scenarios/`, each stressing a
   different failure mode, with a generated bundle and tests that fail if they
   drift from the schema.
-- 551 tests, up from 246.
+- 561 tests, up from 246.
 
 **Exit criteria — met.** A directory of scenario files can be validated
 offline (`for f in scenarios/*.yaml; do bhashabench validate "$f"; done`) and
