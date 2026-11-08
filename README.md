@@ -43,11 +43,30 @@ conversation scoring.
 > evaluated:** pronunciation and prosody — nobody has listened to it, and no
 > automated test can judge it.
 >
+> **Phase 6 — Caller engine.** A provider-independent `CallerProvider`
+> interface with a **deterministic, rule-based** caller: an explicit nine-state
+> machine, eleven ordered rules over signals extracted from the bot's
+> transcript, decision validation, conversation persistence on the Phase 2
+> schema, and seven endpoints under `/api/v1/caller`. A whole multi-turn
+> conversation runs offline against a scripted bot.
+>
+> **Phase 6 uses deterministic, rule-based caller orchestration. Official
+> Gnani Evon integration is deferred until documented access and credentials
+> are available.** **Evon integration is NOT implemented or verified in this
+> phase** — no Gnani text-generation endpoint is published and the released
+> model has no hosted inference provider, so there is nothing to adapt.
+> `evon` is not a registered provider and is refused by name; every caller
+> response carries `uses_language_model: false`. **Not evaluated:**
+> conversation quality, and behaviour against a real voice bot — nothing here
+> has had a conversation with one. Design and limits in
+> [docs/CALLER.md](docs/CALLER.md).
+>
 > **No calls are placed and no scores are produced yet.** Telephony, audio
-> degradation, caller simulation and automated evaluation arrive
-> in later phases — see [the roadmap](docs/DEVELOPMENT_ROADMAP.md). The
-> `TestRun`, `CallSession` and `ConversationTurn` tables exist as foundational
-> schema only; nothing writes to them, and Phase 4 persists no transcript.
+> degradation and automated evaluation arrive in later phases — see
+> [the roadmap](docs/DEVELOPMENT_ROADMAP.md). Phase 6 is the first to write to
+> the `TestRun`, `CallSession` and `ConversationTurn` tables, and it writes
+> only conversations it ran itself against a scripted or supplied bot reply;
+> Phase 4 still persists no transcript of its own.
 > Nothing in this README should be read as a claim that an unimplemented
 > feature works.
 
@@ -103,16 +122,15 @@ explicit criteria.
 
 ## What BhashaBench will do
 
-Scenario definitions landed in Phase 2 and speech to text in Phase 4.
-Nothing else below is implemented yet; each item names the phase that
-delivers it.
+Phases 1 to 6 are delivered. Nothing else below is implemented yet; each item
+names the phase that delivers it.
 
 | Capability | What it does | Phase |
 |------------|--------------|-------|
 | ~~Scenario definitions~~ | **Done (Phase 2).** Declare a persona, a language, an objective and success criteria in YAML | 2 |
 | ~~Speech to text~~ | **Done (Phase 4).** Transcribe bot audio via Gnani Prisma — batch and streaming, behind a provider-independent interface | 4 |
 | ~~Text to speech~~ | **Done (Phase 5).** Synthesise caller speech via Gnani Timbre - 13 voices, 10 languages, telephony-rate audio | 5 |
-| Simulated callers | An AI caller that pursues a goal rather than replaying a script, driven by Gnani Evon | 6 |
+| ~~Simulated callers~~ | **Done (Phase 6).** A caller that pursues a goal rather than replaying a script - deterministic and rule-based. Gnani Evon is **not** integrated: no documented API access exists | 6 |
 | Audio degradation | Background noise, packet loss, jitter and telephony codecs, applied from a fixed seed | 7 |
 | Live telephony | Outbound calls with Twilio bidirectional media streaming and barge-in handling | 8 |
 | Orchestration | Run a full conversation end to end and persist every turn | 9 |
@@ -146,7 +164,7 @@ delivers it.
 │ (Phase 9)       │  │ engine        │   │ 5 tables, owned   │
 └──┬──────────────┘  │ implemented   │   │ by Alembic        │
    │                 └───────────────┘   └───────────────────┘
-   ├── Caller agent — Gnani Evon      (Phase 6)
+   ├── Caller engine — rule-based     (Phase 6; Evon not integrated)
    ├── Speech to text — Gnani Prisma  (Phase 4)
    ├── Text to speech — Gnani Timbre  (Phase 5)
    ├── Audio degradation             (Phase 7)
@@ -171,6 +189,9 @@ Further reading:
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — design decisions
 - [`docs/DATABASE.md`](docs/DATABASE.md) — schema, ER diagram, migrations
 - [`docs/SCENARIO_FORMAT.md`](docs/SCENARIO_FORMAT.md) — the scenario YAML format
+- [`docs/PROVIDERS.md`](docs/PROVIDERS.md) — provider contracts and what is
+  actually verified
+- [`docs/CALLER.md`](docs/CALLER.md) — the caller engine: states, rules, limits
 
 ---
 
@@ -217,9 +238,13 @@ BhashaBench/
 │   │   │                      vendor's wire format may appear.
 │   │   ├── speech/            text-to-speech subsystem (Phase 5), same shape
 │   │   │   └── providers/     Gnani Timbre + offline fake
+│   │   ├── caller/            caller engine (Phase 6): state machine, rules,
+│   │   │   │                  transcript analysis, validation, orchestration
+│   │   │   └── providers/     deterministic rule engine. No Evon adapter -
+│   │   │                      see docs/CALLER.md for why
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 1327 tests across 23 modules
+│   ├── tests/                 1669 tests across 28 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -231,14 +256,16 @@ BhashaBench/
 │   ├── public/
 │   └── Dockerfile             multi-stage: development / builder / production
 ├── benchmarks/                benchmark suite definitions      (Phase 11)
-├── sample_bot/                reference bot to test against    (Phase 6)
+├── sample_bot/                reference bot to test against    (empty)
 ├── scripts/                   operational scripts
 ├── scenarios/                 reference scenario YAML (6 languages)
 ├── docs/
 │   ├── ARCHITECTURE.md
+│   ├── CALLER.md
 │   ├── CLI.md
 │   ├── DATABASE.md
 │   ├── DEVELOPMENT_ROADMAP.md
+│   ├── PROVIDERS.md
 │   └── SCENARIO_FORMAT.md
 ├── .github/workflows/         CI pipelines                     (Phase 14)
 ├── docker-compose.yml
@@ -373,13 +400,20 @@ their phase lands.
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Consumed by the Compose `db` service | — |
 | `CORS_ORIGINS` | Comma-separated allowed browser origins | `http://localhost:3000` |
 | `NEXT_PUBLIC_API_BASE_URL` | Backend URL used by the frontend | `http://localhost:8000` |
+| `CALLER_PROVIDER` | Caller strategy. `deterministic` is the only value; `evon` is refused by name | `deterministic` |
+| `CALLER_MAX_TURNS` | Ceiling on conversation turns, on top of the scenario's own `goal.max_turns`. The lower wins | `20` |
+| `CALLER_MAX_CLARIFICATIONS` | How often the caller presses for a usable answer before closing as no progress | `2` |
+| `CALLER_MAX_MESSAGE_CHARS` | Longest caller utterance accepted from a provider | `600` |
+| `CALLER_TURN_TIMEOUT_SECONDS` | Ceiling on one full turn, synthesis and transcription included | `90.0` |
+| `CALLER_AUDIO_STORAGE_DIR` | Conversation audio directory; `storage/` is git-ignored | `storage/caller-audio` |
+| `CALLER_SYNTHESISE_AUDIO` | Synthesise caller audio per turn. Off deliberately — with `SPEECH_PROVIDER=timbre` every turn is a billable call | `false` |
 
 ### Declared for later phases
 
 | Variable | Phase |
 |----------|-------|
 | `TRANSCRIPTION_PROVIDER`, `TRANSCRIPTION_TIMEOUT_SECONDS`, `TRANSCRIPTION_MAX_ATTEMPTS`, `TRANSCRIPTION_MAX_UPLOAD_BYTES`, `TRANSCRIPTION_LIVE_TESTS` | 4 |
-| `GNANI_API_KEY`, `GNANI_API_BASE_URL` | 4–6 |
+| `GNANI_API_KEY`, `GNANI_API_BASE_URL` | 4–5 |
 | `GNANI_STT_MODEL` | 4 |
 | `SPEECH_PROVIDER`, `SPEECH_TIMEOUT_SECONDS`, `SPEECH_MAX_ATTEMPTS`, `SPEECH_MAX_TEXT_CHARS`, `SPEECH_LIVE_TESTS`, `GNANI_TTS_MODEL`, `GNANI_TTS_VOICE` | 5 |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | 8 |
@@ -461,7 +495,7 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite has **1327 tests** in twenty-three modules. 1286 run by
+The backend suite has **1669 tests** in twenty-eight modules. 1628 run by
 default; the 41 live provider tests are deselected unless you opt in:
 
 | Module | Tests | Covers |
@@ -488,6 +522,11 @@ default; the 41 live provider tests are deselected unless you opt in:
 | `test_speech_timbre.py` | 132 | The Gnani Timbre adapter against its published contract: JSON body, every documented status and both error shapes, binary-response handling, the streaming WAV header, serialisation, client ownership |
 | `test_speech_core.py` | 121 | The Timbre contract constants, voice catalogue, domain models, registry and service rules - including that a tag the model ignores is refused rather than spoken aloud |
 | `test_speech_api.py` | 77 | The real FastAPI speech routes: binary response and its media types, `X-Speech-*` headers, error mapping, provider capabilities, cleanup on every exit path, security |
+| `test_caller_core.py` | 71 | The caller state machine, the transcript analyser (Indic digits, code-switched keywords), the decision schema and the provider registry |
+| `test_caller_rules.py` | 193 | Every rule of the deterministic caller; that five different bot replies produce five different turns; a legality sweep of every state against every shape of reply |
+| `test_caller_service.py` | 34 | Decision validation, instruction-leak and invented-identifier rejection, synthesis, credential redaction in an error |
+| `test_caller_orchestrator.py` | 44 | Multi-turn conversations against real PostgreSQL: success, every failure reason, determinism, persistence, transcription failure, audio artefacts |
+| `test_caller_api.py` | 43 | The caller routes through `TestClient`: creation, turns, text and audio submission, termination, limits, prompt injection, OpenAPI |
 | `test_speech_live.py` | 26 | **Opt-in, billable.** Real Gnani Timbre calls. Skipped unless `SPEECH_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
 
 ```bash
@@ -516,7 +555,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 1286 passed, 41 skipped in 35.15s ================
+================ 1628 passed, 41 skipped in 51.00s ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -598,6 +637,14 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 | `GET` | `/api/v1/transcription/providers` | Every registered provider with its capabilities, limitations and documentation gaps - including ones missing a credential |
 | `POST` | `/api/v1/speech/generate` | Synthesises text to speech and returns the **binary audio** with its media type. Metadata travels in `X-Speech-*` headers; a measurement header is present only when it could be verified from the audio |
 | `GET` | `/api/v1/speech/providers` | Every synthesis provider with its voices, languages, audio formats, speed range and documentation gaps |
+| `POST` | `/api/v1/caller/conversations` | 201. Opens a caller conversation for one scenario. Takes `{"suite_id": ..., "scenario_id": ...}` |
+| `POST` | `/api/v1/caller/conversations/{id}/turns` | Produces and persists the caller's next utterance |
+| `POST` | `/api/v1/caller/conversations/{id}/bot-text` | Records the bot's reply as text, skipping transcription |
+| `POST` | `/api/v1/caller/conversations/{id}/bot-audio` | Transcribes the bot's reply and records it. A failure is a turn with `content: null`, never an empty transcript |
+| `GET` | `/api/v1/caller/conversations/{id}` | State, outcome, turn counters and the rules that fired |
+| `GET` | `/api/v1/caller/conversations/{id}/turns` | Every turn of the conversation, in order |
+| `POST` | `/api/v1/caller/conversations/{id}/terminate` | Ends a conversation; outcome `aborted`, which is not a bot defect |
+| `GET` | `/api/v1/caller/providers` | Caller providers with their capabilities and limits, plus an `evon_status` field stating that Gnani Evon is not implemented |
 | `WS` | `/api/v1/transcription/stream` | Streaming transcription. Send PCM frames, receive `started` / `final_transcript` / `completed` events. Not in the OpenAPI document - OpenAPI 3.1 cannot describe a WebSocket; see [docs/PROVIDERS.md](docs/PROVIDERS.md) |
 | `POST` | `/api/v1/suites/{suite_id}/scenarios/import` | Bulk import from a bundle. Takes `{"yaml": ..., "dry_run": ..., "atomic": ...}` |
 | `GET` | `/api/v1/suites/{suite_id}/scenarios/export` | The suite as a deterministic, re-importable bundle |

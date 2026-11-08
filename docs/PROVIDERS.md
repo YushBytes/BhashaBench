@@ -4,6 +4,10 @@ How BhashaBench talks to a speech engine - **recognition** (Gnani Prisma,
 Phase 4) and **synthesis** (Gnani Timbre, Phase 5) - what each actually
 supports, and how to run them with or without credentials.
 
+The **caller** provider family (Phase 6) follows the same pattern but speaks to
+no vendor at all; its verification status is below and its design is in
+[CALLER.md](CALLER.md).
+
 ---
 
 ## Verification status — read this first
@@ -42,6 +46,37 @@ for Prisma recognition, one for Timbre synthesis.
 | Adapter end-to-end after the WAV header fix | ✅ **Verified live** | **Live call.** The full path - request, binary response, sentinel header, measurement - returns a valid `SpeechResult`. Confirmed after the fix |
 | Pronunciation / prosody / intelligibility | ⚠️ **Not evaluated** | Nobody has listened to the audio. No automated test can judge this |
 | Streaming synthesis (SSE / WebSocket) | ⬜ **Not implemented** | Documented by the vendor; nothing consumes a stream before Phase 9 |
+
+### Caller — deterministic engine (Phase 6)
+
+**Phase 6 uses deterministic, rule-based caller orchestration. Official Gnani
+Evon integration is deferred until documented access and credentials are
+available.**
+
+**Evon integration is NOT implemented or verified in this phase.**
+
+No live call was made for Phase 6, because there is nothing to call: the caller
+provider is a rule engine that runs entirely in process.
+
+| Capability | Status | How it was established |
+|------------|--------|------------------------|
+| Deterministic caller implementation | ✅ **Verified** | `app/caller/providers/deterministic.py`; 342 offline tests |
+| Responds differently to different bot transcripts | ✅ **Verified offline** | Five bot replies, five different rules, utterances and intents - `test_caller_rules.py` |
+| Multi-turn conversation, end to end | ✅ **Verified offline** | Scripted bot, real rules, real state machine, real PostgreSQL - `test_caller_orchestrator.py` |
+| Reproducibility | ✅ **Verified offline** | The same script twice produces an identical transcript |
+| Legal state transitions from every state | ✅ **Verified offline** | Every non-terminal state swept against twelve shapes of reply |
+| Decision validation and secret redaction | ✅ **Verified offline** | `test_caller_service.py`, including an injected credential in provider error text |
+| Persistence on the Phase 2 schema | ✅ **Verified offline** | Real PostgreSQL; no migration, and `alembic check` reports no drift |
+| HTTP surface and status mapping | ✅ **Verified offline** | `test_caller_api.py` through `TestClient` |
+| Gnani Evon API access | ❌ **Not available** | No text-generation endpoint is published; the released model has no hosted inference provider |
+| Gnani Evon adapter | ⬜ **Not implemented** | Deliberately absent. `evon` is not a registered provider and is refused by name |
+| Conversation quality / naturalness | ⚠️ **Not evaluated** | A rule engine composing from fixed phrase tables. No test claims otherwise |
+| Behaviour against a real voice bot | ❌ **Not verified** | Nothing in this repository has had a conversation with a voice bot |
+
+**Code-mixing is not generated.** A scenario may declare it; the caller will
+not produce it. Reviewed phrase tables exist for `ta-IN`, `hi-IN` and `en-IN`
+only, and a scenario in any other catalogue language is refused rather than
+answered in English.
 
 ### What "verified" does and does not mean here
 

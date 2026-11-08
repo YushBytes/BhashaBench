@@ -62,8 +62,10 @@ reasoning behind its score.
          ├──────────────┬──────────────┬──────────────┬──────────────┐
          │              │              │              │              │
 ┌────────▼─────┐ ┌──────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌────▼──────┐
-│ Caller agent │ │ Prisma STT  │ │ Timbre TTS │ │ Degradation│ │  Twilio   │
-│ (Evon, Ph 6) │ │ (Phase 4)   │ │ (Phase 5)  │ │ (Phase 7)  │ │ (Phase 8) │
+│ Caller engine│ │ Prisma STT  │ │ Timbre TTS │ │ Degradation│ │  Twilio   │
+│ rule-based   │ │ (Phase 4)   │ │ (Phase 5)  │ │ (Phase 7)  │ │ (Phase 8) │
+│ (Phase 6)    │ │             │ │            │ │            │ │           │
+│ no Evon      │ │             │ │            │ │            │ │           │
 └──────────────┘ └─────────────┘ └────────────┘ └────────────┘ └─────┬─────┘
                                                                      │
                                                           ┌──────────▼────────┐
@@ -75,7 +77,7 @@ reasoning behind its score.
 
 ---
 
-## 3. Implemented today (Phases 1–4)
+## 3. Implemented today (Phases 1–6)
 
 ### 3.1 Backend — `backend/app/`
 
@@ -246,6 +248,56 @@ all: it interleaves receiving client audio with forwarding provider events.
 belongs to is orchestration (Phase 9). A table written by nothing would be
 schema guesswork, so the subsystem is a pure function of its input and the
 endpoints work with PostgreSQL down.
+
+### 3.2c The speech subsystem (Phase 5)
+
+`app/speech/` mirrors `app/transcription/` exactly — protocol, capabilities,
+registry of factories, offline fake, vendor contract module, one adapter per
+vendor under `providers/`. It reuses `transcription/{redaction,retry,audio}`
+rather than copying them; promote those three to a shared package when a third
+provider family arrives. The contract and its gaps are in
+[PROVIDERS.md](PROVIDERS.md).
+
+### 3.2d The caller engine (Phase 6)
+
+`app/caller/` is the first subsystem that is not a vendor adapter, and it
+raised three structural decisions worth recording.
+
+**The provider pattern was kept even with one provider, and that provider
+speaks to nobody.** A feasibility gate established that no Gnani
+text-generation endpoint is published and the released Evon model has no
+hosted inference provider, so there was nothing to adapt. Rather than guess a
+wire format, Phase 6 ships a rule engine behind the same shape as Prisma and
+Timbre: a `CallerProvider` protocol, a `CallerCapabilities` dataclass, a
+registry of factories. The cost is one indirection nothing currently needs;
+the benefit is that an Evon adapter slots in without touching the
+orchestrator, the service, the API or the schema. `uses_language_model` is a
+capability field precisely so that the day a model provider arrives, every
+report built on a run can say whether a model wrote the caller's words.
+
+**Validation lives in the service, not the provider.** A provider cannot be
+trusted to police itself, and the rule engine is the one provider that barely
+needs policing — it cannot leak a prompt it does not have, nor invent a
+reference number it can only quote. The checks exist for its replacement.
+Putting them above the provider boundary means a future model adapter inherits
+them rather than reimplementing them, and that an invalid decision is rejected
+before it reaches speech synthesis.
+
+**No new tables.** Phase 2 created `TestRun → CallSession → ConversationTurn`
+as foundational schema; a caller conversation *is* a `CallSession` and an
+utterance *is* a `ConversationTurn`. The caller's evolving per-phase state
+goes in the existing JSONB columns under a `caller` namespace, so Phase 8's
+telephony metadata can share the column without collision. The alternative —
+caller-specific tables — would have duplicated the relationships, needed a
+migration, and forced Phase 9 to reconcile two conversation shapes. The
+trade-off accepted is that caller state is not queryable with a typed column;
+when a field earns an index it should be promoted to one.
+
+So Phase 6 is the first phase that writes to those tables, and it writes only
+conversations it ran itself. It is also the first subsystem whose endpoints
+require PostgreSQL.
+
+The states, rules and limits are in [CALLER.md](CALLER.md).
 
 ### 3.3 Frontend — `frontend/`
 

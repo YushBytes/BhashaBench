@@ -21,7 +21,7 @@ phase, not as existing behaviour.
 | 3 | Scenario Library & Tooling | ✅ Complete |
 | 4 | Gnani Prisma — Speech to Text | ✅ Complete |
 | 5 | Gnani Timbre — Text to Speech | ✅ Complete |
-| 6 | AI Caller Simulation (Gnani Evon) | ⬜ Not started |
+| 6 | Caller Simulation — deterministic engine | ✅ Complete (Evon **not** integrated) |
 | 7 | Audio Degradation Pipeline | ⬜ Not started |
 | 8 | Twilio Telephony & Media Streaming | ⬜ Not started |
 | 9 | Conversation Orchestration Engine | ⬜ Not started |
@@ -165,7 +165,7 @@ library is now complete enough to drive those.
   `GET /api/v1/transcription/providers`, and the
   `/api/v1/transcription/stream` WebSocket.
 - 964 tests, up from 561. 15 of them are opt-in live provider tests.
-  (1327 after Phase 5.)
+  (1327 after Phase 5; 1669 after Phase 6.)
 
 **Verified language support.** Prisma documents ten of BhashaBench's thirteen
 catalogue languages. Urdu, Odia and Assamese have no speech model: a scenario
@@ -260,16 +260,99 @@ values the vendor does not publish; any persistence of generated audio.
 
 ---
 
-## Phase 6 — AI Caller Simulation (Gnani Evon)
+## Phase 6 — Caller Simulation (deterministic engine) ✅
 
-- Caller agent driven by Evon reasoning: it pursues the scenario objective
-  rather than replaying a fixed script.
-- Persona conditioning: patience, verbosity, accent, interruption behaviour.
-- Turn-level state machine with a hard turn budget.
-- Deterministic replay mode for regression testing.
+**Phase 6 uses deterministic, rule-based caller orchestration. Official Gnani
+Evon integration is deferred until documented access and credentials are
+available.**
+
+**Evon integration is NOT implemented or verified in this phase.**
+
+### Why the scope changed
+
+A feasibility gate ran before any implementation and did not pass. No Gnani
+**text-generation** endpoint is published — the documented surface is
+recognition (Prisma) and synthesis (Timbre) — and the released model
+`gnani/gnani-evon-v3.3-30B-A3B` has no hosted inference provider advertised.
+There is therefore no base URL, no request schema and no response schema to
+transcribe into a contract module, and this repository does not add a provider
+constant it cannot cite.
+
+The owner authorised a deterministic caller as an explicitly temporary
+stand-in. It is named for what it is: `CALLER_PROVIDER=deterministic`,
+`uses_language_model: false` on every API response, and an `evon_status` field
+on `GET /api/v1/caller/providers` saying the integration is not implemented.
+`evon` is **not** a registered provider; configuring it fails with an error
+that explains why. No stub adapter exists, because one that raised on every
+call would have advertised Evon as a configurable option.
+
+### Delivered
+
+- `CallerProvider` protocol, `CallerCapabilities`, a registry of factories and
+  an offline-only provider — the same shape as the Prisma and Timbre
+  subsystems, so an Evon adapter slots in without touching anything above it.
+- An explicit nine-state machine with a table of every permitted transition.
+  Every non-terminal state can reach a terminal one, so a runaway conversation
+  is impossible by construction rather than only by the turn counter.
+- Eleven ordered rules over signals extracted from the bot's transcript. The
+  same scenario against a bot that asks for a reference, refuses, mishears,
+  misquotes a fact or answers produces five different conversations.
+- A transcript analyser that normalises NFKC, maps nine Indic digit ranges to
+  ASCII and unions English keywords into every language, because the
+  code-switching this project measures means an Indian-language bot says
+  "reference number" in English.
+- Decision validation before synthesis: length and transition limits, nine
+  instruction-leak patterns, and rejection of any identifier-shaped number not
+  traceable to a known fact. Written for the model provider that replaces the
+  rule engine, which will need them.
+- Conversation persistence on the Phase 2 schema. **No new tables and no
+  migration**; `alembic check` reports no drift.
+- Seven endpoints under `/api/v1/caller`, and an offline `simulate()` that
+  drives a whole conversation against a scripted bot with no provider, no
+  credential and no telephony.
+- 342 offline tests.
+
+### Three defects the tests found
+
+Worth recording, because each was invisible by inspection:
+
+- **`caller.confirmed_close` was effectively unreachable.** It sat below
+  `bot.confirmed`, so a bot answering a read-back with "yes, that is correct"
+  drove `confirming -> confirming`, which the state machine forbids — the
+  conversation died on the most ordinary turn in the script. Found by a sweep
+  of every state against every shape of reply.
+- **`ALLOWED[INTRODUCING]` omitted `CONFIRMING`.** A bot that answered the
+  objective in its first reply — a helpline that recognises the caller's
+  number does exactly that — had the caller's read-back rejected.
+- **Provider error text reached the database and the API unredacted.** Both
+  the transcription and synthesis failure paths interpolated the raw exception
+  into `turn_metadata`, which is also returned on the wire. The same class of
+  defect Phase 4 fixed twice.
+
+A fourth, smaller one: the invented-identifier threshold was four digits while
+its own comment claimed "2019" would pass. It is now five, so a caller can say
+the year it registered a holding.
+
+### Not verified
+
+| | |
+|---|---|
+| Gnani Evon API access | Not available. Nothing was called |
+| Conversation quality / naturalness | Not evaluated. A rule engine composing from fixed phrase tables |
+| Behaviour against a real voice bot | Not verified. Nothing here has had a conversation with one |
+| Code-mixed caller speech | Not generated. A scenario may declare it; the caller will not produce it |
+| Languages beyond `ta-IN`, `hi-IN`, `en-IN` | No reviewed phrase table. Such a scenario is refused, not answered in English |
 
 **Exit criteria.** The simulated caller completes a multi-turn conversation
-against the local sample bot without human input.
+without human input — **met** offline, against a scripted bot and against
+supplied bot replies through the API. **Not met** against the local sample bot:
+`sample_bot/` is empty and was not in the authorised scope.
+
+**Deliberately not in this phase.** Any Evon adapter, stub or otherwise;
+telephony; audio degradation; a sample bot; scoring. Persona conditioning is
+projected from the scenario and shapes the opening utterance, but accent and
+interruption behaviour belong to Phases 7 and 8, where the audio and the call
+exist.
 
 ---
 

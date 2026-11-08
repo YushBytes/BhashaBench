@@ -9,7 +9,7 @@ BhashaBench is an automated testing and benchmarking platform for
 Indian-language voice bots. It is being built in **15 controlled phases**; see
 `docs/DEVELOPMENT_ROADMAP.md`.
 
-**Phases 1 to 5 are complete.** Phase 6 has not started.
+**Phases 1 to 6 are complete.** Phase 7 has not started.
 
 | Phase | Status |
 |-------|--------|
@@ -18,7 +18,8 @@ Indian-language voice bots. It is being built in **15 controlled phases**; see
 | 3 — Scenario library & tooling | ✅ Complete |
 | 4 — Speech to text (Gnani Prisma) | ✅ Complete |
 | 5 — Text to speech (Gnani Timbre) | ✅ Complete |
-| 6–15 | ⬜ Not started |
+| 6 — Caller simulation (deterministic) | ✅ Complete — Evon **not** integrated |
+| 7–15 | ⬜ Not started |
 
 ## The two rules that matter most
 
@@ -33,10 +34,19 @@ Indian-language voice bots. It is being built in **15 controlled phases**; see
 ## Phase discipline
 
 Do not implement functionality belonging to a future phase, even if it seems
-convenient. A pull request that does will be asked to split. Phase 6+ work —
-caller simulation, audio degradation, telephony, orchestration, evaluation —
-is explicitly out of scope until its phase. In particular, do not add a Gnani
-Evon client, and do not invent its endpoints or credentials.
+convenient. A pull request that does will be asked to split. Phase 7+ work —
+audio degradation, telephony, full orchestration, evaluation — is explicitly
+out of scope until its phase.
+
+**Do not add a Gnani Evon client, and do not invent its endpoints or
+credentials.** Phase 6's feasibility gate established that no Gnani
+text-generation endpoint is published and that the released model has no
+hosted inference provider, so there is nothing to cite. Phase 6 therefore
+ships a deterministic rule engine, named for what it is. Two things that must
+stay true: `evon` is not a registered caller provider (configuring it fails
+with an error explaining why), and no code claims Evon is integrated. Do not
+add a stub adapter that raises — that advertises Evon as a configurable
+option, which is the dishonesty the rule exists to prevent.
 
 Phases 4 and 5 added the Gnani **Prisma** (speech-to-text) and **Timbre**
 (text-to-speech) adapters. Every constant either sends is transcribed from the
@@ -47,11 +57,21 @@ capability is declared unsupported — three of Prisma's four output modes are
 unsupported for exactly this reason, because their literal wire values are
 never quoted.
 
-The `TestRun`, `CallSession` and `ConversationTurn` tables exist as
-**foundational schema only**. Nothing executes a run or places a call, and
-Phase 4 persists no transcript: deciding which turn a transcript belongs to is
-orchestration (Phase 9), and a table written by nothing would be schema
-guesswork. The transcription endpoints therefore work with PostgreSQL down.
+Phase 6 is the first thing to write to `TestRun`, `CallSession` and
+`ConversationTurn`, and it reuses them exactly as Phase 2 shaped them: one
+conversation is a `CallSession`, one utterance a `ConversationTurn`, and the
+caller's own state lives in the existing JSONB columns under a `caller`
+namespace so Phase 8's telephony metadata can share the column. **Phase 6
+adds no table and no migration** — keep it that way unless a real column is
+needed, and run `alembic check`.
+
+No call is placed, so a conversation opens as `IN_PROGRESS`, never `PENDING`;
+`DIALING`, `NO_ANSWER` and `BUSY` are telephony states an offline simulation
+must not claim.
+
+Phase 4 still persists no transcript of its own: deciding which turn a loose
+transcript belongs to is orchestration (Phase 9). The transcription and speech
+endpoints therefore work with PostgreSQL down; the caller endpoints do not.
 
 ## Architecture rules
 
@@ -75,6 +95,11 @@ speech/        the text-to-speech subsystem (Phase 5), same shape.
                third provider family arrives.
 speech/providers/
                one adapter per vendor, same rule
+caller/        the caller engine (Phase 6): state machine, transcript
+               analysis, decision validation, orchestration, artefacts
+caller/providers/
+               one caller strategy per module. Deterministic only; there is
+               no Evon adapter and adding a non-functional one is forbidden
 ```
 
 - Route handlers stay thin. No `select()` in a route, no HTTP concepts in a
@@ -163,6 +188,56 @@ an orphaned socket reaches pytest as `PytestUnraisableExceptionWarning`, which
 `filterwarnings = ["error"]` turns into a failing exit code even when the test
 passed. Both have happened. Keep one provider per test.
 
+### The caller engine
+
+Full design in `docs/CALLER.md`. Six rules that are easy to break:
+
+**Rule order is the design.** `app/caller/providers/deterministic.py`
+evaluates rules top to bottom, first match wins, and the order encodes
+priority. A refusal is handled before a question, because a bot that says "I
+cannot help, what is your number?" has refused and that is the finding worth
+recording. More subtly, `caller.confirmed_close` must stay **above**
+`bot.asked_for_identifier`, `bot.asked_unknown`, `bot.confirmed` and
+`fallback.clarify`: every rule above it targets a state `CONFIRMING` can
+legally reach and every rule below targets one it cannot, so moving it down
+makes a bot answering a read-back with "yes, that is correct" drive
+`confirming -> confirming` and kill the conversation. That shipped broken once.
+
+**The transition table is the authority, and it is swept.**
+`test_caller_rules.py` drives every non-terminal state against every shape of
+reply and asserts the resulting transition is legal. If you add a rule or a
+state, that test is what tells you whether the table still agrees — do not
+weaken it. `ALLOWED[INTRODUCING]` omitting `CONFIRMING` was a real defect: a
+bot that answered the objective in its first reply had the read-back rejected.
+
+**The caller never sees `expected_outcomes`.** `CallerContext` has no such
+field, deliberately, so the caller cannot recite what it is marked against.
+Outcome matching happens in the orchestrator's `report()`, and
+`outcomes_observed` is a keyword indicator, not a score — its own API
+description says so, because evaluation is Phase 10.
+
+**Validation runs before synthesis, always.** `CallerService.validate`
+rejects an empty or overlong utterance, an illegal transition, nine
+instruction-leak patterns, and any identifier-shaped digit run not traceable
+to a known fact. The rule engine structurally cannot fail most of these; they
+exist for the model provider that replaces it, which is why they live in the
+service and not in the provider. A provider cannot be trusted to police
+itself. The identifier threshold is five digits, not four, so a caller can say
+"I registered in 2019" — do not lower it without reading the comment.
+
+**A transcription failure is a null turn; a bad upload is a 4xx.** Three
+outcomes that look alike and must not be merged: the bot said nothing (empty
+transcript, a bot defect), we could not transcribe it (`content=None` plus a
+`transcription_error`, our problem, conversation continues), and the request
+was malformed (re-raised, nothing persisted, so a `.txt` upload does not get
+`200 OK` and a null turn indistinguishable from silence). The split lives in
+`_REQUEST_DEFECTS` in the orchestrator.
+
+**Redact provider error text.** Both the transcription and synthesis failure
+paths put a string into `turn_metadata`, which is also returned on the API
+surface. Pass it through `redact` — these two sites shipped unredacted once,
+the same class of defect Phase 4 fixed twice.
+
 ### Front ends share services, not messages
 
 The API and the CLI both call `services/`. A domain error that suggests a
@@ -218,7 +293,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # whole suite (1327 tests, 41 live ones deselected)
+pytest                                  # whole suite (1669 tests, 41 live ones deselected)
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```
@@ -280,6 +355,7 @@ ruff check . && ruff format --check .   # from the repository root
 | `docs/SCENARIO_FORMAT.md` | the scenario specification or bundle format changes |
 | `docs/CLI.md` | a command, flag, exit code or output format changes |
 | `docs/PROVIDERS.md` | a provider contract, capability, limitation or verification status changes |
+| `docs/CALLER.md` | a caller state, rule, validation check, limit or endpoint changes |
 | `backend/tests/fixtures/audio/README.md` | an audio fixture is added or changed |
 | `scenarios/README.md` | a reference scenario is added or changed |
 | `docs/DEVELOPMENT_ROADMAP.md` | a phase's scope or status changes |

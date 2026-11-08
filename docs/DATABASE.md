@@ -3,11 +3,29 @@
 PostgreSQL 16, accessed through SQLAlchemy 2.x typed declarative ORM, with the
 schema owned entirely by Alembic.
 
-> **Scope.** Phase 2 creates all five tables. Only `test_suites` and
-> `scenarios` are written to by the API. `test_runs`, `call_sessions` and
-> `conversation_turns` are **foundational schema**: they exist so later phases
-> have a stable shape to write into, and nothing in this phase creates a row
-> in them.
+> **Scope.** Phase 2 creates all five tables, and they are still the only five
+> — Phase 6 added no table and no migration. `test_suites` and `scenarios` are
+> written by the scenario API.
+>
+> `test_runs`, `call_sessions` and `conversation_turns` were foundational
+> schema until Phase 6, which is the first thing to write rows into them: a
+> caller conversation is a `call_session` inside a `test_run`, and each
+> utterance is a `conversation_turn`. The caller's own evolving state lives in
+> the existing JSONB columns under a `caller` namespace —
+> `call_metadata.caller` for conversation state, `turn_metadata` for the
+> decision and the audio reference — so Phase 8's telephony metadata can share
+> the column without collision, and no migration is needed each time the
+> caller records something new. See [CALLER.md](CALLER.md).
+>
+> A conversation opens as `in_progress`, never `pending`: nothing is dialled,
+> so there is no pending period, and `dialing`, `no_answer` and `busy` are
+> telephony states an offline simulation must not claim.
+>
+> Two traps worth knowing before writing to those JSONB columns. SQLAlchemy
+> does not track mutation *inside* a JSON value, so an in-place edit is
+> silently dropped at flush — reassign the whole dict. And the relationships
+> are `lazy="raise_on_sql"`, so a collection must be eagerly loaded
+> (`selectinload`) rather than touched lazily.
 
 ---
 
