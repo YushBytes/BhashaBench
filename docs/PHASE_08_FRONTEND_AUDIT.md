@@ -17,7 +17,7 @@
 BhashaBench has a substantial, carefully-built backend and an almost non-existent
 frontend. The gap between the two is the headline finding.
 
-The backend exposes **34 paths / 42 operations** across suites, scenarios,
+The backend exposes **34 paths / 41 operations** across suites, scenarios,
 transcription, speech, the caller engine and the pipeline. Its response schemas
 are unusually honest: `evon_status`, `telephony_status`,
 `bot_audio_externally_received`, `uses_language_model` and `measurement_note`
@@ -33,7 +33,7 @@ Five findings matter most:
 
 1. **The landing copy is factually stale and now contradicts itself on screen.**
    The page tells visitors "The Phase 1 backend is a running FastAPI service.
-   These three endpoints work" (42 operations exist) and "no speech is
+   These three endpoints work" (41 operations exist) and "no speech is
    processed" (Phases 4, 5 and 7 process speech), while two cards directly above
    are badged **Partial**. See §12.1. This is the inverse of the usual honesty
    risk — it *understates* — but it is still the UI stating something untrue.
@@ -192,7 +192,7 @@ explicit that this is deliberate:
 > inventing a client for them would mean shipping a fake integration.
 
 That reasoning was sound when written. It is now **partly obsolete** — the
-`endpoints` constant lists 3 endpoints when the API serves 42, and
+`endpoints` constant lists 3 endpoints when the API serves 41, and
 `GET /api/v1/health` could supply real subsystem status today. See §12.1.
 
 `apiBaseUrl` reads `NEXT_PUBLIC_API_BASE_URL` with a `http://localhost:8000`
@@ -463,13 +463,18 @@ Ordered by severity. Every item was observed in the rendered browser.
 
 ### 12.1 Critical — the page states things that are not true
 
+> **Resolved after this audit.** The three strings below were corrected in the
+> follow-up copy-only commit (Step 1 of §20). The table is kept as the record
+> of what commit `6bb9104` rendered; the "Why it is wrong" column is what
+> justified the change.
+
 Three rendered strings are now false, and one directly contradicts a badge
 sitting a few pixels away.
 
 | Location | Rendered text | Why it is wrong |
 |---|---|---|
 | Hero caveat, `app/page.tsx` | "This is the foundation release… **No calls are placed, no speech is processed and no scores are produced yet.**" | Phases 4, 5 and 7 process speech. Prisma transcribes, Timbre synthesises, the pipeline runs both end to end. Only "no calls are placed" and "no scores" remain true. |
-| API section intro | "The **Phase 1 backend** is a running FastAPI service. **These three endpoints work; everything else returns 404** until a later phase adds it." | The API serves **34 paths / 42 operations**. The claim is wrong by an order of magnitude. |
+| API section intro | "The **Phase 1 backend** is a running FastAPI service. **These three endpoints work; everything else returns 404** until a later phase adds it." | The API serves **34 paths / 41 operations**. The claim is wrong by an order of magnitude. |
 | Test-suite intro | "These are the capabilities the platform is being built to exercise — **none of them are implemented yet**…" | Self-contradicting: two cards in the grid directly beneath are badged **Partial**, and the roadmap below marks Phases 1–5 **Live**. |
 | `endpoints` in `lib/content.ts` | 3 entries | Stale by 39 operations |
 
@@ -557,7 +562,7 @@ Stated so the redesign does not throw it away:
 
 ## 13. Backend API inventory
 
-34 paths, 42 operations, read from the generated OpenAPI document (not grepped).
+34 paths, 41 operations, read from the generated OpenAPI document (not grepped).
 
 ### 13.1 Core
 
@@ -1024,11 +1029,12 @@ built. **Nothing here starts without your approval.**
 
 (The test suite is already confirmed green — §9.4 — so it is not a blocker.)
 
-**Step 1 — Correct the lie already on screen** *(can ship independently, tiny
-diff)*
-Fix the three stale strings and the `endpoints` constant in §12.1. This is
-worth doing **before** the redesign, because it is a truthfulness defect and the
-redesign may be weeks away.
+**Step 1 — Correct the lie already on screen** — ✅ **DONE**
+*(shipped independently as a copy-only commit, approved separately)*
+The three stale strings in §12.1 were corrected and the `endpoints` constant
+documented as a deliberate subset. No layout, token, component or backend
+change was involved. Done **before** the redesign because it was a
+truthfulness defect and the redesign may be weeks away.
 
 **Step 2 — Design foundation** *(requires your visual reference)*
 Tokens, type scale, spacing, the full state-colour system for 9 outcomes ×
@@ -1132,7 +1138,7 @@ read from source or documentation without execution.
 | Backend startup (local) | `uvicorn` on :8001 | ✅ Started, serving |
 | Backend startup (Docker) | `docker logs`, `docker inspect`, `curl` | ❌ Crash-loop, root cause identified |
 | Database connectivity | `GET /api/v1/health` | ✅ `SELECT 1 succeeded` |
-| OpenAPI generation | Imported `create_app().openapi()` | ✅ 34 paths, 42 ops, 81 schemas |
+| OpenAPI generation | Imported `create_app().openapi()` | ✅ 34 paths, 41 ops, 81 schemas |
 | Provider capability endpoints | `curl` ×4 | ✅ All responded with real payloads |
 | Language catalogue | `curl` | ✅ 13 languages with endonyms/scripts |
 | Suite & scenario listing | `curl` | ✅ Responded; both empty (total 0) |

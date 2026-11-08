@@ -20,7 +20,7 @@ export default function HomePage() {
         id="test-suite"
         eyebrow="Test suite"
         title="What BhashaBench will test"
-        intro="A voice bot that passes a quiet demo often fails a real Indian phone call. These are the capabilities the platform is being built to exercise — none of them are implemented yet, and each card names the phase that delivers it."
+        intro="A voice bot that passes a quiet demo often fails a real Indian phone call. These are the capabilities the platform is being built to exercise. Each card carries its real status: Partial means the engine runs offline today, Planned means the phase that delivers it has not started."
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {capabilities.map((capability) => (
@@ -32,8 +32,8 @@ export default function HomePage() {
       <Section
         id="api"
         eyebrow="API"
-        title="Endpoints available today"
-        intro="The Phase 1 backend is a running FastAPI service. These three endpoints work; everything else returns 404 until a later phase adds it."
+        title="The API today"
+        intro="The backend is a running FastAPI service exposing 41 operations across 34 paths — test suites, scenarios, transcription, speech synthesis, the caller engine and the test-run pipeline. The three service-level endpoints below take no arguments and are the quickest way to confirm a deployment; the full reference is in the API docs."
       >
         <EndpointTable />
       </Section>
@@ -91,10 +91,11 @@ function Hero() {
       </div>
 
       <p className="mt-6 max-w-2xl text-sm leading-relaxed text-text-tertiary">
-        This is the foundation release. The application skeleton,
-        configuration, health endpoints and container setup are in place. No
-        calls are placed, no speech is processed and no scores are produced
-        yet.
+        Seven of fifteen phases are complete. Scenario definitions, Gnani
+        Prisma transcription, Gnani Timbre synthesis, a deterministic
+        rule-based caller and the end-to-end audio pipeline all run today. No
+        telephone call is placed, no conversation with a real external bot has
+        been verified, and no accuracy or quality score is produced yet.
       </p>
     </section>
   );

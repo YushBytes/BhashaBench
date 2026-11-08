@@ -118,7 +118,14 @@ export const capabilities: readonly Capability[] = [
   },
 ] as const;
 
-/** Endpoints that exist and respond today. */
+/**
+ * The service-level endpoints, listed because they take no arguments and so
+ * are the quickest check that a deployment is alive. This is deliberately a
+ * subset: the API serves 41 operations across 34 paths, and the full list
+ * belongs in the generated OpenAPI document rather than being duplicated —
+ * and drifting — here. Re-derive the totals with
+ * `create_app().openapi()["paths"]` when they are quoted in copy.
+ */
 export interface Endpoint {
   readonly method: "GET";
   readonly path: string;

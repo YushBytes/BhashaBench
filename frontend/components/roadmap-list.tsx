@@ -1,7 +1,7 @@
 import { StatusPill } from "@/components/status-pill";
 import { phases } from "@/lib/content";
 
-/** All 15 phases with their real status. Only Phase 1 is marked live. */
+/** All 15 phases with their real status, as recorded in `phases`. */
 export function RoadmapList() {
   return (
     <ol className="overflow-hidden rounded-xl border border-border-subtle">
