@@ -523,9 +523,9 @@ default; the 41 live provider tests are deselected unless you opt in:
 | `test_speech_core.py` | 121 | The Timbre contract constants, voice catalogue, domain models, registry and service rules - including that a tag the model ignores is refused rather than spoken aloud |
 | `test_speech_api.py` | 77 | The real FastAPI speech routes: binary response and its media types, `X-Speech-*` headers, error mapping, provider capabilities, cleanup on every exit path, security |
 | `test_caller_core.py` | 71 | The caller state machine, the transcript analyser (Indic digits, code-switched keywords), the decision schema and the provider registry |
-| `test_caller_rules.py` | 193 | Every rule of the deterministic caller; that five different bot replies produce five different turns; a legality sweep of every state against every shape of reply |
+| `test_caller_rules.py` | 155 | Every rule of the deterministic caller; that five different bot replies produce five different turns; a legality sweep of every state against every shape of reply |
 | `test_caller_service.py` | 34 | Decision validation, instruction-leak and invented-identifier rejection, synthesis, credential redaction in an error |
-| `test_caller_orchestrator.py` | 44 | Multi-turn conversations against real PostgreSQL: success, every failure reason, determinism, persistence, transcription failure, audio artefacts |
+| `test_caller_orchestrator.py` | 39 | Multi-turn conversations against real PostgreSQL: success, every failure reason, determinism, persistence, transcription failure, audio artefacts |
 | `test_caller_api.py` | 43 | The caller routes through `TestClient`: creation, turns, text and audio submission, termination, limits, prompt injection, OpenAPI |
 | `test_speech_live.py` | 26 | **Opt-in, billable.** Real Gnani Timbre calls. Skipped unless `SPEECH_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
 
