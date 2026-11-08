@@ -54,6 +54,32 @@ class RunCancelledError(PipelineError):
     """
 
 
+class RunCapacityExhaustedError(PipelineError):
+    """Every concurrent-run slot is in use, so this run was not started.
+
+    Not a failure of the run: it keeps whatever state it had, nothing is
+    persisted and nothing is lost, so the client can retry when a slot frees
+    up. The API answers 503 for exactly that reason - the condition is
+    temporary and about the server's capacity, not about the request.
+
+    Attributes:
+        limit: The configured maximum, so a client is told what it hit.
+        in_use: How many were running when the refusal happened.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        limit: int | None = None,
+        in_use: int | None = None,
+        run_id: str | None = None,
+    ) -> None:
+        super().__init__(message, run_id=run_id, stage="admission")
+        self.limit = limit
+        self.in_use = in_use
+
+
 class AudioValidationError(PipelineError):
     """Audio entering or leaving a stage failed inspection.
 
@@ -123,5 +149,6 @@ __all__ = [
     "PipelineConfigurationError",
     "PipelineError",
     "RunCancelledError",
+    "RunCapacityExhaustedError",
     "RunNotActiveError",
 ]

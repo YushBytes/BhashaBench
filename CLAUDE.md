@@ -247,7 +247,7 @@ the same class of defect Phase 4 fixed twice.
 
 ### The pipeline
 
-Full design in `docs/PIPELINE.md`. Five rules that are easy to break:
+Full design in `docs/PIPELINE.md`. Six rules that are easy to break:
 
 **The execution mode is the honesty control.** `OFFLINE_SIMULATION` moves no
 audio, `AUDIO_FIXTURE_TEST` runs every stage with the bot stubbed, and only
@@ -276,6 +276,17 @@ every other path component — no caller-supplied string reaches a filename.
 stated SNR holds for that utterance, and the achieved ratio is asserted to
 better than 0.5 dB rather than trusted. Nothing here claims simulated noise is
 a field recording.
+
+**The concurrency limiter is process-wide, and must stay that way.**
+`slots_for_limit` is `lru_cache`d on the limit so every request shares one
+instance; a per-request limiter counts to one and enforces nothing, which is
+how `PIPELINE_MAX_CONCURRENT_RUNS` spent a whole phase unused. It refuses with
+503 rather than queueing, it releases in a `finally` so cancellation and
+timeouts cannot leak a slot, and `_admitted` is re-entrant because
+`supply_bot_audio` calls `run_to_completion` and would otherwise 503 against
+its own slot. Do not swap it for an `asyncio.Semaphore`: a waiting semaphore
+binds its waiters to one event loop, and this one is shared across the loops
+that `asyncio.run` creates.
 
 **Three failures that must not be merged:** the bot said nothing (empty
 transcript, a bot defect), we could not transcribe it (`content=None` plus a
@@ -340,7 +351,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # whole suite (1907 tests, 41 live ones deselected)
+pytest                                  # whole suite (1957 tests, 41 live ones deselected)
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

@@ -35,7 +35,7 @@ WAV, so every stage between the two providers ran for real.
 
 | | |
 |---|---|
-| Multi-turn audio workflow, offline | ✅ Verified — 238 offline tests |
+| Multi-turn audio workflow, offline | ✅ Verified — 288 offline tests |
 | Degradation, reproducibility, SNR accuracy | ✅ Verified — measured, see below |
 | Artefact storage, original preservation | ✅ Verified |
 | Timbre / Prisma through the existing services | ✅ Verified with the offline fakes |
@@ -43,6 +43,7 @@ WAV, so every stage between the two providers ran for real.
 | A real voice bot conversation | ❌ Not tested — no external bot endpoint was available |
 | Telephony | ⬜ Not implemented |
 | Recognition accuracy under degradation | ❌ Not measured — the fixtures contain no speech and no reviewed ground truth |
+| Concurrency limit enforced | ✅ Verified — Phase 7.1; the limit holds under forced overlap, and exceptions, cancellation and timeouts all release capacity |
 
 ---
 
@@ -82,7 +83,7 @@ measured duration. A run that broke at transcription and one that broke at
 synthesis look different in the report, which is the only way either is
 diagnosable.
 
-### Three bounds on a run
+### Four bounds on a run
 
 One bound is never enough:
 
@@ -91,6 +92,7 @@ One bound is never enough:
 2. The engine's loop, capped at the recorded turn budget.
 3. A wall-clock timeout over the whole run (`PIPELINE_RUN_TIMEOUT_SECONDS`),
    because a run that hangs holds a database session.
+4. Across runs rather than within one: the concurrency limit below.
 
 A narrower `max_turns` is written into the caller's own metadata, so Phase 6's
 budget rule respects it and the caller closes itself rather than being cut off
@@ -247,6 +249,48 @@ recorded beside the requested one, because with few packets the two differ a
 lot and reporting only the request would overstate what the audio suffered.
 
 ---
+
+## Concurrency
+
+At most `PIPELINE_MAX_CONCURRENT_RUNS` runs execute at once. Beyond that,
+`POST /start` answers **503 immediately** - it does not queue.
+
+**Why refuse rather than wait.** A request parked behind an unbounded line has
+no bound on its own latency, and a client cannot tell a slow run from a stuck
+one. A refusal is a fact the client can act on. The run is untouched by it -
+not started, not failed, nothing persisted - so retrying is safe rather than a
+second attempt at a half-run.
+
+**Why a counting guard and not `asyncio.Semaphore`.** A semaphore that waits
+holds pending waiters, and a waiter belongs to the event loop that created it;
+a process-wide semaphore would eventually be awaited from a different loop than
+a waiter was parked on, which raises intermittently under exactly the
+concurrency it exists to control. This limiter never waits, so it holds no
+waiter and has no loop affinity. It is a non-blocking counting semaphore; it is
+simply not that class. The counter is mutated under a lock held for the
+check-and-increment only and never across an `await`, so a synchronous caller
+from FastAPI's worker threads cannot race it.
+
+**Scope is the process, and that is the point.** `slots_for_limit` is
+`lru_cache`d on the limit, mirroring `get_settings`. A limiter built per request
+would count to one and enforce nothing - which is precisely how
+`PIPELINE_MAX_CONCURRENT_RUNS` spent Phase 7 as a documented number with no
+consumer.
+
+**Release is unconditional.** The slot is held by an `async with`, so normal
+completion, an exception, `asyncio.CancelledError` and a timeout all unwind
+through the same `finally`. A failing run cannot cost the process a slot
+permanently.
+
+**Admission is re-entrant per engine.** `supply_bot_audio` holds a slot and
+then calls `run_to_completion`, which would otherwise be refused by the slot
+its own caller is holding - a self-inflicted 503 under no load. One engine
+instance serves one request and therefore one run, so it holds at most one
+slot.
+
+Capacity is observable for tests via `RunSlots.in_use`, `.available` and
+`.peak_in_use`; the last is what makes "the limit was never exceeded" assertable
+*during* a run rather than only after everything has been released.
 
 ## Artefacts
 
@@ -436,6 +480,7 @@ curl -s     $B/$RUN/report      | python -m json.tool
 |------|------|
 | 404 | No such run or scenario |
 | 409 | The run has already finished, or is not ready for this request |
+| 503 | Every concurrent-run slot is in use. The run is untouched; retry it |
 | 413 | Bot audio over 10 MiB |
 | 415 | Bot audio in a container that cannot be decoded |
 | 422 | Invalid request, an unimplemented mode, an unknown adapter, or an unsupported scenario language |
@@ -449,7 +494,7 @@ curl -s     $B/$RUN/report      | python -m json.tool
 |----------|---------|-------|
 | `PIPELINE_BOT_ADAPTER` | `scripted` | Default adapter. Both options send audio nowhere |
 | `PIPELINE_RUN_TIMEOUT_SECONDS` | `600.0` | Wall-clock ceiling on one run |
-| `PIPELINE_MAX_CONCURRENT_RUNS` | `2` | Bounds provider spend and memory |
+| `PIPELINE_MAX_CONCURRENT_RUNS` | `2` | Bounds provider spend and memory. Enforced: `POST /start` answers 503 beyond it |
 | `PIPELINE_NOISE_SEED` | `42` | Fixed so a run is reproducible by default |
 | `PIPELINE_NOISE_PROFILE` | `clean` | For runs that name none; a scenario's own profile wins |
 
@@ -496,9 +541,10 @@ pytest backend/tests/test_pipeline_degradation.py  # the DSP, profiles, SNR
 pytest backend/tests/test_pipeline_bots.py         # adapters and the registry
 pytest backend/tests/test_pipeline_engine.py       # multi-turn runs, failures
 pytest backend/tests/test_pipeline_api.py          # the HTTP surface
+pytest backend/tests/test_pipeline_concurrency.py  # the admission limiter
 ```
 
-238 tests, all offline. The engine and API modules need PostgreSQL
+288 tests, all offline. The engine and API modules need PostgreSQL
 (`docker compose up -d db`) and never skip silently.
 
 The offline speech fake produces genuine 16-bit mono WAV, which is what makes
@@ -524,9 +570,10 @@ providers and the bot are stubs.
 - **Resampling is linear interpolation** and relies on the bandpass that the
   telephony profiles apply first to limit aliasing. A profile that downsampled
   without filtering would alias, which is why the presets always pair them.
-- **Concurrency is bounded by configuration, not enforced by a semaphore.**
-  `PIPELINE_MAX_CONCURRENT_RUNS` is recorded and respected by operators; the
-  engine does not currently reject a run for exceeding it.
+- **Concurrency is enforced per process, not per deployment.** The limiter
+  lives in the application process, so two uvicorn workers each admit
+  `PIPELINE_MAX_CONCURRENT_RUNS` runs. Set the value per worker, or put a
+  shared limiter behind it, if the real bound is a provider quota.
 
 ## Future telephony
 

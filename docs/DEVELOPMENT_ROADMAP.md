@@ -23,6 +23,7 @@ phase, not as existing behaviour.
 | 5 | Gnani Timbre — Text to Speech | ✅ Complete |
 | 6 | Caller Simulation — deterministic engine | ✅ Complete (Evon **not** integrated) |
 | 7 | End-to-End Voice Pipeline & Audio Degradation | ✅ Complete (no live call, no real bot) |
+| 7.1 | Concurrency Enforcement | ✅ Complete |
 | 8 | Twilio Telephony & Media Streaming | ⬜ Not started |
 | 9 | Conversation Orchestration Engine | ⬜ Not started |
 | 10 | Automated Evaluation & Scoring | ⬜ Not started |
@@ -165,7 +166,8 @@ library is now complete enough to drive those.
   `GET /api/v1/transcription/providers`, and the
   `/api/v1/transcription/stream` WebSocket.
 - 964 tests, up from 561. 15 of them are opt-in live provider tests.
-  (1327 after Phase 5; 1669 after Phase 6; 1907 after Phase 7.)
+  (1327 after Phase 5; 1669 after Phase 6; 1907 after Phase 7; 1957 after
+  Phase 7.1.)
 
 **Verified language support.** Prisma documents ten of BhashaBench's thirteen
 catalogue languages. Urdu, Odia and Assamese have no speech model: a scenario
@@ -438,6 +440,26 @@ severity is what they control.
 **met**, asserted for every profile. A multi-turn audio workflow executes
 offline - **met**. A genuine external voice-bot conversation - **not met**, and
 not claimed.
+
+### Phase 7.1 — concurrency enforcement
+
+`PIPELINE_MAX_CONCURRENT_RUNS` shipped in Phase 7 as a documented number that
+nothing read: the setting existed, the run metadata recorded it, and no code
+consulted it. The gap was reported in the Phase 7 close-out and is now closed.
+
+A process-wide counting guard admits at most the configured number of
+concurrently executing runs and refuses the rest with **503** rather than
+queueing them - a request parked behind an unbounded line has no bound on its
+own latency, and the refused run is untouched so retrying is safe. The slot is
+held by an `async with`, so completion, exception, cancellation and timeout all
+release through the same `finally`, and admission is re-entrant per engine so
+`supply_bot_audio` cannot refuse itself against its own slot.
+
+Deliberately not an `asyncio.Semaphore`: one that waits holds waiters bound to
+the loop that created them, which raises intermittently when a process-wide
+instance is awaited from another loop. A non-blocking counter has no loop
+affinity. 50 tests, with the overlap forced by `asyncio.Event` gates rather
+than timed, so they cannot flake.
 
 **Deliberately not in this phase.** Telephony or SIP; jitter and codec
 simulation beyond band-limiting (G.711 and AMR-NB need a codec this project

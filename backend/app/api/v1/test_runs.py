@@ -31,6 +31,7 @@ from app.caller.orchestrator import ConversationOrchestrator
 from app.caller.registry import build_provider as build_caller_provider
 from app.caller.service import CallerService
 from app.pipeline.bots.registry import build_adapter, describe_adapters
+from app.pipeline.concurrency import get_run_slots
 from app.pipeline.degradation import NoiseProfile
 from app.pipeline.engine import (
     MAX_BOT_AUDIO_BYTES,
@@ -107,6 +108,11 @@ def get_engine_factory(
                 artefacts=artefacts,
                 stt_provider=transcription_provider.capabilities.name,
                 tts_provider=speech_provider.capabilities.name,
+                # The process-wide limiter, not a per-request one. A limiter
+                # built per request would count to one and enforce nothing,
+                # which is exactly how PIPELINE_MAX_CONCURRENT_RUNS came to be
+                # a documented number with no consumer.
+                slots=get_run_slots(settings),
             )
         finally:
             # Synchronous teardown cannot await an async close, and these
@@ -129,6 +135,14 @@ def get_engine(factory: EngineFactoryDep) -> Iterator[RunEngine]:
 
 
 EngineDep = Annotated[RunEngine, Depends(get_engine)]
+
+_CAPACITY_ERROR: dict[int | str, dict[str, object]] = {
+    status.HTTP_503_SERVICE_UNAVAILABLE: {
+        "model": ErrorResponse,
+        "description": "Every concurrent-run slot is in use. The run was not "
+        "started and keeps its current state, so retry it when a slot frees up.",
+    },
+}
 
 _COMMON_ERRORS: dict[int | str, dict[str, object]] = {
     status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "No such run."},
@@ -244,9 +258,14 @@ def create_run(
         "Runs turns until the run reaches a terminal state, or until it needs "
         "audio that has to come from outside. A run left `running` with "
         "`awaiting_bot_audio_for_turn` set is healthy and waiting, not failed: "
-        "submit the bot's reply to `/bot-audio` to continue it."
+        "submit the bot's reply to `/bot-audio` to continue it.\n\n"
+        "At most `PIPELINE_MAX_CONCURRENT_RUNS` runs execute at once. Beyond "
+        "that this answers **503** immediately rather than queueing: a request "
+        "waiting behind an unbounded line has no bound on its own latency, and "
+        "the client cannot tell a slow run from a stuck one. The run is "
+        "untouched - not started, not failed - so retrying is safe."
     ),
-    responses=_COMMON_ERRORS,
+    responses=_COMMON_ERRORS | _CAPACITY_ERROR,
 )
 async def start_run(run_id: uuid.UUID, engine: EngineDep, session: DbSession) -> RunResponse:
     """Execute a run to its terminal state, or to its next wait."""

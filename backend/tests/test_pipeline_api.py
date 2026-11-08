@@ -30,6 +30,7 @@ from app.models import TestSuite as SuiteModel
 from app.pipeline.bots.manual import ManualBotAdapter
 from app.pipeline.bots.registry import build_adapter
 from app.pipeline.bots.scripted import ScriptedBotAdapter
+from app.pipeline.concurrency import RunSlots
 from app.pipeline.engine import MAX_BOT_AUDIO_BYTES, RunEngine
 from app.speech.models import AudioConfig
 from app.speech.providers.fake import FakeSpeechScript, FakeSynthesisProvider
@@ -132,7 +133,7 @@ def pipeline_client(
         }
     )
     store = AudioArtefactStore(settings.caller_audio_root)
-    state: dict[str, Any] = {"adapter": None, "transcription": None}
+    state: dict[str, Any] = {"adapter": None, "transcription": None, "slots": None}
 
     def factory(adapter_name: str | None) -> Iterator[RunEngine]:
         caller = CallerService(
@@ -168,6 +169,9 @@ def pipeline_client(
             artefacts=store,
             stt_provider="fake",
             tts_provider="fake",
+            # None by default, so every other test in this module is unaffected
+            # by admission control; a concurrency test installs a real limiter.
+            slots=state["slots"],
         )
 
     test_app.dependency_overrides[get_engine_factory] = lambda: factory
@@ -775,6 +779,153 @@ class TestSecurity:
         assert "C:\\" not in text
         assert "/tmp/" not in text
         assert "AppData" not in text
+
+
+class TestConcurrencyLimit:
+    """The limit, enforced through the real route rather than in isolation.
+
+    The engine-level tests stub the turn loop, which is right for the admission
+    logic but says nothing about whether a refusal reaches a client as a status
+    code. These exhaust the limiter before the request, which is deterministic:
+    no second request has to be timed against the first.
+    """
+
+    def test_a_run_is_refused_with_503_when_capacity_is_exhausted(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        slots = RunSlots(1)
+        pipeline_client.pipeline_state["slots"] = slots
+        run = _create(pipeline_client, scenario_ids)
+
+        with slots.hold_sync():
+            response = pipeline_client.post(f"{BASE}/{run['run_id']}/start")
+
+        assert response.status_code == 503
+        message = response.json()["error"]["message"]
+        assert "concurrent run slots are in use" in message
+        assert "retry" in message
+
+    def test_a_refused_run_keeps_its_state_and_is_retryable(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        """The refusal must not fail or advance the run - that is what makes
+        retrying safe rather than a second chance at a broken run."""
+        slots = RunSlots(1)
+        pipeline_client.pipeline_state["slots"] = slots
+        run = _create(pipeline_client, scenario_ids)
+
+        with slots.hold_sync():
+            assert pipeline_client.post(f"{BASE}/{run['run_id']}/start").status_code == 503
+
+        after = pipeline_client.get(f"{BASE}/{run['run_id']}").json()
+        assert after["status"] == "created"
+        assert after["outcome"] is None
+        assert after["caller_turns"] == 0
+        assert after["error"] is None
+
+        # And once the slot is free, the same request succeeds.
+        resumed = pipeline_client.post(f"{BASE}/{run['run_id']}/start")
+        assert resumed.status_code == 200
+        assert resumed.json()["caller_turns"] >= 1
+
+    def test_the_refusal_releases_nothing_it_did_not_take(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        """A refused request that decremented the counter on its way out would
+        hand the next caller phantom capacity."""
+        slots = RunSlots(1)
+        pipeline_client.pipeline_state["slots"] = slots
+        run = _create(pipeline_client, scenario_ids)
+
+        with slots.hold_sync():
+            for _ in range(3):
+                assert pipeline_client.post(f"{BASE}/{run['run_id']}/start").status_code == 503
+            assert slots.in_use == 1
+
+        assert slots.in_use == 0
+        assert slots.available == 1
+
+    def test_a_completed_run_releases_its_slot(
+        self,
+        pipeline_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+        wav: bytes,
+    ) -> None:
+        slots = RunSlots(1)
+        pipeline_client.pipeline_state["slots"] = slots
+        pipeline_client.pipeline_state["adapter"] = ScriptedBotAdapter(
+            [wav] * 4, exhausted_is_error=False
+        )
+        run = _create(pipeline_client, scenario_ids, mode="audio_fixture_test")
+        assert pipeline_client.post(f"{BASE}/{run['run_id']}/start").status_code == 200
+        assert slots.in_use == 0
+        assert slots.peak_in_use == 1
+
+    def test_a_failed_run_releases_its_slot(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        """A run that ends `failed` must still give the slot back, or a few bad
+        scenarios would wedge the server."""
+        slots = RunSlots(1)
+        pipeline_client.pipeline_state["slots"] = slots
+        pipeline_client.pipeline_state["adapter"] = ScriptedBotAdapter(
+            [b"this is not audio at all"]
+        )
+        run = _create(pipeline_client, scenario_ids, mode="audio_fixture_test")
+        body = pipeline_client.post(f"{BASE}/{run['run_id']}/start").json()
+        assert body["status"] == "failed"
+        assert slots.in_use == 0
+        assert slots.available == 1
+
+    def test_supplying_bot_audio_does_not_refuse_itself(
+        self,
+        pipeline_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+        wav: bytes,
+    ) -> None:
+        """The re-entrancy case over HTTP: `supply_bot_audio` holds a slot and
+        then drives the run on, which must not 503 against its own slot even
+        when the limit is one."""
+        slots = RunSlots(1)
+        pipeline_client.pipeline_state["slots"] = slots
+        pipeline_client.pipeline_state["adapter"] = ManualBotAdapter()
+        run = _create(pipeline_client, scenario_ids, mode="external_bot_test", bot_adapter="manual")
+        pipeline_client.post(f"{BASE}/{run['run_id']}/start")
+
+        response = pipeline_client.post(
+            f"{BASE}/{run['run_id']}/bot-audio",
+            files={"audio": ("reply.wav", wav, "audio/wav")},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["run"]["bot_turns"] >= 1
+        assert slots.in_use == 0
+
+    def test_cancelling_a_waiting_run_leaves_no_slot_held(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        slots = RunSlots(1)
+        pipeline_client.pipeline_state["slots"] = slots
+        pipeline_client.pipeline_state["adapter"] = ManualBotAdapter()
+        run = _create(pipeline_client, scenario_ids, mode="external_bot_test", bot_adapter="manual")
+        pipeline_client.post(f"{BASE}/{run['run_id']}/start")
+        assert slots.in_use == 0
+
+        assert pipeline_client.post(f"{BASE}/{run['run_id']}/cancel").status_code == 200
+        assert slots.in_use == 0
+
+    def test_the_503_is_documented_on_the_start_endpoint(self, pipeline_client: TestClient) -> None:
+        paths = pipeline_client.get("/openapi.json").json()["paths"]
+        responses = paths[f"{BASE}/{{run_id}}/start"]["post"]["responses"]
+        assert "503" in responses
+        assert "retry" in responses["503"]["description"]
+
+    def test_the_start_endpoint_documents_that_it_does_not_queue(
+        self, pipeline_client: TestClient
+    ) -> None:
+        paths = pipeline_client.get("/openapi.json").json()["paths"]
+        description = paths[f"{BASE}/{{run_id}}/start"]["post"]["description"]
+        assert "PIPELINE_MAX_CONCURRENT_RUNS" in description
+        assert "rather than queueing" in description
 
 
 class TestOpenAPI:

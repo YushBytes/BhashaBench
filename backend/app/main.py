@@ -38,6 +38,7 @@ from app.pipeline.errors import (
     PipelineConfigurationError,
     PipelineError,
     RunCancelledError,
+    RunCapacityExhaustedError,
     RunNotActiveError,
 )
 from app.schemas.common import ErrorDetail, ErrorResponse, HealthResponse, ServiceIdentity
@@ -167,6 +168,9 @@ _SPEECH_STATUS: dict[type[SpeechError], int] = {
 
 
 _PIPELINE_STATUS: dict[type[PipelineError], int] = {
+    # Temporary and about the server's capacity, not the request: the run was
+    # not started and keeps its state, so retrying later is the right move.
+    RunCapacityExhaustedError: status.HTTP_503_SERVICE_UNAVAILABLE,
     # A configuration the engine cannot honour is the request's fault: an
     # unimplemented mode, an unknown adapter, a run that is not waiting for
     # audio. 422, not 500.

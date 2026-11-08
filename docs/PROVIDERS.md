@@ -86,11 +86,12 @@ was nothing to contact: **neither shipping adapter opens a socket.**
 
 | Capability | Status | How it was established |
 |------------|--------|------------------------|
-| Multi-turn audio workflow, offline | ✅ **Verified offline** | 238 tests; synthesis, degradation, storage, validation and transcription all run for real with the providers faked |
+| Multi-turn audio workflow, offline | ✅ **Verified offline** | 288 tests; synthesis, degradation, storage, validation and transcription all run for real with the providers faked |
 | Degradation reproducibility | ✅ **Verified offline** | Byte-identical output per profile for a fixed seed |
 | Signal-to-noise accuracy | ✅ **Verified offline** | Measured by isolating the noise; within 0.5 dB across seven targets |
 | Original artefact preservation | ✅ **Verified offline** | Both variants stored; the processed file names its source |
 | Path-traversal resistance | ✅ **Verified offline** | An uploaded filename reaches no path |
+| Concurrent-run limit | ✅ **Verified offline** | Phase 7.1. Never exceeded under forced overlap; released on completion, exception, cancellation and timeout |
 | Timbre and Prisma through the existing services | ✅ **Verified offline** | With the offline fakes, through the Phase 4/5 service layer - no second client |
 | A live Gnani call inside a pipeline run | ❌ **Not tested** | None was authorised, and an offline run needs none |
 | A real voice bot conversation | ❌ **Not tested** | No external bot endpoint was available |

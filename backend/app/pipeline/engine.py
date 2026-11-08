@@ -35,6 +35,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -54,6 +56,7 @@ from app.core.config import Settings
 from app.models.call_session import CallSession
 from app.models.test_run import RunStatus, TestRun
 from app.pipeline.bots.protocol import BotAdapter, BotReply
+from app.pipeline.concurrency import RunSlots
 from app.pipeline.degradation import (
     NoiseProfile,
     degrade,
@@ -322,6 +325,7 @@ class RunEngine:
         artefacts: AudioArtefactStore,
         stt_provider: str | None = None,
         tts_provider: str | None = None,
+        slots: RunSlots | None = None,
     ) -> None:
         self._session = session
         self._orchestrator = orchestrator
@@ -335,6 +339,19 @@ class RunEngine:
         # engine already knows these names.
         self._stt_provider = stt_provider
         self._tts_provider = tts_provider
+        # `None` means unlimited, which is what a direct caller gets unless it
+        # asks otherwise - a unit test driving one run should not have to think
+        # about admission control. The API always passes the process-wide
+        # limiter, because that is the only scope at which a limit limits
+        # anything.
+        self._slots = slots
+        # Re-entrancy. `supply_bot_audio` does its own work and then calls
+        # `run_to_completion`, so without this the inner call would be refused
+        # by the slot the outer call is already holding - a self-inflicted 503
+        # under no load at all. One engine instance serves one request and
+        # therefore one run, so holding at most one slot per instance is the
+        # correct accounting.
+        self._holds_slot = False
 
     # -- Lifecycle ----------------------------------------------------------
 
@@ -511,18 +528,52 @@ class RunEngine:
 
     # -- Execution ----------------------------------------------------------
 
+    @asynccontextmanager
+    async def _admitted(self, run_id: uuid.UUID) -> AsyncIterator[None]:
+        """Hold a concurrency slot for the duration of the block.
+
+        A no-op when no limiter is configured, and a no-op when this engine
+        already holds a slot - see `_holds_slot`. The `finally` is what releases
+        on every exit: normal return, an exception, `asyncio.CancelledError`
+        and a timeout all unwind through this frame.
+
+        Raises:
+            RunCapacityExhaustedError: every slot is in use.
+        """
+        if self._slots is None or self._holds_slot:
+            yield
+            return
+
+        async with self._slots.hold():
+            self._holds_slot = True
+            try:
+                yield
+            finally:
+                self._holds_slot = False
+
     async def run_to_completion(self, run_id: uuid.UUID) -> RunReport:
         """Execute turns until the run reaches a terminal state.
 
-        Bounded three ways, because one bound is never enough: the caller's own
-        turn budget, this run's recorded budget, and a wall-clock timeout over
-        the whole run. The loop also stops the moment a turn reports the
-        conversation finished.
+        Bounded four ways, because one bound is never enough: the caller's own
+        turn budget, this run's recorded budget, a wall-clock timeout over the
+        whole run, and - across runs rather than within one - the concurrency
+        limit. The loop also stops the moment a turn reports the conversation
+        finished.
 
         A `BotAudioPendingError` is not a failure - it leaves the run `running`
         and returns, which is how the manual adapter's "waiting for the
         operator" state is expressed. The caller polls or posts audio.
+
+        Raises:
+            RunCapacityExhaustedError: no concurrency slot was free. The run is
+                untouched - not started, not failed - so retrying later is
+                safe.
         """
+        async with self._admitted(run_id):
+            return await self._execute(run_id)
+
+    async def _execute(self, run_id: uuid.UUID) -> RunReport:
+        """Drive the turn loop. Admission has already been granted."""
         run, meta = self._load_active(run_id)
         meta["status"] = PipelineStatus.INITIALIZING.value
         repo.mark_running(self._session, run, meta)
@@ -1096,7 +1147,15 @@ class RunEngine:
             NotFoundError: no such run.
             RunNotActiveError: the run has already finished.
             PipelineConfigurationError: the run is not waiting for audio.
+            RunCapacityExhaustedError: no concurrency slot was free.
         """
+        async with self._admitted(run_id):
+            return await self._supply_bot_audio(run_id, audio, content_type)
+
+    async def _supply_bot_audio(
+        self, run_id: uuid.UUID, audio: bytes, content_type: str
+    ) -> RunReport:
+        """Ingest externally supplied audio. Admission already granted."""
         run, meta = self._load_active(run_id)
         awaiting = meta.get("awaiting_bot_audio_for_turn")
         if awaiting is None:
@@ -1150,7 +1209,9 @@ class RunEngine:
             artefacts=artefacts,
         )
         if ingested:
-            # Carry on until the next thing that needs input, or the end.
+            # Carry on until the next thing that needs input, or the end. The
+            # slot this method already holds covers it: `_admitted` is
+            # re-entrant, so this does not refuse itself.
             await self.run_to_completion(run_id)
         return self.report(run_id)
 

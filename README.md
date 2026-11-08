@@ -66,7 +66,9 @@ conversation scoring.
 > synthesises it, a reproducible degradation engine makes it sound like a phone
 > call, a bot adapter carries it, and Prisma transcribes the reply. Nine
 > endpoints under `/api/v1/test-runs`, five noise profiles, both the original
-> and the degraded audio preserved for every turn.
+> and the degraded audio preserved for every turn, and a process-wide limit on
+> how many runs execute at once - beyond it `POST /start` answers 503 rather
+> than queueing.
 >
 > Every run records an **execution mode**, and that is the honesty control:
 > `offline_simulation` moves no audio, `audio_fixture_test` runs every stage
@@ -272,7 +274,7 @@ BhashaBench/
 │   │   │                      default sends audio nowhere
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 1907 tests across 32 modules
+│   ├── tests/                 1957 tests across 33 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -438,7 +440,7 @@ their phase lands.
 | `CALLER_SYNTHESISE_AUDIO` | Synthesise caller audio per turn. Off deliberately — with `SPEECH_PROVIDER=timbre` every turn is a billable call. The pipeline forces it on for runs that move audio | `false` |
 | `PIPELINE_BOT_ADAPTER` | Default bot adapter. Both options send audio nowhere, which is why one is the default | `scripted` |
 | `PIPELINE_RUN_TIMEOUT_SECONDS` | Wall-clock ceiling on one run | `600.0` |
-| `PIPELINE_MAX_CONCURRENT_RUNS` | Bounds provider spend and memory | `2` |
+| `PIPELINE_MAX_CONCURRENT_RUNS` | Bounds provider spend and memory. Enforced per process: `POST /start` answers 503 beyond it rather than queueing | `2` |
 | `PIPELINE_NOISE_SEED` | Default degradation seed, fixed so a run is reproducible | `42` |
 | `PIPELINE_NOISE_PROFILE` | Profile for runs that name none; a scenario's own wins | `clean` |
 
@@ -529,7 +531,7 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite has **1907 tests** in thirty-two modules. 1866 run by
+The backend suite has **1957 tests** in thirty-three modules. 1916 run by
 default; the 41 live provider tests are deselected unless you opt in:
 
 | Module | Tests | Covers |
@@ -564,7 +566,8 @@ default; the 41 live provider tests are deselected unless you opt in:
 | `test_pipeline_degradation.py` | 87 | The DSP: resampling, channel conversion, bandpass, noise at a measured SNR, clipping, packet loss, every profile, reproducibility from a seed |
 | `test_pipeline_bots.py` | 35 | The bot adapter protocol, both adapters and the registry - including that neither contacts anything and the default sends audio nowhere |
 | `test_pipeline_engine.py` | 61 | Multi-turn audio runs against real PostgreSQL: the full workflow, every failure path, cancellation, the manual flow, reproducibility |
-| `test_pipeline_api.py` | 55 | The nine test-run routes: creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, OpenAPI |
+| `test_pipeline_api.py` | 64 | The nine test-run routes: creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, the 503 at the concurrency limit, OpenAPI |
+| `test_pipeline_concurrency.py` | 41 | The admission limiter: the configured maximum is never exceeded, capacity frees up for the next run, and exceptions, cancellation and timeouts all release it |
 | `test_speech_live.py` | 26 | **Opt-in, billable.** Real Gnani Timbre calls. Skipped unless `SPEECH_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
 
 ```bash
@@ -593,7 +596,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 1866 passed, 41 skipped in 77.04s ================
+================ 1916 passed, 41 skipped in 78.70s ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
