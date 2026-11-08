@@ -9,7 +9,7 @@ BhashaBench is an automated testing and benchmarking platform for
 Indian-language voice bots. It is being built in **15 controlled phases**; see
 `docs/DEVELOPMENT_ROADMAP.md`.
 
-**Phases 1 to 6 are complete.** Phase 7 has not started.
+**Phases 1 to 7 are complete.** Phase 8 has not started.
 
 | Phase | Status |
 |-------|--------|
@@ -19,7 +19,8 @@ Indian-language voice bots. It is being built in **15 controlled phases**; see
 | 4 — Speech to text (Gnani Prisma) | ✅ Complete |
 | 5 — Text to speech (Gnani Timbre) | ✅ Complete |
 | 6 — Caller simulation (deterministic) | ✅ Complete — Evon **not** integrated |
-| 7–15 | ⬜ Not started |
+| 7 — End-to-end voice pipeline | ✅ Complete — no live call, no real bot |
+| 8–15 | ⬜ Not started |
 
 ## The two rules that matter most
 
@@ -34,9 +35,11 @@ Indian-language voice bots. It is being built in **15 controlled phases**; see
 ## Phase discipline
 
 Do not implement functionality belonging to a future phase, even if it seems
-convenient. A pull request that does will be asked to split. Phase 7+ work —
-audio degradation, telephony, full orchestration, evaluation — is explicitly
-out of scope until its phase.
+convenient. A pull request that does will be asked to split. Phase 8+ work —
+telephony, multi-scenario orchestration, evaluation — is explicitly out of
+scope until its phase. In particular, do not add a Twilio client or any
+telephony bridge, and do not set `CallSession`'s `DIALING`, `NO_ANSWER` or
+`BUSY` statuses: an offline simulation must not claim a telephony state.
 
 **Do not add a Gnani Evon client, and do not invent its endpoints or
 credentials.** Phase 6's feasibility gate established that no Gnani
@@ -100,6 +103,10 @@ caller/        the caller engine (Phase 6): state machine, transcript
 caller/providers/
                one caller strategy per module. Deterministic only; there is
                no Evon adapter and adding a non-functional one is forbidden
+pipeline/      the end-to-end voice pipeline (Phase 7): run engine, audio
+               degradation, execution modes, artefact records
+pipeline/bots/ one bot adapter per module. Neither shipping adapter opens a
+               socket, and the default is the one that sends audio nowhere
 ```
 
 - Route handlers stay thin. No `select()` in a route, no HTTP concepts in a
@@ -238,6 +245,46 @@ paths put a string into `turn_metadata`, which is also returned on the API
 surface. Pass it through `redact` — these two sites shipped unredacted once,
 the same class of defect Phase 4 fixed twice.
 
+### The pipeline
+
+Full design in `docs/PIPELINE.md`. Five rules that are easy to break:
+
+**The execution mode is the honesty control.** `OFFLINE_SIMULATION` moves no
+audio, `AUDIO_FIXTURE_TEST` runs every stage with the bot stubbed, and only
+`EXTERNAL_BOT_TEST` may be described as testing a bot. `TELEPHONY_TEST` exists
+in the enum and is excluded from `IMPLEMENTED_MODES`, so a run cannot be
+created in it — an enum member that cannot be used is the honest record of the
+gap. Do not add it to that set until telephony genuinely exists.
+
+**`bot_audio_externally_received` must stay computed from the replies, not from
+the mode.** A single fixture reply clears it permanently, which is what makes a
+mislabelled `external_bot_test` visible. Deriving it from the requested mode
+would turn it into a restatement of the label it exists to check.
+
+**The engine wraps Phase 6; it does not reimplement it.** `next_caller_turn`
+decides and synthesises, `submit_bot_audio` transcribes and persists. The
+engine owns the degradation, the adapter exchange and the audio validation
+between them. Two conversation engines would disagree eventually.
+
+**The original artefact always survives.** `degrade()` returns new bytes and
+writes nothing, and a processed artefact records `derived_from`. A degraded file
+whose source is gone is not evidence. The variant suffix is a whitelist, like
+every other path component — no caller-supplied string reaches a filename.
+
+**A seed is required for anything stochastic**, enforced in
+`DegradationConfig.validate`. Noise is scaled from the signal's own RMS so the
+stated SNR holds for that utterance, and the achieved ratio is asserted to
+better than 0.5 dB rather than trusted. Nothing here claims simulated noise is
+a field recording.
+
+**Three failures that must not be merged:** the bot said nothing (empty
+transcript, a bot defect), we could not transcribe it (`content=None` plus a
+`transcription_error`, our problem, the run continues), and the audio was not
+decodable (the run fails `audio_validation_failed`). On the manual endpoint a
+malformed *upload* is refused with a 4xx and leaves the run waiting, so the
+operator can retry — a mistyped filename is not a reason to discard a
+conversation.
+
 ### Front ends share services, not messages
 
 The API and the CLI both call `services/`. A domain error that suggests a
@@ -293,7 +340,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # whole suite (1669 tests, 41 live ones deselected)
+pytest                                  # whole suite (1907 tests, 41 live ones deselected)
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```
@@ -356,6 +403,7 @@ ruff check . && ruff format --check .   # from the repository root
 | `docs/CLI.md` | a command, flag, exit code or output format changes |
 | `docs/PROVIDERS.md` | a provider contract, capability, limitation or verification status changes |
 | `docs/CALLER.md` | a caller state, rule, validation check, limit or endpoint changes |
+| `docs/PIPELINE.md` | an execution mode, degradation profile, bot adapter, artefact rule or run endpoint changes |
 | `backend/tests/fixtures/audio/README.md` | an audio fixture is added or changed |
 | `scenarios/README.md` | a reference scenario is added or changed |
 | `docs/DEVELOPMENT_ROADMAP.md` | a phase's scope or status changes |

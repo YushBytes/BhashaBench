@@ -4,9 +4,10 @@ How BhashaBench talks to a speech engine - **recognition** (Gnani Prisma,
 Phase 4) and **synthesis** (Gnani Timbre, Phase 5) - what each actually
 supports, and how to run them with or without credentials.
 
-The **caller** provider family (Phase 6) follows the same pattern but speaks to
-no vendor at all; its verification status is below and its design is in
-[CALLER.md](CALLER.md).
+Two further provider families follow the same pattern and speak to no vendor at
+all: the **caller** (Phase 6), whose design is in [CALLER.md](CALLER.md), and
+the **bot adapters** (Phase 7), in [PIPELINE.md](PIPELINE.md). Both have
+verification sections below.
 
 ---
 
@@ -77,6 +78,35 @@ provider is a rule engine that runs entirely in process.
 not produce it. Reviewed phrase tables exist for `ta-IN`, `hi-IN` and `en-IN`
 only, and a scenario in any other catalogue language is refused rather than
 answered in English.
+
+### Bot adapters — the pipeline's view of a voice bot (Phase 7)
+
+No live call was made for Phase 7, and no real voice bot was contacted. There
+was nothing to contact: **neither shipping adapter opens a socket.**
+
+| Capability | Status | How it was established |
+|------------|--------|------------------------|
+| Multi-turn audio workflow, offline | ✅ **Verified offline** | 238 tests; synthesis, degradation, storage, validation and transcription all run for real with the providers faked |
+| Degradation reproducibility | ✅ **Verified offline** | Byte-identical output per profile for a fixed seed |
+| Signal-to-noise accuracy | ✅ **Verified offline** | Measured by isolating the noise; within 0.5 dB across seven targets |
+| Original artefact preservation | ✅ **Verified offline** | Both variants stored; the processed file names its source |
+| Path-traversal resistance | ✅ **Verified offline** | An uploaded filename reaches no path |
+| Timbre and Prisma through the existing services | ✅ **Verified offline** | With the offline fakes, through the Phase 4/5 service layer - no second client |
+| A live Gnani call inside a pipeline run | ❌ **Not tested** | None was authorised, and an offline run needs none |
+| A real voice bot conversation | ❌ **Not tested** | No external bot endpoint was available |
+| Telephony | ⬜ **Not implemented** | `telephony_test` is refused |
+| Recognition accuracy under degradation | ⚠️ **Not measured** | The fixtures contain no speech with reviewed ground truth |
+
+**There is no adapter for any third-party bot API.** A real integration is an
+adapter written against that bot's published interface and registered in
+`app/pipeline/bots/registry.py` - the same rule as the speech providers, for
+the same reason. The default adapter is the one that sends audio nowhere,
+because §7 requires the default configuration to be safe.
+
+**Simulated noise is not a recording.** `heavy_background_noise` is shaped
+white noise at 7 dB SNR over a 300-3400 Hz channel. This repository contains no
+field recordings, and the profiles are named for severity because severity is
+what they control.
 
 ### What "verified" does and does not mean here
 

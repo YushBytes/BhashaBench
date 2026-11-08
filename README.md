@@ -61,11 +61,33 @@ conversation scoring.
 > has had a conversation with one. Design and limits in
 > [docs/CALLER.md](docs/CALLER.md).
 >
-> **No calls are placed and no scores are produced yet.** Telephony, audio
-> degradation and automated evaluation arrive in later phases — see
-> [the roadmap](docs/DEVELOPMENT_ROADMAP.md). Phase 6 is the first to write to
-> the `TestRun`, `CallSession` and `ConversationTurn` tables, and it writes
-> only conversations it ran itself against a scripted or supplied bot reply;
+> **Phase 7 — End-to-end voice pipeline.** A scenario becomes a multi-turn
+> conversation with real audio: the Phase 6 caller decides what to say, Timbre
+> synthesises it, a reproducible degradation engine makes it sound like a phone
+> call, a bot adapter carries it, and Prisma transcribes the reply. Nine
+> endpoints under `/api/v1/test-runs`, five noise profiles, both the original
+> and the degraded audio preserved for every turn.
+>
+> Every run records an **execution mode**, and that is the honesty control:
+> `offline_simulation` moves no audio, `audio_fixture_test` runs every stage
+> with the bot's replies read from fixtures, and only `external_bot_test` may
+> be described as testing a bot. `telephony_test` exists in the vocabulary and
+> **cannot be used** - a run in that mode is refused, because no telephony
+> exists.
+>
+> **Not tested:** no live Gnani call was made through the pipeline, and **no
+> real voice bot has been tested** - no external bot endpoint was available.
+> **Not measured:** recognition accuracy under degradation. The audio fixtures
+> contain no speech with reviewed ground truth, so no accuracy claim is
+> possible. Simulated noise is shaped white noise at a stated signal-to-noise
+> ratio, **not** a field recording. Design and limits in
+> [docs/PIPELINE.md](docs/PIPELINE.md).
+>
+> **No calls are placed and no scores are produced yet.** Telephony and
+> automated evaluation arrive in later phases — see
+> [the roadmap](docs/DEVELOPMENT_ROADMAP.md). Phases 6 and 7 write to the
+> `TestRun`, `CallSession` and `ConversationTurn` tables, and only for
+> conversations they ran themselves against a scripted or supplied bot reply;
 > Phase 4 still persists no transcript of its own.
 > Nothing in this README should be read as a claim that an unimplemented
 > feature works.
@@ -122,7 +144,7 @@ explicit criteria.
 
 ## What BhashaBench will do
 
-Phases 1 to 6 are delivered. Nothing else below is implemented yet; each item
+Phases 1 to 7 are delivered. Nothing else below is implemented yet; each item
 names the phase that delivers it.
 
 | Capability | What it does | Phase |
@@ -131,7 +153,7 @@ names the phase that delivers it.
 | ~~Speech to text~~ | **Done (Phase 4).** Transcribe bot audio via Gnani Prisma — batch and streaming, behind a provider-independent interface | 4 |
 | ~~Text to speech~~ | **Done (Phase 5).** Synthesise caller speech via Gnani Timbre - 13 voices, 10 languages, telephony-rate audio | 5 |
 | ~~Simulated callers~~ | **Done (Phase 6).** A caller that pursues a goal rather than replaying a script - deterministic and rule-based. Gnani Evon is **not** integrated: no documented API access exists | 6 |
-| Audio degradation | Background noise, packet loss, jitter and telephony codecs, applied from a fixed seed | 7 |
+| ~~Audio degradation~~ | **Done (Phase 7).** Band-limiting, background noise at a measured SNR, clipping, level and packet loss, reproducible from a fixed seed. Simulated conditions, not field recordings | 7 |
 | Live telephony | Outbound calls with Twilio bidirectional media streaming and barge-in handling | 8 |
 | Orchestration | Run a full conversation end to end and persist every turn | 9 |
 | Automated scoring | Per-criterion pass/fail with reasoning, plus latency, word error rate and task completion | 10 |
@@ -192,6 +214,8 @@ Further reading:
 - [`docs/PROVIDERS.md`](docs/PROVIDERS.md) — provider contracts and what is
   actually verified
 - [`docs/CALLER.md`](docs/CALLER.md) — the caller engine: states, rules, limits
+- [`docs/PIPELINE.md`](docs/PIPELINE.md) — the voice pipeline: execution modes,
+  degradation, bot adapters
 
 ---
 
@@ -242,9 +266,13 @@ BhashaBench/
 │   │   │   │                  transcript analysis, validation, orchestration
 │   │   │   └── providers/     deterministic rule engine. No Evon adapter -
 │   │   │                      see docs/CALLER.md for why
+│   │   ├── pipeline/          end-to-end voice pipeline (Phase 7): run engine,
+│   │   │   │                  audio degradation, execution modes
+│   │   │   └── bots/          bot adapters. Neither opens a socket; the
+│   │   │                      default sends audio nowhere
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 1669 tests across 28 modules
+│   ├── tests/                 1907 tests across 32 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -265,6 +293,7 @@ BhashaBench/
 │   ├── CLI.md
 │   ├── DATABASE.md
 │   ├── DEVELOPMENT_ROADMAP.md
+│   ├── PIPELINE.md
 │   ├── PROVIDERS.md
 │   └── SCENARIO_FORMAT.md
 ├── .github/workflows/         CI pipelines                     (Phase 14)
@@ -406,7 +435,12 @@ their phase lands.
 | `CALLER_MAX_MESSAGE_CHARS` | Longest caller utterance accepted from a provider | `600` |
 | `CALLER_TURN_TIMEOUT_SECONDS` | Ceiling on one full turn, synthesis and transcription included | `90.0` |
 | `CALLER_AUDIO_STORAGE_DIR` | Conversation audio directory; `storage/` is git-ignored | `storage/caller-audio` |
-| `CALLER_SYNTHESISE_AUDIO` | Synthesise caller audio per turn. Off deliberately — with `SPEECH_PROVIDER=timbre` every turn is a billable call | `false` |
+| `CALLER_SYNTHESISE_AUDIO` | Synthesise caller audio per turn. Off deliberately — with `SPEECH_PROVIDER=timbre` every turn is a billable call. The pipeline forces it on for runs that move audio | `false` |
+| `PIPELINE_BOT_ADAPTER` | Default bot adapter. Both options send audio nowhere, which is why one is the default | `scripted` |
+| `PIPELINE_RUN_TIMEOUT_SECONDS` | Wall-clock ceiling on one run | `600.0` |
+| `PIPELINE_MAX_CONCURRENT_RUNS` | Bounds provider spend and memory | `2` |
+| `PIPELINE_NOISE_SEED` | Default degradation seed, fixed so a run is reproducible | `42` |
+| `PIPELINE_NOISE_PROFILE` | Profile for runs that name none; a scenario's own wins | `clean` |
 
 ### Declared for later phases
 
@@ -419,7 +453,7 @@ their phase lands.
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | 8 |
 | `PUBLIC_BASE_URL` | 8 |
 | `ALLOWED_BOT_NUMBERS`, `MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS` | 8 |
-| `AUDIO_STORAGE_PATH`, `NOISE_MASTER_SEED` | 7 |
+| `AUDIO_STORAGE_PATH`, `NOISE_MASTER_SEED` | superseded by `CALLER_AUDIO_STORAGE_DIR` and `PIPELINE_NOISE_SEED` in Phase 7 |
 | `JUDGE_RETRIES`, `PASS_THRESHOLD` | 10 |
 
 No endpoint paths, authentication schemes or request parameters for
@@ -495,7 +529,7 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite has **1669 tests** in twenty-eight modules. 1628 run by
+The backend suite has **1907 tests** in thirty-two modules. 1866 run by
 default; the 41 live provider tests are deselected unless you opt in:
 
 | Module | Tests | Covers |
@@ -527,6 +561,10 @@ default; the 41 live provider tests are deselected unless you opt in:
 | `test_caller_service.py` | 34 | Decision validation, instruction-leak and invented-identifier rejection, synthesis, credential redaction in an error |
 | `test_caller_orchestrator.py` | 39 | Multi-turn conversations against real PostgreSQL: success, every failure reason, determinism, persistence, transcription failure, audio artefacts |
 | `test_caller_api.py` | 43 | The caller routes through `TestClient`: creation, turns, text and audio submission, termination, limits, prompt injection, OpenAPI |
+| `test_pipeline_degradation.py` | 87 | The DSP: resampling, channel conversion, bandpass, noise at a measured SNR, clipping, packet loss, every profile, reproducibility from a seed |
+| `test_pipeline_bots.py` | 35 | The bot adapter protocol, both adapters and the registry - including that neither contacts anything and the default sends audio nowhere |
+| `test_pipeline_engine.py` | 61 | Multi-turn audio runs against real PostgreSQL: the full workflow, every failure path, cancellation, the manual flow, reproducibility |
+| `test_pipeline_api.py` | 55 | The nine test-run routes: creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, OpenAPI |
 | `test_speech_live.py` | 26 | **Opt-in, billable.** Real Gnani Timbre calls. Skipped unless `SPEECH_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
 
 ```bash
@@ -555,7 +593,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 1628 passed, 41 skipped in 51.00s ================
+================ 1866 passed, 41 skipped in 77.04s ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -645,6 +683,15 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 | `GET` | `/api/v1/caller/conversations/{id}/turns` | Every turn of the conversation, in order |
 | `POST` | `/api/v1/caller/conversations/{id}/terminate` | Ends a conversation; outcome `aborted`, which is not a bot defect |
 | `GET` | `/api/v1/caller/providers` | Caller providers with their capabilities and limits, plus an `evon_status` field stating that Gnani Evon is not implemented |
+| `POST` | `/api/v1/test-runs` | 201. Creates a test run for one scenario and records its execution mode. Executes nothing |
+| `POST` | `/api/v1/test-runs/{id}/start` | Runs turns until terminal, or until the run needs audio from outside. A run left `running` with `awaiting_bot_audio_for_turn` is waiting, not failed |
+| `POST` | `/api/v1/test-runs/{id}/bot-audio` | Supplies the bot's reply as audio; it is validated, transcribed and the run continues |
+| `POST` | `/api/v1/test-runs/{id}/cancel` | Stops a run. Outcome `cancelled`, never `failed` - an operator's decision is not a finding about the bot |
+| `GET` | `/api/v1/test-runs/{id}` | State, counters and outcome |
+| `GET` | `/api/v1/test-runs/{id}/turns` | Every utterance of the run's conversation |
+| `GET` | `/api/v1/test-runs/{id}/artifacts` | Audio references and measured metadata. A degraded artefact names the original it came from |
+| `GET` | `/api/v1/test-runs/{id}/report` | Full evidence: state, artefacts, caller state transitions and every stage with its measured duration. Measurements, not scores |
+| `GET` | `/api/v1/test-runs/bot-adapters/available` | Bot adapters with their capabilities, plus the execution modes a run may use |
 | `WS` | `/api/v1/transcription/stream` | Streaming transcription. Send PCM frames, receive `started` / `final_transcript` / `completed` events. Not in the OpenAPI document - OpenAPI 3.1 cannot describe a WebSocket; see [docs/PROVIDERS.md](docs/PROVIDERS.md) |
 | `POST` | `/api/v1/suites/{suite_id}/scenarios/import` | Bulk import from a bundle. Takes `{"yaml": ..., "dry_run": ..., "atomic": ...}` |
 | `GET` | `/api/v1/suites/{suite_id}/scenarios/export` | The suite as a deterministic, re-importable bundle |

@@ -1,0 +1,543 @@
+# The end-to-end voice testing pipeline
+
+How a scenario becomes a multi-turn conversation with real audio: what runs,
+what is simulated, and which of the two any given run actually did.
+
+---
+
+## Execution modes — read this first
+
+The mode is the honesty control for the whole phase. Every run records one,
+every report repeats it, and nothing infers it.
+
+| Mode | Audio | The bot's side comes from | What a result establishes |
+|------|-------|---------------------------|---------------------------|
+| `offline_simulation` | none | text replies | The caller's logic. **Nothing about audio.** |
+| `audio_fixture_test` | real, end to end | pre-recorded or generated audio files | Synthesis, degradation, storage and transcription work together. **Nothing about any particular voice bot.** |
+| `external_bot_test` | real, end to end | audio an operator obtained from the bot under test | The only mode that may be described as testing a bot |
+| `telephony_test` | — | — | **Not implemented.** Creating a run in this mode is refused |
+
+Two mechanisms keep the labels honest rather than aspirational:
+
+- **`telephony_test` cannot be used.** The enum member exists so the
+  vocabulary is complete and the gap is visible where someone would look for
+  it, but `IMPLEMENTED_MODES` excludes it and `RunConfig.validate` refuses it.
+- **`bot_audio_externally_received`** is true only when *every* reply in a run
+  came from outside this process. A fixture reply clears it permanently, so a
+  run labelled `external_bot_test` whose replies were fixtures reports `false`
+  and can be seen to be mislabelled.
+
+### What has and has not been verified
+
+No live Gnani call was made for Phase 7. The pipeline was exercised end to end
+with the offline speech and transcription fakes, which produce genuine 16-bit
+WAV, so every stage between the two providers ran for real.
+
+| | |
+|---|---|
+| Multi-turn audio workflow, offline | ✅ Verified — 238 offline tests |
+| Degradation, reproducibility, SNR accuracy | ✅ Verified — measured, see below |
+| Artefact storage, original preservation | ✅ Verified |
+| Timbre / Prisma through the existing services | ✅ Verified with the offline fakes |
+| Timbre / Prisma live in a pipeline run | ❌ Not tested — no live call was authorised or made |
+| A real voice bot conversation | ❌ Not tested — no external bot endpoint was available |
+| Telephony | ⬜ Not implemented |
+| Recognition accuracy under degradation | ❌ Not measured — the fixtures contain no speech and no reviewed ground truth |
+
+---
+
+## The turn lifecycle
+
+Phase 7 **wraps** Phase 6 rather than replacing it. The caller, its state
+machine and the transcription semantics are all the Phase 6 implementation; the
+pipeline adds the audio legs around them.
+
+```
+  orchestrator.next_caller_turn()   Phase 6: decide, synthesise, persist
+            │
+            ▼
+  read the original artefact back   Phase 7
+            │
+            ▼
+  degrade it                        Phase 7  ──▶ stored as a second artefact
+            │                                     the original is untouched
+            ▼
+  adapter.send_turn(...)            Phase 7: hand it to the bot
+            │
+            ▼
+  validate the reply's audio        Phase 7  ──▶ invalid audio is never
+            │                                     stored as a successful turn
+            ▼
+  orchestrator.submit_bot_audio()   Phase 6: Prisma, then persist
+            │
+            └──▶ the caller reacts to the transcript, and the loop repeats
+```
+
+Reading the caller's audio back off disk rather than having Phase 6 hand the
+bytes over is a deliberate small cost: it keeps `next_caller_turn`'s signature
+and Phase 6's tests untouched, and the read is a local file.
+
+**Every stage leaves an event**, including the ones that failed, with its
+measured duration. A run that broke at transcription and one that broke at
+synthesis look different in the report, which is the only way either is
+diagnosable.
+
+### Three bounds on a run
+
+One bound is never enough:
+
+1. The caller's own `budget.exhausted` rule, which closes the conversation
+   gracefully with `TURN_BUDGET_EXHAUSTED`.
+2. The engine's loop, capped at the recorded turn budget.
+3. A wall-clock timeout over the whole run (`PIPELINE_RUN_TIMEOUT_SECONDS`),
+   because a run that hangs holds a database session.
+
+A narrower `max_turns` is written into the caller's own metadata, so Phase 6's
+budget rule respects it and the caller closes itself rather than being cut off
+mid-conversation with no outcome.
+
+---
+
+## Status and outcome
+
+Two separate things, because "failed" is not a finding.
+
+**Status** — how far the run got: `created`, `initializing`, `running`,
+`completed`, `failed`, `cancelled`, `timed_out`.
+
+The `test_runs.status` column keeps Phase 2's coarser five-value lifecycle; the
+precise status lives in `run_metadata`. `to_run_status` is the single place the
+mapping lives, and `timed_out` maps to the column's `failed` — a timeout *is* a
+failure at that level of detail, and widening the enum would mean editing the
+`finished_at_matches_status` CHECK constraint that enumerates the terminal
+three.
+
+**Outcome** — why it ended:
+
+| Outcome | Means | About the bot? |
+|---------|-------|----------------|
+| `goal_achieved` | The caller got what it came for | yes |
+| `bot_refused` | The bot declined or had no record | yes |
+| `bot_unintelligible` | Nothing transcribable came back | yes |
+| `no_progress` | The bot never said anything usable | yes |
+| `turn_budget_exhausted` | Ran out of turns | yes |
+| `provider_error` | **Our** synthesis or transcription broke | **no** |
+| `audio_validation_failed` | Audio did not survive inspection | **no** |
+| `external_bot_unavailable` | The bot could not be reached | **no** |
+| `cancelled` | An operator stopped it | **no** |
+
+The last four are collected in `OUR_FAULT_OUTCOMES`. Aggregating them into a
+bot's score would blame it for our outage, so Phase 10 should exclude them from
+any quality metric; the set exists now so that decision sits where the outcomes
+are defined.
+
+An unfinished run reports `outcome: null`. It does not report a failure,
+because a run that has not happened has no result.
+
+---
+
+## Audio degradation
+
+A real Indian phone call is not a studio recording, and a bench that only ever
+feeds a bot clean 16 kHz speech measures something nobody experiences.
+
+### Every transformation is an approximation, not a measurement
+
+**These are simulated conditions.** `heavy_background_noise` is shaped white
+noise at a stated signal-to-noise ratio over a band-limited channel. It is
+**not** a recording of a market in Coimbatore, this repository contains no
+field recordings, and nothing here claims otherwise. The profiles are named for
+severity because severity is what they control.
+
+### Why there is no numpy
+
+The repository has no numeric or audio dependency — no numpy, scipy, soundfile
+or pydub — and `audioop`, which would have supplied `ratecv`, `tomono` and
+`lin2lin`, was removed from the standard library in Python 3.13. The choice was
+to add a scientific stack or to write the hundred or so lines of integer
+arithmetic these transformations actually need.
+
+One utterance is a few seconds of 8 kHz mono — tens of thousands of samples —
+so pure Python is comfortably fast enough (~30 ms for two seconds of audio
+through the heaviest profile). A dependency carried for that would be
+overengineering. If a later phase needs spectral work — a real reverb, a
+measured room impulse — that is the point to reconsider; it is not needed to
+make speech sound like a phone call.
+
+Only **16-bit PCM WAV** is accepted. Both Timbre and the offline fake produce
+it, and guessing at other widths without a decoder is how a bench starts
+reporting on audio it did not understand.
+
+### The transformations
+
+Applied in a fixed order, which mirrors a real path — a codec band-limits
+before the line adds noise, and loss happens last because it happens on the
+wire:
+
+| # | Transformation | Notes |
+|---|----------------|-------|
+| 1 | `to_mono` | Averages interleaved channels |
+| 2 | `resample` | Linear interpolation. Mono only — stereo is refused rather than mangled |
+| 3 | `bandpass` | One-pole high-pass and low-pass in cascade: a gentle 6 dB/octave roll-off, which is the honest shape for a telephone channel. A band edge above Nyquist is clamped **and reported** |
+| 4 | `add_noise` | Scaled from the signal's own RMS, so the stated ratio holds for *this* utterance |
+| 5 | `reduce_amplitude` | Quiet speech |
+| 6 | `clip` | Hard clip at a fraction of full scale; the count clipped is recorded |
+| 7 | `packet_loss` | Whole 20 ms packets, filled with silence — scattered samples would sound like crackle, not like a gap |
+
+### Profiles
+
+| Profile | Rate | Band | SNR |
+|---------|------|------|-----|
+| `clean` | unchanged | — | — |
+| `telephony_bandwidth` | 8 kHz mono | 300–3400 Hz | — |
+| `light_background_noise` | 8 kHz mono | 300–3400 Hz | 25 dB |
+| `moderate_background_noise` | 8 kHz mono | 300–3400 Hz | 15 dB |
+| `heavy_background_noise` | 8 kHz mono | 300–3400 Hz | 7 dB |
+
+The three noise profiles sit on the telephony channel, because noise on a
+wideband studio recording is not the condition being simulated. **No named
+profile applies packet loss** — it is configurable, but a profile name never
+implies a lossy network.
+
+The ratios are accurate to better than 0.5 dB, asserted across seven targets by
+isolating the noise (noisy signal minus clean signal) and measuring the real
+achieved ratio rather than restating the parameter.
+
+### Scenario environments map onto profiles
+
+A scenario names an acoustic *environment*; the engine applies a *severity*.
+`app/schemas/scenario_spec.py` defined these six names in Phase 2 with the note
+"Phase 7 implements these":
+
+| Scenario declares | Engine applies |
+|-------------------|----------------|
+| `clean` | `clean` |
+| `rural` | `light_background_noise` |
+| `indoor_fan` | `light_background_noise` |
+| `urban` | `moderate_background_noise` |
+| `market` | `heavy_background_noise` |
+| `worst_case` | `heavy_background_noise` |
+
+Several environments share a severity, which loses information — so a run
+records **both** the declared environment and the profile applied, and the
+report shows both rather than implying the environment was recreated.
+
+A scenario's declared environment wins unless the request names a profile
+explicitly: the scenario's audio section is part of the test's definition, and
+silently running it clean would report a result for a condition never applied.
+
+### Reproducibility
+
+A degraded artefact is only evidence if the same input, profile and seed
+produce the same bytes.
+
+- A seed is **required** for anything stochastic. `DegradationConfig.validate`
+  refuses noise or packet loss without one.
+- The seed is recorded on the artefact, and the default
+  (`PIPELINE_NOISE_SEED`) is fixed so a run is reproducible even when nobody
+  asked for one.
+- Byte-identical output across runs is asserted for every profile.
+
+### What is recorded
+
+Every processed artefact carries the transformation list, every parameter, the
+seed, both formats, both sample rates, both channel counts, both durations, the
+peak amplitude and the clipped-sample count. The realised packet-loss rate is
+recorded beside the requested one, because with few packets the two differ a
+lot and reporting only the request would overstate what the audio suffered.
+
+---
+
+## Artefacts
+
+Audio stays on disk under `CALLER_AUDio_STORAGE_DIR`; only a reference reaches
+the database and the API.
+
+**The original always survives.** `degrade()` returns new bytes and writes
+nothing, so the input cannot be overwritten structurally rather than by
+convention. One turn holds two files:
+
+```
+<conversation-uuid>/0000-caller-original.wav
+<conversation-uuid>/0000-caller-degraded.wav   derived_from: the line above
+<conversation-uuid>/0001-bot.wav
+```
+
+A degraded artefact names the original it came from, so the pair can be
+compared after the fact. A processed artefact without its source is not
+evidence.
+
+**Path safety.** Every component of a reference is generated or validated: a
+UUID, a non-negative turn index, a speaker enum, a whitelisted variant and a
+whitelisted suffix. No caller-supplied string reaches a path — an uploaded
+filename of `../../../../etc/passwd.wav` is simply not used — and the resolved
+path is checked to be inside the storage root before anything is written.
+
+References are **relative**. An absolute filesystem path would disclose the
+server layout and be useless to a client after a redeploy.
+
+**Artefacts are listed, not served.** A route that streamed a stored recording
+would be the obvious convenience and the wrong thing to add now: it is an
+authorisation decision — who may hear a conversation — and there is no identity
+to make it against until Phase 15.
+
+Generated audio is never committed; `storage/` is git-ignored.
+
+---
+
+## Bot adapters
+
+How the pipeline obtains the bot's side. Two ship, and **neither opens a
+socket**.
+
+| Adapter | Does | `contacts_external_system` |
+|---------|------|---------------------------|
+| `scripted` | Replays fixture audio, one payload per turn. Deterministic | `false` |
+| `manual` | Stores the caller's audio and waits for an operator to post the reply | `false` |
+
+`scripted` is the default, and that is a safety decision: §7 requires the
+default configuration not to send audio to arbitrary external destinations, so
+the default is the adapter that sends audio nowhere at all.
+
+**No third-party bot API is invented here.** A real integration is an adapter
+written against a real bot's published interface and added to `_FACTORIES` in
+`app/pipeline/bots/registry.py`. There is no plugin discovery, for the same
+reason the speech subsystems have none: "which bot produced this
+conversation?" must be answerable by reading the source.
+
+### The manual flow — how a real bot gets tested
+
+This is the honest maximum available until a bot publishes an API or telephony
+exists:
+
+1. Create a run with `mode: external_bot_test` and `bot_adapter: manual`.
+2. `POST /start`. The pipeline synthesises the caller's turn, degrades it,
+   stores it, and pauses. The run stays `running` with
+   `awaiting_bot_audio_for_turn` set — **waiting is healthy, not failed**.
+3. Play that artefact to the bot under test, however the bot is reachable, and
+   record the answer.
+4. `POST /bot-audio` with the file. It is validated, transcribed, and the run
+   continues to the next pause or to the end.
+
+So the audio exchange is genuinely with the bot under test, while the transport
+is a person rather than a protocol this project guessed at.
+
+Audio supplied this way is recorded as externally obtained, because posting it
+asserts that it came from the bot. **The pipeline cannot verify that claim and
+does not pretend to** — the report names the adapter so a reader can weigh it.
+
+A malformed upload is refused with a 4xx and **leaves the run waiting**, so the
+operator can post the right file. A bad filename is their mistake, not a reason
+to discard a conversation.
+
+---
+
+## Prisma and Timbre
+
+Both are used through the services Phases 4 and 5 built. There is no second
+adapter, no second client and no new vendor constant.
+
+**Timbre** synthesises the caller's turn, inside Phase 6's `CallerService`. The
+pipeline forces synthesis on regardless of `CALLER_SYNTHESISE_AUDIO`: a run
+that moves audio has nothing to send without it, and that setting exists to
+stop Phase 6's *text* conversations billing a provider per turn.
+
+**Prisma** transcribes the bot's reply, through
+`ConversationOrchestrator.submit_bot_audio`. That is also why there is no
+transcription code in the engine: Phase 6 already stores the artefact, calls
+the provider, and records a null-content turn with a `transcription_error` when
+the provider fails.
+
+Three failures that look alike and must not be merged:
+
+| Event | Record | Run continues? |
+|-------|--------|----------------|
+| The bot said nothing | empty transcript — a bot defect | yes |
+| We could not transcribe it | `content: null` plus `transcription_error` — our problem | yes |
+| The audio was not decodable | the run fails `audio_validation_failed` | no |
+
+A pipeline that collapsed the first two would blame the bot for its own
+deafness.
+
+Error text from a provider is redacted before it reaches `run_metadata`,
+`turn_metadata` or an API response. Provider messages have carried an
+`Authorization` header before now.
+
+### Live tests
+
+Default tests are offline and make **no** provider calls. The opt-in live tests
+from Phases 4 and 5 are unchanged and still require their environment
+variables. Nothing in Phase 7 consumes credit during an ordinary run of the
+suite.
+
+---
+
+## Evidence, not scores
+
+§11's rule, and the field descriptions on the API say so too.
+
+**Measured or counted:** caller turns, bot turns, transcription successes and
+failures, each artefact's duration, configured and observed sample rates,
+channel counts, the degradation profile and its parameters, the seed, caller
+state transitions, which rules fired, goal completion, the failure reason, the
+provider error category, and each stage's duration.
+
+**Not computed, and not claimed:** accuracy, word error rate, semantic
+correctness, or conversation quality. None is possible without a reviewed
+reference transcript — the test fixtures contain tones and generated audio, not
+speech with known ground truth — and evaluation is a later phase. A successful
+transcription means the pipeline worked, not that the bot answered well.
+
+`RunReportResponse.measurement_note` states this on the wire, so a consumer
+cannot mistake these counts for a quality metric.
+
+---
+
+## API
+
+All endpoints are under `/api/v1/test-runs`. There is **no authentication**,
+because Phases 1–6 ship none and it lands in Phase 15. Do not expose this
+service publicly before then: these endpoints write files to disk and, with a
+provider configured, spend money.
+
+| Endpoint | Does |
+|----------|------|
+| `POST /test-runs` | Creates a run (201). Executes nothing |
+| `POST /test-runs/{id}/start` | Runs turns until terminal, or until it needs external audio |
+| `POST /test-runs/{id}/bot-audio` | Supplies the bot's reply and continues the run |
+| `POST /test-runs/{id}/cancel` | Stops it; outcome `cancelled`, never `failed` |
+| `GET /test-runs/{id}` | State, counters and outcome |
+| `GET /test-runs/{id}/turns` | Every utterance, in order |
+| `GET /test-runs/{id}/artifacts` | References and measured metadata |
+| `GET /test-runs/{id}/report` | Full evidence: state, artefacts, transitions, every stage |
+| `GET /test-runs/bot-adapters/available` | Adapters, their capabilities, and the usable modes |
+
+### A fixture run, end to end
+
+```bash
+B=http://localhost:8000/api/v1/test-runs
+
+RUN=$(curl -s -X POST $B -H 'content-type: application/json' -d '{
+  "suite_id": "<uuid>",
+  "scenario_id": "<uuid>",
+  "mode": "audio_fixture_test",
+  "noise_profile": "moderate_background_noise",
+  "seed": 42
+}' | python -c 'import json,sys; print(json.load(sys.stdin)["run_id"])')
+
+curl -s -X POST $B/$RUN/start   | python -m json.tool
+curl -s     $B/$RUN/artifacts   | python -m json.tool
+curl -s     $B/$RUN/report      | python -m json.tool
+```
+
+### Status codes
+
+| Code | When |
+|------|------|
+| 404 | No such run or scenario |
+| 409 | The run has already finished, or is not ready for this request |
+| 413 | Bot audio over 10 MiB |
+| 415 | Bot audio in a container that cannot be decoded |
+| 422 | Invalid request, an unimplemented mode, an unknown adapter, or an unsupported scenario language |
+| 502 / 504 | The bot adapter was unavailable or timed out |
+
+---
+
+## Configuration
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `PIPELINE_BOT_ADAPTER` | `scripted` | Default adapter. Both options send audio nowhere |
+| `PIPELINE_RUN_TIMEOUT_SECONDS` | `600.0` | Wall-clock ceiling on one run |
+| `PIPELINE_MAX_CONCURRENT_RUNS` | `2` | Bounds provider spend and memory |
+| `PIPELINE_NOISE_SEED` | `42` | Fixed so a run is reproducible by default |
+| `PIPELINE_NOISE_PROFILE` | `clean` | For runs that name none; a scenario's own profile wins |
+
+The pipeline also reads the Phase 6 caller settings and the Phase 4/5 provider
+settings. With `TRANSCRIPTION_PROVIDER=fake` and `SPEECH_PROVIDER=fake` the
+whole pipeline runs with no credential at all, which is how the tests run.
+
+---
+
+## Persistence
+
+**No new tables and no migration.** `alembic check` reports no drift, and the
+schema is still the five tables Phase 2 created.
+
+| Concept | Row |
+|---------|-----|
+| A pipeline run | `TestRun` |
+| Its conversation | `CallSession` |
+| One utterance | `ConversationTurn` |
+
+`TestRun.run_metadata`'s own docstring says it is for "execution context
+captured at run time: tool versions, resolved audio profile, seed" — which is
+exactly what a pipeline run records. It writes there under a `pipeline`
+namespace, beside Phase 6's `caller` namespace in `call_metadata`, so a later
+phase recording its own run context cannot collide.
+
+The trade-off accepted is that run state is not queryable with a typed column.
+When a field earns an index it should be promoted to one.
+
+Two traps the repositories exist to avoid, both documented in Phase 6 and both
+still live: SQLAlchemy does not track mutation *inside* a JSONB value, so an
+in-place edit is silently dropped at flush; and the relationships are
+`lazy="raise_on_sql"`, so a related row must be loaded deliberately. The second
+one bit this phase — reaching `conversation.scenario` on a freshly created row
+worked until something committed, which made it a bug that only appeared behind
+the HTTP layer.
+
+---
+
+## Testing
+
+```bash
+pytest backend/tests/test_pipeline_degradation.py  # the DSP, profiles, SNR
+pytest backend/tests/test_pipeline_bots.py         # adapters and the registry
+pytest backend/tests/test_pipeline_engine.py       # multi-turn runs, failures
+pytest backend/tests/test_pipeline_api.py          # the HTTP surface
+```
+
+238 tests, all offline. The engine and API modules need PostgreSQL
+(`docker compose up -d db`) and never skip silently.
+
+The offline speech fake produces genuine 16-bit mono WAV, which is what makes
+the whole pipeline exercisable with real bytes through real DSP: only the two
+providers and the bot are stubs.
+
+---
+
+## Known limitations
+
+- **No live provider call has been made through the pipeline.** Phases 4 and 5
+  were verified live against Gnani; a pipeline run has not been.
+- **No real voice bot has been tested.** No external bot endpoint was
+  available. The `manual` adapter is the path for when one is.
+- **No telephony.** `telephony_test` is refused.
+- **No accuracy measurement.** The fixtures contain no speech with reviewed
+  ground truth, so no recognition claim is possible — under degradation or
+  otherwise.
+- **16-bit PCM WAV only** for degradation. MP3 and OGG bot replies can be
+  transcribed but not degraded or measured.
+- **One conversation per run.** `conversation_of` names this assumption; a
+  later phase fanning a run over many scenarios turns it into a list.
+- **Resampling is linear interpolation** and relies on the bandpass that the
+  telephony profiles apply first to limit aliasing. A profile that downsampled
+  without filtering would alias, which is why the presets always pair them.
+- **Concurrency is bounded by configuration, not enforced by a semaphore.**
+  `PIPELINE_MAX_CONCURRENT_RUNS` is recorded and respected by operators; the
+  engine does not currently reject a run for exceeding it.
+
+## Future telephony
+
+Phase 8 adds real calls. The seams are already in place: `ExecutionMode`
+carries a `TELEPHONY_TEST` member that nothing can use yet, `BotAdapter` is the
+interface a telephony bridge implements, `BotReply.session_id` exists for a
+call identifier, and `CallSession` already has `provider_call_id`,
+`DIALING`, `NO_ANSWER` and `BUSY` statuses that this phase deliberately never
+sets — an offline simulation must not claim a telephony state.
+
+What Phase 8 has to add: a media-streaming bridge, the `ALLOWED_BOT_NUMBERS`
+allow-list enforcement, barge-in handling, and the per-run cost caps
+(`MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS`) that
+`.env.example` already declares.

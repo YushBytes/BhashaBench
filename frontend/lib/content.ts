@@ -38,7 +38,7 @@ export interface Phase {
   readonly status: Status;
 }
 
-export const currentPhase = 6;
+export const currentPhase = 7;
 export const totalPhases = 15;
 
 export const phases: readonly Phase[] = [
@@ -52,7 +52,9 @@ export const phases: readonly Phase[] = [
   // API access exists. Marking this "live" would be the claim the first rule
   // in CLAUDE.md forbids.
   { number: 6, title: "Caller simulation (rule-based)", status: "partial" },
-  { number: 7, title: "Audio degradation pipeline", status: "planned" },
+  // "Partial", not "live": the pipeline runs end to end offline, and no real
+  // voice bot or live provider call has gone through it.
+  { number: 7, title: "End-to-end voice pipeline", status: "partial" },
   { number: 8, title: "Twilio telephony & media streaming", status: "planned" },
   { number: 9, title: "Conversation orchestration engine", status: "planned" },
   { number: 10, title: "Automated evaluation & scoring", status: "planned" },
@@ -82,8 +84,8 @@ export const capabilities: readonly Capability[] = [
   {
     title: "Realistic audio degradation",
     summary:
-      "Traffic, market and fan noise, packet loss, jitter and telephony codecs, applied from a seed so every run reproduces exactly.",
-    status: "planned",
+      "Band-limiting, background noise at a measured signal-to-noise ratio, clipping and packet loss, applied from a seed so every run reproduces exactly. Simulated conditions, not field recordings.",
+    status: "partial",
     phase: 7,
   },
   {

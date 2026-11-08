@@ -53,8 +53,8 @@ reasoning behind its score.
          ┌──────────────────────┼──────────────────────┐
          │                      │                      │
 ┌────────▼────────┐  ┌──────────▼─────────┐  ┌─────────▼────────┐
-│  Orchestrator   │  │  Scenario engine   │  │  PostgreSQL 16   │
-│  (Phase 9)      │  │  ◀── Implemented   │  │  ◀── Implemented │
+│  Run engine     │  │  Scenario engine   │  │  PostgreSQL 16   │
+│  ◀── Phase 7    │  │  ◀── Implemented   │  │  ◀── Implemented │
 └────────┬────────┘  └────────────────────┘  │  5 tables via    │
          │                                   │  Alembic         │
          │                                   └──────────────────┘
@@ -65,7 +65,7 @@ reasoning behind its score.
 │ Caller engine│ │ Prisma STT  │ │ Timbre TTS │ │ Degradation│ │  Twilio   │
 │ rule-based   │ │ (Phase 4)   │ │ (Phase 5)  │ │ (Phase 7)  │ │ (Phase 8) │
 │ (Phase 6)    │ │             │ │            │ │            │ │           │
-│ no Evon      │ │             │ │            │ │            │ │           │
+│ no Evon      │ │             │ │            │ │            │ │ not built │
 └──────────────┘ └─────────────┘ └────────────┘ └────────────┘ └─────┬─────┘
                                                                      │
                                                           ┌──────────▼────────┐
@@ -77,7 +77,7 @@ reasoning behind its score.
 
 ---
 
-## 3. Implemented today (Phases 1–6)
+## 3. Implemented today (Phases 1–7)
 
 ### 3.1 Backend — `backend/app/`
 
@@ -298,6 +298,46 @@ conversations it ran itself. It is also the first subsystem whose endpoints
 require PostgreSQL.
 
 The states, rules and limits are in [CALLER.md](CALLER.md).
+
+### 3.2e The voice pipeline (Phase 7)
+
+`app/pipeline/` connects the scenario engine, the caller, Timbre and Prisma
+into one multi-turn run. Four decisions worth recording.
+
+**It wraps Phase 6 rather than extending it.** `next_caller_turn` decides and
+synthesises; `submit_bot_audio` transcribes and persists. The engine owns only
+the legs between them - degradation, the adapter exchange, audio validation. The
+alternative, a second conversation engine that also knew about the caller state
+machine, would have disagreed with the first eventually. The cost is that the
+engine reads the caller's audio back off disk rather than being handed the
+bytes; that keeps Phase 6's signatures and tests untouched, and the read is
+local.
+
+**The DSP is pure Python, with no numeric dependency.** There is no numpy,
+scipy, soundfile or pydub in the repository, and `audioop` left the standard
+library in Python 3.13. A few seconds of 8 kHz mono is tens of thousands of
+samples, so the arithmetic runs in tens of milliseconds; a scientific stack
+carried for that would be the dependency nobody wanted. The trade-off accepted
+is a narrow input contract - 16-bit PCM WAV only - and no spectral work. A
+later phase needing a measured impulse response is the point to revisit it.
+
+**Execution mode is a recorded property, not an inferred one.** Every run
+stores how it obtained the bot's side, and `bot_audio_externally_received` is
+computed from the replies rather than from the requested mode, so a run
+labelled as an external bot test whose replies were fixtures reports `false`.
+`TELEPHONY_TEST` exists in the enum and is excluded from the usable set: an
+enum member that cannot be used is a better record of the gap than a missing
+one, because it sits where someone looks for it.
+
+**Still no new tables.** A pipeline run *is* a `TestRun`, whose `run_metadata`
+docstring already said it was for "execution context captured at run time: tool
+versions, resolved audio profile, seed". The pipeline writes there under a
+`pipeline` namespace, beside Phase 6's `caller` namespace. The database's
+five-value `RunStatus` stays the coarse lifecycle and the finer pipeline status
+lives in metadata, so `timed_out` does not require widening a CHECK constraint
+that enumerates the terminal three.
+
+Execution modes, profiles, adapters and limits are in [PIPELINE.md](PIPELINE.md).
 
 ### 3.3 Frontend — `frontend/`
 

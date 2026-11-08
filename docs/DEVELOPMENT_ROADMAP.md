@@ -22,7 +22,7 @@ phase, not as existing behaviour.
 | 4 | Gnani Prisma — Speech to Text | ✅ Complete |
 | 5 | Gnani Timbre — Text to Speech | ✅ Complete |
 | 6 | Caller Simulation — deterministic engine | ✅ Complete (Evon **not** integrated) |
-| 7 | Audio Degradation Pipeline | ⬜ Not started |
+| 7 | End-to-End Voice Pipeline & Audio Degradation | ✅ Complete (no live call, no real bot) |
 | 8 | Twilio Telephony & Media Streaming | ⬜ Not started |
 | 9 | Conversation Orchestration Engine | ⬜ Not started |
 | 10 | Automated Evaluation & Scoring | ⬜ Not started |
@@ -165,7 +165,7 @@ library is now complete enough to drive those.
   `GET /api/v1/transcription/providers`, and the
   `/api/v1/transcription/stream` WebSocket.
 - 964 tests, up from 561. 15 of them are opt-in live provider tests.
-  (1327 after Phase 5; 1669 after Phase 6.)
+  (1327 after Phase 5; 1669 after Phase 6; 1907 after Phase 7.)
 
 **Verified language support.** Prisma documents ten of BhashaBench's thirteen
 catalogue languages. Urdu, Odia and Assamese have no speech model: a scenario
@@ -356,17 +356,94 @@ exist.
 
 ---
 
-## Phase 7 — Audio Degradation Pipeline
+## Phase 7 — End-to-End Voice Pipeline & Audio Degradation ✅
 
-Real Indian phone calls are not studio recordings.
+The phase that connects the previous three. A scenario becomes a multi-turn
+conversation with real audio: the Phase 6 caller decides, Timbre synthesises,
+the degradation engine makes it sound like a phone call, a bot adapter carries
+it, and Prisma transcribes the reply.
 
-- Composable degradations: additive background noise (traffic, market, fan),
-  packet loss, jitter, codec simulation (G.711/AMR-NB), clipping, reverb.
-- Named severity profiles: `clean`, `urban`, `rural`, `worst_case`.
-- Seeded via `NOISE_MASTER_SEED`, so every run is reproducible.
-- Objective verification of each stage's effect on the signal.
+### Delivered
 
-**Exit criteria.** The same seed and profile produce byte-identical output.
+- **A run engine** (`app/pipeline/engine.py`), free of FastAPI so it is
+  testable without it. Three statuses beyond the database's five live in
+  `run_metadata`, and nine outcomes separate what the bot did from what we
+  broke.
+- **Execution modes.** `offline_simulation`, `audio_fixture_test` and
+  `external_bot_test` are usable; `telephony_test` exists in the vocabulary and
+  is refused, because no telephony exists. Every run records its mode and every
+  report repeats it.
+- **The audio degradation engine** (`app/pipeline/degradation.py`): channel
+  conversion, resampling, a cascaded one-pole bandpass, noise at a target SNR,
+  level, clipping and whole-packet loss, in a fixed order that mirrors a real
+  path. Five named profiles, and the six acoustic environments the Phase 2
+  scenario schema declared with the note "Phase 7 implements these" now map
+  onto them.
+- **Bot adapters** (`app/pipeline/bots/`): a scripted offline adapter and a
+  manual adapter that stores the caller's audio and waits for an operator to
+  post the bot's reply. Neither opens a socket, and the default is the one that
+  sends audio nowhere.
+- **Artefact handling.** Both the original and the degraded audio survive every
+  turn, the processed file names its source, and every path component is
+  generated or whitelisted.
+- **Nine endpoints** under `/api/v1/test-runs`, and 238 offline tests.
+- **No new table and no migration.** `alembic check` reports no drift.
+
+### Pure Python DSP, deliberately
+
+The repository has no numpy, scipy, soundfile or pydub, and `audioop` was
+removed from the standard library in Python 3.13. One utterance is a few
+seconds of 8 kHz mono, so the hundred-odd lines of integer arithmetic these
+transformations need run in about 30 ms - and a scientific stack carried for
+that would be the overengineering this phase was told to avoid. Only 16-bit PCM
+WAV is accepted; guessing at other widths without a decoder is how a bench
+starts reporting on audio it did not understand.
+
+### Four defects the tests found
+
+- **`conversation.scenario` was reached on a freshly created row.** The
+  relationship is `lazy="raise_on_sql"`, so it resolved from the identity map
+  until something committed - which made it a 500 that appeared only behind the
+  HTTP layer, never in the engine tests.
+- **The turn loop allowed `budget + 1` turns** and left a truncated run
+  `running` with no outcome. A narrower `max_turns` now reaches the caller's own
+  metadata, so Phase 6's budget rule closes the conversation gracefully.
+- **A malformed upload killed the run.** On the manual endpoint that is the
+  operator's mistake, not a reason to discard a conversation; it is now refused
+  with a 4xx and the run stays waiting so they can retry.
+- **A fresh run reported itself `running`.** Phase 6's `create_run` marks a run
+  running with a start time because it creates and uses one immediately; a
+  pipeline run is created and started separately, so it is reset to `pending`.
+
+A fifth, smaller: the scenario noise vocabulary was assumed rather than read.
+The schema's six environments are `clean`, `urban`, `rural`, `market`,
+`indoor_fan` and `worst_case`, and the mapping now covers all of them.
+
+### Not verified
+
+| | |
+|---|---|
+| A live Gnani call through the pipeline | Not made. None was authorised, and none is needed for an offline run |
+| A real voice bot conversation | Not tested. No external bot endpoint was available; the `manual` adapter is the path for when one is |
+| Telephony | Not implemented. A run in that mode is refused |
+| Recognition accuracy under degradation | Not measured. The fixtures contain no speech with reviewed ground truth |
+| Conversation quality | Not evaluated. A successful transcription means the pipeline worked, not that the bot answered well |
+
+**Simulated noise is shaped white noise at a stated signal-to-noise ratio over
+a band-limited channel.** It is not a field recording, this repository contains
+no environmental recordings, and the profiles are named for severity because
+severity is what they control.
+
+**Exit criteria.** The same seed and profile produce byte-identical output -
+**met**, asserted for every profile. A multi-turn audio workflow executes
+offline - **met**. A genuine external voice-bot conversation - **not met**, and
+not claimed.
+
+**Deliberately not in this phase.** Telephony or SIP; jitter and codec
+simulation beyond band-limiting (G.711 and AMR-NB need a codec this project
+does not carry); reverb, which needs an impulse response nobody has measured;
+any accuracy or quality score; serving stored audio over HTTP, which is an
+authorisation decision with no identity to make it against until Phase 15.
 
 ---
 
