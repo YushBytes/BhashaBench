@@ -9,7 +9,15 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1 import health, languages, scenarios, speech, suites, transcription
+from app.api.v1 import (
+    caller,
+    health,
+    languages,
+    scenarios,
+    speech,
+    suites,
+    transcription,
+)
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -28,3 +36,6 @@ api_router.include_router(transcription.router)
 
 # Phase 5. Likewise: `/speech` overlaps nothing.
 api_router.include_router(speech.router)
+
+# Phase 6. The simulated caller, which drives the two above.
+api_router.include_router(caller.router)

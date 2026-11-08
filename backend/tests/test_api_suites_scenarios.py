@@ -661,6 +661,14 @@ class TestOpenApiSurface:
             # Phase 5
             "/api/v1/speech/generate",
             "/api/v1/speech/providers",
+            # Phase 6
+            "/api/v1/caller/conversations",
+            "/api/v1/caller/conversations/{conversation_id}",
+            "/api/v1/caller/conversations/{conversation_id}/turns",
+            "/api/v1/caller/conversations/{conversation_id}/bot-text",
+            "/api/v1/caller/conversations/{conversation_id}/bot-audio",
+            "/api/v1/caller/conversations/{conversation_id}/terminate",
+            "/api/v1/caller/providers",
         }
 
     def test_scenario_spec_schema_is_published(self, client: TestClient) -> None:

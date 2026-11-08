@@ -17,6 +17,15 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.router import api_router
+from app.caller.errors import (
+    CallerConfigurationError,
+    CallerError,
+    ConversationNotActiveError,
+    DuplicateTurnError,
+    InvalidCallerDecisionError,
+    ScenarioNotUsableError,
+    TurnBudgetExhaustedError,
+)
 from app.core.config import Settings, get_settings
 from app.core.languages import UnsupportedLanguageError
 from app.schemas.common import ErrorDetail, ErrorResponse, HealthResponse, ServiceIdentity
@@ -80,9 +89,13 @@ Implemented so far:
 * **Phase 5** - text to speech behind a `SynthesisProvider` interface, with a
   Gnani Timbre adapter and an offline fake. Returns binary audio; nothing is
   persisted.
+* **Phase 6** - a simulated caller that conducts scenario-driven multi-turn
+  conversations, persisted as call sessions and turns. The caller is a
+  **deterministic rule engine**; Gnani Evon is *not* integrated - see
+  `docs/PROVIDERS.md`.
 
-Telephony, audio degradation, caller simulation and automated evaluation are
-**not** implemented - see `docs/DEVELOPMENT_ROADMAP.md`.
+Telephony, audio degradation and automated evaluation are **not** implemented -
+see `docs/DEVELOPMENT_ROADMAP.md`.
 """
 
 
@@ -139,6 +152,24 @@ _SPEECH_STATUS: dict[type[SpeechError], int] = {
     SpeechTimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
 }
 """Speech error type -> HTTP status. Exact types, defaulting to 502."""
+
+
+_CALLER_STATUS: dict[type[CallerError], int] = {
+    CallerConfigurationError: status.HTTP_500_INTERNAL_SERVER_ERROR,
+    # A finished conversation asked for another turn, or two requests racing to
+    # create the same turn index. Both are conflicts with existing state, not
+    # bad requests - the request would have been fine a moment earlier.
+    ConversationNotActiveError: status.HTTP_409_CONFLICT,
+    DuplicateTurnError: status.HTTP_409_CONFLICT,
+    # A provider returned something unusable. 422 rather than 500: for the rule
+    # engine it means a rule is wrong, but for a future model provider it is
+    # the ordinary case of a model not following its output contract, and the
+    # caller of the API can legitimately retry with a different scenario.
+    InvalidCallerDecisionError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    ScenarioNotUsableError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    TurnBudgetExhaustedError: status.HTTP_409_CONFLICT,
+}
+"""Caller error type -> HTTP status. Exact types, defaulting to 422."""
 
 
 def _error_response(status_code: int, error_type: str, message: str) -> JSONResponse:
@@ -254,6 +285,19 @@ def register_exception_handlers(app: FastAPI) -> None:
         # Redacted at the boundary as well as in the adapter, for the reason
         # given on the transcription handler.
         return _error_response(status_code, classify_speech(exc), redact(exc))
+
+    # -- Phase 6 caller errors ------------------------------------------------
+
+    @app.exception_handler(CallerError)
+    async def handle_caller_error(_request: Request, exc: CallerError) -> JSONResponse:
+        status_code = _CALLER_STATUS.get(type(exc), status.HTTP_422_UNPROCESSABLE_CONTENT)
+        if isinstance(exc, CallerConfigurationError):
+            logger.error("Caller provider is misconfigured: %s", exc)
+        name = type(exc).__name__
+        if name.endswith("Error"):
+            name = name[: -len("Error")]
+        snake = "".join(f"_{c.lower()}" if c.isupper() else c for c in name).lstrip("_")
+        return _error_response(status_code, f"{snake}_error", redact(exc))
 
     @app.exception_handler(Exception)
     async def handle_unexpected_error(_request: Request, exc: Exception) -> JSONResponse:

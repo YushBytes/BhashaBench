@@ -233,6 +233,86 @@ class Settings(BaseSettings):
         ),
     )
 
+    # -- Simulated caller (Phase 6) ------------------------------------------
+    # No credential of any kind: the only provider is a rule engine. Gnani Evon
+    # is not integrated - see docs/PROVIDERS.md - so there is deliberately no
+    # EVON_API_KEY here to suggest otherwise.
+    caller_provider: str = Field(
+        default="deterministic",
+        description=(
+            "Which caller strategy to use. Only 'deterministic' exists in this "
+            "phase: a rule engine, not a language model."
+        ),
+    )
+    caller_max_turns: int = Field(
+        default=20,
+        ge=2,
+        le=100,
+        description=(
+            "Hard ceiling on conversation turns, applied on top of a "
+            "scenario's own `goal.max_turns`. The lower of the two wins, so a "
+            "scenario cannot ask for an unbounded conversation."
+        ),
+    )
+    caller_max_clarifications: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description=(
+            "How many times the caller will press for a usable answer before "
+            "closing the conversation as making no progress."
+        ),
+    )
+    caller_max_message_chars: int = Field(
+        default=600,
+        ge=1,
+        le=5000,
+        description=(
+            "Longest caller utterance accepted from a provider. Bounded "
+            "independently of the speech limit so a runaway decision is caught "
+            "before it reaches synthesis."
+        ),
+    )
+    caller_turn_timeout_seconds: float = Field(
+        default=90.0,
+        gt=0,
+        le=600,
+        description="Ceiling on one full turn, including synthesis and transcription.",
+    )
+    caller_audio_storage_dir: str = Field(
+        default="storage/caller-audio",
+        description=(
+            "Directory for conversation audio, relative to the repository root "
+            "unless absolute. `storage/` is already git-ignored. Audio is kept "
+            "on disk and only referenced from the database."
+        ),
+    )
+    caller_synthesise_audio: bool = Field(
+        default=False,
+        description=(
+            "Whether to synthesise caller audio for each turn. Off by default: "
+            "with SPEECH_PROVIDER=timbre every turn becomes a billable call, so "
+            "turning this on is a deliberate act."
+        ),
+    )
+
+    @field_validator("caller_provider", mode="before")
+    @classmethod
+    def _normalise_caller_provider(cls, value: object) -> object:
+        """Fold case and whitespace, as for the other provider settings."""
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @property
+    def caller_audio_root(self) -> Path:
+        """The resolved audio storage directory.
+
+        Relative values resolve against the repository root rather than the
+        process working directory, so the location does not depend on where
+        uvicorn happened to be started from.
+        """
+        configured = Path(self.caller_audio_storage_dir).expanduser()
+        return configured if configured.is_absolute() else (REPO_ROOT / configured)
+
     @field_validator("speech_provider", mode="before")
     @classmethod
     def _normalise_speech_provider(cls, value: object) -> object:
