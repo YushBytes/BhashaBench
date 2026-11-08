@@ -320,10 +320,36 @@ path is checked to be inside the storage root before anything is written.
 References are **relative**. An absolute filesystem path would disclose the
 server layout and be useless to a client after a redeploy.
 
-**Artefacts are listed, not served.** A route that streamed a stored recording
-would be the obvious convenience and the wrong thing to add now: it is an
-authorisation decision — who may hear a conversation — and there is no identity
-to make it against until Phase 15.
+**Artefacts are served, carefully.** Phase 7 listed artefacts and refused to
+stream them, on the grounds that who may hear a recorded conversation is an
+authorisation decision with no identity to make it against. That reasoning
+still holds. What changed in Phase 8 is that the conversation inspector cannot
+work without playback, and withholding the route never created an
+authorisation model — it only put the recording out of reach of the one
+operator entitled to it.
+
+`GET /test-runs/{id}/artifacts/{turn_index}/audio` streams one stored file
+under three constraints:
+
+- **No client string reaches the filesystem.** The artefact is addressed by
+  run, turn index and variant — a UUID, a non-negative integer and a
+  two-value enum. The stored reference is looked up in the run's own record,
+  and the store refuses anything resolving outside its root besides. There is
+  no request field a path could travel in.
+- **The route is off where it would be reachable.** Staging and production
+  refuse with 403 unless `PIPELINE_SERVE_ARTEFACTS=true`, because this payload
+  is a recording rather than a status field. Development serves it: the
+  operator is the only listener.
+- **It claims no authorisation.** A run id is an identifier, not a credential,
+  and this route is exactly as open as every other one. Real access control
+  arrives with authentication in Phase 15. A 403 here says *this environment
+  declines*, never *no such artefact* — the latter would be a lie about what
+  is on disk.
+
+The route resolves through the engine's own artefact store rather than
+building a second one from settings: whoever constructed the engine may have
+pointed it elsewhere, and a reader that guessed would report a present
+recording as missing.
 
 Generated audio is never committed; `storage/` is git-ignored.
 
@@ -452,9 +478,32 @@ provider configured, spend money.
 | `POST /test-runs/{id}/cancel` | Stops it; outcome `cancelled`, never `failed` |
 | `GET /test-runs/{id}` | State, counters and outcome |
 | `GET /test-runs/{id}/turns` | Every utterance, in order |
+| `GET /test-runs` | A filtered, paginated page of runs, newest first |
 | `GET /test-runs/{id}/artifacts` | References and measured metadata |
+| `GET /test-runs/{id}/artifacts/{turn}/audio` | The stored bytes of one artefact. Supports `Range` |
 | `GET /test-runs/{id}/report` | Full evidence: state, artefacts, transitions, every stage |
 | `GET /test-runs/bot-adapters/available` | Adapters, their capabilities, and the usable modes |
+
+### Listing runs
+
+`GET /test-runs` pages the run history the dashboard shows. Filters:
+`suite_id`, `status`, `mode`, `language`, `outcome` and `scenario` (a
+case-insensitive substring; `%` and `_` are escaped, so a wildcard narrows to
+nothing rather than matching every row). `limit` is capped at 100.
+
+Two things it deliberately does **not** do:
+
+- **It lists only runs the pipeline created.** A `TestRun` is also the parent
+  of a Phase 6 caller conversation, and those record no pipeline metadata —
+  listing them would produce rows whose detail view is empty. They stay
+  addressable through the caller API.
+- **`duration_seconds` is null until a run has both a start and a finish.** An
+  elapsed-so-far figure in a duration column reads as a duration and is not
+  one.
+
+Turn counts come from one grouped query over the page rather than a query per
+row, and they are counted rather than defaulted: a run with no turns reports
+zero because zero were found, not because the field was missing.
 
 ### A fixture run, end to end
 
@@ -478,7 +527,8 @@ curl -s     $B/$RUN/report      | python -m json.tool
 
 | Code | When |
 |------|------|
-| 404 | No such run or scenario |
+| 403 | This environment does not stream stored audio (see `PIPELINE_SERVE_ARTEFACTS`) |
+| 404 | No such run or scenario, or no artefact for that turn and variant |
 | 409 | The run has already finished, or is not ready for this request |
 | 503 | Every concurrent-run slot is in use. The run is untouched; retry it |
 | 413 | Bot audio over 10 MiB |
@@ -493,6 +543,7 @@ curl -s     $B/$RUN/report      | python -m json.tool
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `PIPELINE_BOT_ADAPTER` | `scripted` | Default adapter. Both options send audio nowhere |
+| `PIPELINE_SERVE_ARTEFACTS` | `false` | Lets a *deployed* environment stream stored audio. Development always does |
 | `PIPELINE_RUN_TIMEOUT_SECONDS` | `600.0` | Wall-clock ceiling on one run |
 | `PIPELINE_MAX_CONCURRENT_RUNS` | `2` | Bounds provider spend and memory. Enforced: `POST /start` answers 503 beyond it |
 | `PIPELINE_NOISE_SEED` | `42` | Fixed so a run is reproducible by default |

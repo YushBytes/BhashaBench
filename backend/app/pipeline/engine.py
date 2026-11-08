@@ -353,6 +353,18 @@ class RunEngine:
         # correct accounting.
         self._holds_slot = False
 
+    @property
+    def artefact_store(self) -> AudioArtefactStore:
+        """The store this engine writes artefacts to, and reads them back from.
+
+        Exposed so a route serving a stored file resolves it through the same
+        store that wrote it. Building a second store from settings at the
+        point of reading looks equivalent and is not: whoever constructed the
+        engine may have pointed it somewhere else, and the reader would then
+        look in the wrong directory and report a recording as missing.
+        """
+        return self._artefacts
+
     # -- Lifecycle ----------------------------------------------------------
 
     def create(

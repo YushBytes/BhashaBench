@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -289,6 +290,85 @@ class BotAdapterListResponse(BaseModel):
     )
 
 
+class RunSummary(BaseModel):
+    """One row of the run listing.
+
+    A deliberate subset of `RunResponse`: what a history table shows without
+    opening a run. Assembling a full report per row would mean loading every
+    run's conversation, artefacts and stage events to render a line of text.
+
+    Every field here is read from the run row or its stored pipeline
+    metadata. Nothing is derived, inferred or defaulted into looking better
+    than it is - `outcome` stays null while a run is unfinished, and
+    `duration_seconds` stays null until there is both a start and a finish to
+    measure between.
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "run_id": "1c9d4b2a-0e5f-4a7b-8c3d-2e1f0a9b8c7d",
+                "suite_id": "8f14e45f-ceea-467a-9d2e-1a3b4c5d6e7f",
+                "scenario_name": "Hindi appointment booking",
+                "language": "hi-IN",
+                "mode": "audio_fixture_test",
+                "status": "completed",
+                "outcome": "goal_achieved",
+                "caller_turns": 4,
+                "bot_turns": 3,
+                "bot_audio_externally_received": False,
+                "created_at": "2026-01-01T00:00:00Z",
+                "duration_seconds": 12.4,
+            }
+        }
+    )
+
+    run_id: uuid.UUID
+    suite_id: uuid.UUID
+    scenario_name: str
+    language: str
+    mode: ExecutionMode
+    status: PipelineStatus
+    outcome: RunOutcome | None = Field(
+        default=None,
+        description="Null while the run is unfinished. An unfinished run has no result.",
+    )
+    noise_profile: str | None = Field(
+        default=None, description="Degradation profile applied to the caller's audio."
+    )
+    bot_adapter: str | None = Field(default=None, description="Adapter that supplied bot audio.")
+    bot_audio_externally_received: bool = Field(
+        default=False,
+        description=(
+            "True only if **every** bot reply came from outside this process. "
+            "False for a fixture run, so a mislabelled external_bot_test is "
+            "visible in the listing without opening it."
+        ),
+    )
+    uses_language_model: bool = Field(
+        default=False,
+        description=(
+            "Whether a learned model generated the caller's words. **False "
+            "throughout** - the caller is a rule engine."
+        ),
+    )
+    caller_turns: int = 0
+    bot_turns: int = 0
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    duration_seconds: float | None = Field(
+        default=None,
+        description=(
+            "Wall-clock seconds between start and finish, measured from the "
+            "two timestamps. Null for a run that has not finished - an "
+            "elapsed-so-far figure in the same column would read as a "
+            "duration and would not be one."
+        ),
+    )
+    error: str | None = Field(default=None, description="Failure message, when the run failed.")
+
+
 __all__ = [
     "ArtefactResponse",
     "BotAdapterListResponse",
@@ -298,6 +378,7 @@ __all__ = [
     "RunArtefactsResponse",
     "RunReportResponse",
     "RunResponse",
+    "RunSummary",
     "RunTurnResponse",
     "RunTurnsResponse",
     "StageEventResponse",

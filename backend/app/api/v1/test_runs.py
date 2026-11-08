@@ -9,27 +9,47 @@ place a domain failure becomes a status code.
 lands in Phase 15. Do not expose this service publicly before then: these
 endpoints write files to disk and, with a provider configured, spend money.
 
-**Artefacts are listed, not served.** A route that streamed a stored file by
-reference would be the obvious convenience and the wrong thing to add here: it
-is an authorisation decision - who may hear a recording of a conversation -
-and there is no identity to make it against yet. So the API reports what was
-recorded and where it sits under the storage root, and reading it is an
-operator's job until Phase 15.
+**Artefacts are served, carefully.** An earlier revision of this module listed
+artefacts and refused to stream them, on the grounds that who may hear a
+recorded conversation is an authorisation decision and there is no identity to
+make it against. The reasoning still holds; what changed is that the inspector
+this API exists to feed cannot work without playback, and refusing the route
+did not create an authorisation model - it only moved the recording out of
+reach of the one operator entitled to it.
+
+So `GET /{run_id}/artifacts/{turn_index}/audio` streams a stored file under
+three constraints, and all three are load-bearing:
+
+- **No client string reaches the filesystem.** The artefact is addressed by
+  run, turn index and variant; the stored reference is looked up in the run's
+  own record, and `AudioArtefactStore` refuses anything resolving outside its
+  root besides.
+- **The route is off where it would be reachable.** Staging and production
+  refuse unless `PIPELINE_SERVE_ARTEFACTS` is set, because this payload is a
+  recording rather than a status field.
+- **It claims no authorisation.** A run id is an identifier, not a credential,
+  and this route is exactly as open as every other one here. Real access
+  control arrives with authentication in Phase 15.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Iterator
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, Header, Path, Query, UploadFile, status
+from fastapi.responses import Response
 
-from app.api.deps import DbSession, SettingsDep
+from app.api.deps import DbSession, PaginationParams, SettingsDep
 from app.caller.artefacts import AudioArtefactStore
+from app.caller.errors import CallerError
 from app.caller.orchestrator import ConversationOrchestrator
 from app.caller.registry import build_provider as build_caller_provider
+from app.caller.schemas import Speaker
 from app.caller.service import CallerService
+from app.core.config import AppEnv
+from app.models.test_run import RunStatus, TestRun
 from app.pipeline.bots.registry import build_adapter, describe_adapters
 from app.pipeline.concurrency import get_run_slots
 from app.pipeline.degradation import NoiseProfile
@@ -40,8 +60,15 @@ from app.pipeline.engine import (
     RunEngine,
     RunReport,
 )
-from app.pipeline.modes import IMPLEMENTED_MODES
+from app.pipeline.errors import ArtefactAccessDisabledError
+from app.pipeline.modes import (
+    IMPLEMENTED_MODES,
+    ExecutionMode,
+    PipelineStatus,
+    RunOutcome,
+)
 from app.repositories import caller_conversations as caller_repo
+from app.repositories import pipeline_runs as pipeline_repo
 from app.schemas.common import ErrorResponse
 from app.schemas.pipeline import (
     ArtefactResponse,
@@ -52,10 +79,13 @@ from app.schemas.pipeline import (
     RunArtefactsResponse,
     RunReportResponse,
     RunResponse,
+    RunSummary,
     RunTurnResponse,
     RunTurnsResponse,
     StageEventResponse,
 )
+from app.schemas.suite import Page
+from app.services.errors import NotFoundError
 from app.services.transcription_service import TranscriptionService
 from app.speech.registry import build_provider as build_speech_provider
 from app.speech.service import SpeechService
@@ -157,8 +187,119 @@ _COMMON_ERRORS: dict[int | str, dict[str, object]] = {
 }
 
 
+_RANGE_PREFIX = "bytes="
+
+
+def _parse_range(header: str | None, size: int) -> tuple[int, int] | None:
+    """Parse a single byte range, or return None to send the whole file.
+
+    Deliberately narrow: one range, `bytes=` only. Multipart ranges exist in
+    the spec and no audio element asks for them, so supporting them would be
+    untested code on a hot path. Anything unparseable is treated as "no range"
+    rather than an error, which is what the RFC asks of a server that cannot
+    honour a range unit.
+
+    Returns:
+        An inclusive `(start, end)` pair, or None for the whole file.
+
+    Raises:
+        ValueError: the range parsed but lies outside the file, which is a
+            416 rather than a silent full-body response.
+    """
+    if not header or not header.startswith(_RANGE_PREFIX) or size <= 0:
+        return None
+
+    spec = header[len(_RANGE_PREFIX) :].strip()
+    if "," in spec:
+        return None
+
+    first, _, last = spec.partition("-")
+    try:
+        if not first:
+            # A suffix range: the final N bytes.
+            length = int(last)
+            if length <= 0:
+                return None
+            return max(0, size - length), size - 1
+        start = int(first)
+        end = int(last) if last else size - 1
+    except ValueError:
+        return None
+
+    if start > end or start >= size:
+        raise ValueError("range outside the artefact")
+    return start, min(end, size - 1)
+
+
+def _audio_response(payload: bytes, content_type: str, range_header: str | None) -> Response:
+    """Return the audio whole, or the one range the client asked for."""
+    size = len(payload)
+    common = {
+        "Accept-Ranges": "bytes",
+        # A stored artefact never changes: the reference is derived from the
+        # conversation, turn and variant, and the engine writes it once.
+        "Cache-Control": "private, max-age=3600",
+    }
+
+    try:
+        window = _parse_range(range_header, size)
+    except ValueError:
+        return Response(
+            status_code=status.HTTP_416_RANGE_NOT_SATISFIABLE,
+            headers={**common, "Content-Range": f"bytes */{size}"},
+        )
+
+    if window is None:
+        return Response(content=payload, media_type=content_type, headers=common)
+
+    start, end = window
+    return Response(
+        content=payload[start : end + 1],
+        status_code=status.HTTP_206_PARTIAL_CONTENT,
+        media_type=content_type,
+        headers={**common, "Content-Range": f"bytes {start}-{end}/{size}"},
+    )
+
+
 def _artefact(record: ArtefactRecord) -> ArtefactResponse:
     return ArtefactResponse(**record.as_dict())
+
+
+def _summary(run: TestRun, turn_counts: dict[str, int]) -> RunSummary:
+    """Build a listing row from the run and its stored pipeline metadata.
+
+    Reads only what was persisted. Where metadata is absent the field stays
+    null rather than acquiring a default that would read as a measurement -
+    a run with no recorded mode is not an `offline_simulation`, it is a run
+    whose mode we did not store.
+    """
+    meta = pipeline_repo.pipeline_metadata_of(run)
+
+    duration: float | None = None
+    if run.started_at is not None and run.finished_at is not None:
+        duration = (run.finished_at - run.started_at).total_seconds()
+
+    outcome = meta.get("outcome")
+    return RunSummary(
+        run_id=run.id,
+        suite_id=run.suite_id,
+        scenario_name=str(meta.get("scenario_name") or ""),
+        language=str(meta.get("language") or ""),
+        mode=ExecutionMode(meta.get("mode", ExecutionMode.OFFLINE_SIMULATION.value)),
+        status=PipelineStatus(meta.get("status", PipelineStatus.CREATED.value)),
+        outcome=RunOutcome(outcome) if outcome else None,
+        noise_profile=meta.get("noise_profile"),
+        bot_adapter=meta.get("bot_adapter"),
+        bot_audio_externally_received=bool(meta.get("bot_audio_externally_received", False)),
+        uses_language_model=bool(meta.get("uses_language_model", False)),
+        caller_turns=turn_counts.get(Speaker.CALLER.value, 0),
+        bot_turns=turn_counts.get(Speaker.BOT.value, 0),
+        created_at=run.created_at,
+        started_at=run.started_at,
+        finished_at=run.finished_at,
+        duration_seconds=duration,
+        error=run.error_message,
+    )
 
 
 def _run(report: RunReport) -> RunResponse:
@@ -192,6 +333,58 @@ def _run(report: RunReport) -> RunResponse:
         started_at=report.started_at,
         finished_at=report.finished_at,
         error=report.error,
+    )
+
+
+@router.get(
+    "",
+    response_model=Page[RunSummary],
+    summary="List test runs",
+    description=(
+        "Newest first. Every field is read from the run row or the pipeline "
+        "metadata it stored; nothing is derived to fill a column.\n\n"
+        "**Only runs the pipeline created are listed.** A `TestRun` is also "
+        "the parent of a Phase 6 caller conversation, and those record no "
+        "pipeline metadata - listing them would produce rows whose detail "
+        "view is empty. They remain addressable through the caller API.\n\n"
+        "`duration_seconds` is null until a run has both a start and a finish: "
+        "an elapsed-so-far figure in a duration column would be read as one."
+    ),
+)
+def list_runs(
+    session: DbSession,
+    page: PaginationParams,
+    suite_id: Annotated[uuid.UUID | None, Query(description="Only runs in this suite.")] = None,
+    status_filter: Annotated[
+        RunStatus | None,
+        Query(alias="status", description="Persisted run status."),
+    ] = None,
+    mode: Annotated[ExecutionMode | None, Query(description="Execution mode.")] = None,
+    language: Annotated[
+        str | None, Query(max_length=35, description="BhashaBench language tag.")
+    ] = None,
+    outcome: Annotated[RunOutcome | None, Query(description="Recorded outcome.")] = None,
+    scenario: Annotated[
+        str | None,
+        Query(max_length=200, description="Case-insensitive match on the scenario name."),
+    ] = None,
+) -> Page[RunSummary]:
+    """A filtered page of runs, with the totals a pager needs."""
+    filters = {
+        "suite_id": suite_id,
+        "status": status_filter,
+        "mode": None if mode is None else mode.value,
+        "language": language,
+        "outcome": None if outcome is None else outcome.value,
+        "scenario_contains": scenario,
+    }
+    runs = pipeline_repo.search_runs(session, limit=page.limit, offset=page.offset, **filters)
+    counts = pipeline_repo.turn_counts_for_runs(session, [run.id for run in runs])
+    return Page[RunSummary](
+        items=[_summary(run, counts.get(run.id, {})) for run in runs],
+        total=pipeline_repo.count_runs(session, **filters),
+        limit=page.limit,
+        offset=page.offset,
     )
 
 
@@ -391,9 +584,10 @@ def read_turns(run_id: uuid.UUID, engine: EngineDep, session: DbSession) -> RunT
     response_model=RunArtefactsResponse,
     summary="List a run's audio artefacts",
     description=(
-        "References and measured metadata, not the audio itself. Serving a "
-        "recording is an authorisation decision - who may hear a conversation "
-        "- and there is no identity to make it against until Phase 15.\n\n"
+        "References and measured metadata. The bytes themselves come from "
+        "`GET /{run_id}/artifacts/{turn_index}/audio`, which addresses an "
+        "artefact by turn and variant rather than by the reference printed "
+        "here.\n\n"
         "A degraded artefact names the original it came from, so the pair can "
         "be compared after the fact."
     ),
@@ -407,6 +601,102 @@ def read_artefacts(run_id: uuid.UUID, engine: EngineDep) -> RunArtefactsResponse
         artefacts=[_artefact(record) for record in report.artefacts],
         total_audio_seconds=report.total_audio_seconds,
     )
+
+
+@router.get(
+    "/{run_id}/artifacts/{turn_index}/audio",
+    summary="Stream one stored audio artefact",
+    description=(
+        "Returns the **binary audio** of a single artefact, so a conversation "
+        "can be listened to rather than only read about.\n\n"
+        "**The reference never comes from the client.** The artefact is "
+        "addressed by run, turn index and variant; the server looks the "
+        "stored reference up in the run's own record and resolves it under "
+        "the storage root. There is no request field a path could travel in, "
+        "and the store refuses anything resolving outside its root regardless."
+        "\n\n"
+        "**Access model: there is none beyond knowing the run id.** This "
+        "application has no authentication, so this route is exactly as open "
+        "as every other one, and a run id is an identifier rather than a "
+        "credential. Because the payload here is a recording of a "
+        "conversation, the route is switched off in staging and production "
+        "unless `PIPELINE_SERVE_ARTEFACTS` is explicitly set; development "
+        "serves it, where the operator is the only listener.\n\n"
+        "Supports a single `Range` header so a player can seek."
+    ),
+    response_class=Response,
+    responses={
+        status.HTTP_200_OK: {
+            "description": "The stored audio.",
+            "content": {"audio/wav": {"schema": {"type": "string", "format": "binary"}}},
+        },
+        status.HTTP_206_PARTIAL_CONTENT: {"description": "The requested byte range."},
+        status.HTTP_403_FORBIDDEN: {
+            "model": ErrorResponse,
+            "description": "This environment does not serve stored audio.",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorResponse,
+            "description": "No such run, or no artefact for that turn and variant.",
+        },
+        status.HTTP_416_RANGE_NOT_SATISFIABLE: {
+            "description": "The requested range lies outside the file."
+        },
+    },
+)
+def read_artefact_audio(
+    run_id: uuid.UUID,
+    turn_index: Annotated[int, Path(ge=0, description="Turn the audio belongs to.")],
+    engine: EngineDep,
+    settings: SettingsDep,
+    variant: Annotated[
+        Literal["original", "degraded"] | None,
+        Query(
+            description=(
+                "Which version of a degraded turn's audio. Omit for a turn stored without variants."
+            )
+        ),
+    ] = None,
+    range_header: Annotated[str | None, Header(alias="Range")] = None,
+) -> Response:
+    """Stream one artefact's bytes, resolved from the run's own record."""
+    if settings.app_env in (AppEnv.STAGING, AppEnv.PRODUCTION) and not (
+        settings.pipeline_serve_artefacts
+    ):
+        raise ArtefactAccessDisabledError(
+            "this environment does not stream stored conversation audio; "
+            "the application has no authentication, so the route is off "
+            "unless PIPELINE_SERVE_ARTEFACTS is set",
+            run_id=str(run_id),
+            stage="artefact_access",
+        )
+
+    report = engine.report(run_id)
+    record = next(
+        (
+            candidate
+            for candidate in report.artefacts
+            if candidate.turn_index == turn_index and candidate.variant == variant
+        ),
+        None,
+    )
+    if record is None:
+        named = "no variant" if variant is None else f"the '{variant}' variant"
+        raise NotFoundError(
+            f"stored audio for turn {turn_index} with {named} of run", run_id
+        )
+
+    try:
+        payload = engine.artefact_store.read(record.reference)
+    except CallerError as exc:
+        # The run recorded an artefact the store cannot produce: the file was
+        # removed, or the configured root moved. 404 rather than 500 - the
+        # server is fine, the recording is not there.
+        raise NotFoundError(
+            f"a readable recording for turn {turn_index} of run", run_id
+        ) from exc
+
+    return _audio_response(payload, record.content_type, range_header)
 
 
 @router.get(

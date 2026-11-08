@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Iterator
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -24,8 +25,9 @@ from app.caller.artefacts import AudioArtefactStore
 from app.caller.orchestrator import ConversationOrchestrator
 from app.caller.providers.deterministic import DeterministicCallerProvider
 from app.caller.service import CallerService
-from app.core.config import get_settings
+from app.core.config import AppEnv, get_settings
 from app.models import Scenario
+from app.models import TestRun as RunModel
 from app.models import TestSuite as SuiteModel
 from app.pipeline.bots.manual import ManualBotAdapter
 from app.pipeline.bots.registry import build_adapter
@@ -962,3 +964,385 @@ class TestOpenAPI:
         assert pipeline_client.get("/api/v1/languages").status_code == 200
         assert pipeline_client.get("/api/v1/health").status_code == 200
         assert pipeline_client.get("/api/v1/caller/providers").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Listing runs
+# ---------------------------------------------------------------------------
+
+
+class TestRunListing:
+    """`GET /api/v1/test-runs`, the history surface the dashboard pages."""
+
+    def test_an_empty_listing_is_an_empty_page_not_an_error(
+        self, pipeline_client: TestClient
+    ) -> None:
+        body = pipeline_client.get(BASE).json()
+        assert body["items"] == []
+        assert body["total"] == 0
+
+    def test_a_created_run_appears(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        run = _create(pipeline_client, scenario_ids)
+        body = pipeline_client.get(BASE).json()
+        assert [item["run_id"] for item in body["items"]] == [run["run_id"]]
+        assert body["total"] == 1
+
+    def test_the_row_carries_what_a_history_table_shows(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        _create(pipeline_client, scenario_ids, mode="audio_fixture_test")
+        row = pipeline_client.get(BASE).json()["items"][0]
+        assert row["scenario_name"] == "tamil_crop_insurance_status"
+        assert row["language"] == "ta-IN"
+        assert row["mode"] == "audio_fixture_test"
+        assert row["status"] == "created"
+        assert row["created_at"]
+
+    def test_an_unfinished_run_reports_no_outcome_and_no_duration(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        """A duration needs a start and a finish. Elapsed-so-far in a duration
+        column would be read as one."""
+        _create(pipeline_client, scenario_ids)
+        row = pipeline_client.get(BASE).json()["items"][0]
+        assert row["outcome"] is None
+        assert row["duration_seconds"] is None
+        assert row["finished_at"] is None
+
+    def test_a_finished_run_reports_a_measured_duration(
+        self,
+        pipeline_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+        wav: bytes,
+    ) -> None:
+        pipeline_client.pipeline_state["adapter"] = ScriptedBotAdapter(
+            [wav] * 4, exhausted_is_error=False
+        )
+        run = _create(pipeline_client, scenario_ids, mode="audio_fixture_test")
+        pipeline_client.post(f"{BASE}/{run['run_id']}/start")
+        row = pipeline_client.get(BASE).json()["items"][0]
+        assert row["outcome"] is not None
+        assert row["duration_seconds"] is not None
+        assert row["duration_seconds"] >= 0
+
+    def test_turn_counts_are_counted_not_defaulted(
+        self,
+        pipeline_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+        wav: bytes,
+    ) -> None:
+        pipeline_client.pipeline_state["adapter"] = ScriptedBotAdapter(
+            [wav] * 4, exhausted_is_error=False
+        )
+        run = _create(pipeline_client, scenario_ids, mode="audio_fixture_test")
+        pipeline_client.post(f"{BASE}/{run['run_id']}/start")
+        row = pipeline_client.get(BASE).json()["items"][0]
+        detail = pipeline_client.get(f"{BASE}/{run['run_id']}").json()
+        assert row["caller_turns"] == detail["caller_turns"]
+        assert row["bot_turns"] == detail["bot_turns"]
+        assert row["caller_turns"] > 0
+
+    def test_newest_first(
+        self,
+        pipeline_client: TestClient,
+        db_session: Session,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+    ) -> None:
+        """`created_at` defaults to the database's `now()`, which in
+        PostgreSQL is the *transaction* timestamp - so two runs created inside
+        one test transaction tie, and the ordering clause cannot be observed
+        without setting the column apart explicitly.
+        """
+        older = _create(pipeline_client, scenario_ids)
+        newer = _create(pipeline_client, scenario_ids)
+
+        aged = db_session.get(RunModel, uuid.UUID(older["run_id"]))
+        assert aged is not None
+        aged.created_at = aged.created_at - timedelta(hours=1)
+        db_session.flush()
+
+        ids = [item["run_id"] for item in pipeline_client.get(BASE).json()["items"]]
+        assert ids == [newer["run_id"], older["run_id"]]
+
+    def test_the_mode_filter_narrows(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        _create(pipeline_client, scenario_ids, mode="offline_simulation")
+        wanted = _create(pipeline_client, scenario_ids, mode="audio_fixture_test")
+        body = pipeline_client.get(BASE, params={"mode": "audio_fixture_test"}).json()
+        assert [item["run_id"] for item in body["items"]] == [wanted["run_id"]]
+        assert body["total"] == 1
+
+    def test_the_language_filter_narrows(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        _create(pipeline_client, scenario_ids)
+        assert pipeline_client.get(BASE, params={"language": "ta-IN"}).json()["total"] == 1
+        assert pipeline_client.get(BASE, params={"language": "hi-IN"}).json()["total"] == 0
+
+    def test_the_scenario_filter_matches_case_insensitively(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        _create(pipeline_client, scenario_ids)
+        body = pipeline_client.get(BASE, params={"scenario": "CROP_INSURANCE"}).json()
+        assert body["total"] == 1
+
+    def test_a_wildcard_in_the_scenario_filter_is_a_literal(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        """A percent sign must narrow to nothing, not match every row."""
+        _create(pipeline_client, scenario_ids)
+        assert pipeline_client.get(BASE, params={"scenario": "%"}).json()["total"] == 0
+
+    def test_the_suite_filter_narrows(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        suite_id, _ = scenario_ids
+        _create(pipeline_client, scenario_ids)
+        mine = pipeline_client.get(BASE, params={"suite_id": str(suite_id)}).json()
+        other = pipeline_client.get(BASE, params={"suite_id": str(uuid.uuid4())}).json()
+        assert mine["total"] == 1
+        assert other["total"] == 0
+
+    def test_an_unknown_filter_value_is_rejected_not_ignored(
+        self, pipeline_client: TestClient
+    ) -> None:
+        assert pipeline_client.get(BASE, params={"mode": "telephony_test"}).status_code == 200
+        assert pipeline_client.get(BASE, params={"mode": "not-a-mode"}).status_code == 422
+
+    def test_pagination_splits_the_results(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        for _ in range(3):
+            _create(pipeline_client, scenario_ids)
+        page = pipeline_client.get(BASE, params={"limit": 2, "offset": 0}).json()
+        assert len(page["items"]) == 2
+        assert page["total"] == 3
+        rest = pipeline_client.get(BASE, params={"limit": 2, "offset": 2}).json()
+        assert len(rest["items"]) == 1
+
+    def test_the_page_window_is_capped(self, pipeline_client: TestClient) -> None:
+        assert pipeline_client.get(BASE, params={"limit": 1000}).status_code == 422
+
+    def test_a_caller_only_run_is_not_listed(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        """A Phase 6 conversation creates a `TestRun` with no pipeline
+        metadata. Listing it would produce a row whose detail view is empty."""
+        suite_id, scenario_id = scenario_ids
+        started = pipeline_client.post(
+            "/api/v1/caller/conversations",
+            json={"suite_id": str(suite_id), "scenario_id": str(scenario_id)},
+        )
+        assert started.status_code == 201, started.text
+        assert pipeline_client.get(BASE).json()["total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Serving a stored artefact
+# ---------------------------------------------------------------------------
+
+
+class TestArtefactAudio:
+    """The route that streams one stored artefact's bytes."""
+
+    @pytest.fixture
+    def executed(
+        self,
+        pipeline_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+        wav: bytes,
+    ) -> str:
+        pipeline_client.pipeline_state["adapter"] = ScriptedBotAdapter(
+            [wav] * 4, exhausted_is_error=False
+        )
+        run = _create(
+            pipeline_client,
+            scenario_ids,
+            mode="audio_fixture_test",
+            noise_profile="moderate_background_noise",
+            seed=5,
+        )
+        pipeline_client.post(f"{BASE}/{run['run_id']}/start")
+        return str(run["run_id"])
+
+    def test_the_stored_bytes_are_returned(
+        self, pipeline_client: TestClient, executed: str
+    ) -> None:
+        artefacts = pipeline_client.get(f"{BASE}/{executed}/artifacts").json()["artefacts"]
+        record = next(a for a in artefacts if a["variant"] == "original")
+        response = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/{record['turn_index']}/audio",
+            params={"variant": "original"},
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("audio/")
+        assert len(response.content) == record["size_bytes"]
+        assert response.content[:4] == b"RIFF"
+
+    def test_the_degraded_variant_differs_from_the_original(
+        self, pipeline_client: TestClient, executed: str
+    ) -> None:
+        """Proof the route serves the artefact asked for rather than one of
+        them twice."""
+        artefacts = pipeline_client.get(f"{BASE}/{executed}/artifacts").json()["artefacts"]
+        turn = next(a for a in artefacts if a["variant"] == "degraded")["turn_index"]
+        original = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/{turn}/audio", params={"variant": "original"}
+        )
+        degraded = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/{turn}/audio", params={"variant": "degraded"}
+        )
+        assert original.status_code == 200
+        assert degraded.status_code == 200
+        assert original.content != degraded.content
+
+    def test_an_unknown_run_is_404(self, pipeline_client: TestClient) -> None:
+        response = pipeline_client.get(f"{BASE}/{uuid.uuid4()}/artifacts/0/audio")
+        assert response.status_code == 404
+
+    def test_an_unknown_turn_is_404(self, pipeline_client: TestClient, executed: str) -> None:
+        response = pipeline_client.get(f"{BASE}/{executed}/artifacts/999/audio")
+        assert response.status_code == 404
+
+    def test_an_unknown_variant_is_rejected(
+        self, pipeline_client: TestClient, executed: str
+    ) -> None:
+        response = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/0/audio", params={"variant": "pristine"}
+        )
+        assert response.status_code == 422
+
+    def test_a_negative_turn_index_is_rejected(
+        self, pipeline_client: TestClient, executed: str
+    ) -> None:
+        assert pipeline_client.get(f"{BASE}/{executed}/artifacts/-1/audio").status_code == 422
+
+    def test_a_traversal_in_the_turn_index_does_not_reach_the_filesystem(
+        self, pipeline_client: TestClient, executed: str
+    ) -> None:
+        """The turn index is an integer. A path cannot travel in it."""
+        response = pipeline_client.get(f"{BASE}/{executed}/artifacts/..%2F..%2Fetc%2Fpasswd/audio")
+        assert response.status_code in (404, 422)
+        assert b"root:" not in response.content
+
+    def test_a_range_request_returns_that_slice(
+        self, pipeline_client: TestClient, executed: str
+    ) -> None:
+        artefacts = pipeline_client.get(f"{BASE}/{executed}/artifacts").json()["artefacts"]
+        record = next(a for a in artefacts if a["variant"] == "original")
+        url = f"{BASE}/{executed}/artifacts/{record['turn_index']}/audio?variant=original"
+        whole = pipeline_client.get(url)
+        part = pipeline_client.get(url, headers={"Range": "bytes=0-99"})
+        assert part.status_code == 206
+        assert len(part.content) == 100
+        assert part.content == whole.content[:100]
+        assert part.headers["content-range"] == f"bytes 0-99/{record['size_bytes']}"
+
+    def test_a_range_beyond_the_file_is_416(
+        self, pipeline_client: TestClient, executed: str
+    ) -> None:
+        artefacts = pipeline_client.get(f"{BASE}/{executed}/artifacts").json()["artefacts"]
+        record = next(a for a in artefacts if a["variant"] == "original")
+        beyond = record["size_bytes"] + 10
+        response = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/{record['turn_index']}/audio?variant=original",
+            headers={"Range": f"bytes={beyond}-"},
+        )
+        assert response.status_code == 416
+
+    def test_range_support_is_advertised(self, pipeline_client: TestClient, executed: str) -> None:
+        artefacts = pipeline_client.get(f"{BASE}/{executed}/artifacts").json()["artefacts"]
+        record = next(a for a in artefacts if a["variant"] == "original")
+        response = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/{record['turn_index']}/audio?variant=original"
+        )
+        assert response.headers["accept-ranges"] == "bytes"
+
+    def test_the_response_never_discloses_the_storage_root(
+        self, pipeline_client: TestClient, executed: str
+    ) -> None:
+        root = str(pipeline_client.artefact_store.root)
+        response = pipeline_client.get(f"{BASE}/{executed}/artifacts/999/audio")
+        assert root not in response.text
+
+
+class TestArtefactAccessGuard:
+    """Where the artefact route is switched off, and why.
+
+    The application has no authentication, so on a reachable host this route
+    would let anyone hear a recorded conversation. Development serves it
+    because the operator is the only listener; a deployed environment has to
+    say so deliberately.
+    """
+
+    @pytest.fixture
+    def executed(
+        self,
+        pipeline_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+        wav: bytes,
+    ) -> str:
+        pipeline_client.pipeline_state["adapter"] = ScriptedBotAdapter(
+            [wav] * 4, exhausted_is_error=False
+        )
+        run = _create(pipeline_client, scenario_ids, mode="audio_fixture_test")
+        pipeline_client.post(f"{BASE}/{run['run_id']}/start")
+        return str(run["run_id"])
+
+    @staticmethod
+    def _with_env(test_app: FastAPI, **updates: Any) -> None:
+        base = test_app.dependency_overrides[get_settings]()
+        updated = base.model_copy(update=updates)
+        test_app.dependency_overrides[get_settings] = lambda: updated
+
+    def test_development_serves_audio(
+        self, pipeline_client: TestClient, test_app: FastAPI, executed: str
+    ) -> None:
+        self._with_env(test_app, app_env=AppEnv.DEVELOPMENT)
+        response = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/0/audio", params={"variant": "original"}
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.parametrize("env", [AppEnv.PRODUCTION, AppEnv.STAGING])
+    def test_a_deployed_environment_refuses_by_default(
+        self, pipeline_client: TestClient, test_app: FastAPI, executed: str, env: AppEnv
+    ) -> None:
+        self._with_env(test_app, app_env=env, pipeline_serve_artefacts=False)
+        response = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/0/audio", params={"variant": "original"}
+        )
+        assert response.status_code == 403
+
+    def test_the_refusal_explains_itself(
+        self, pipeline_client: TestClient, test_app: FastAPI, executed: str
+    ) -> None:
+        self._with_env(test_app, app_env=AppEnv.PRODUCTION, pipeline_serve_artefacts=False)
+        body = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/0/audio", params={"variant": "original"}
+        ).json()
+        assert "PIPELINE_SERVE_ARTEFACTS" in body["error"]["message"]
+
+    def test_a_deployed_environment_may_opt_in(
+        self, pipeline_client: TestClient, test_app: FastAPI, executed: str
+    ) -> None:
+        self._with_env(test_app, app_env=AppEnv.PRODUCTION, pipeline_serve_artefacts=True)
+        response = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/0/audio", params={"variant": "original"}
+        )
+        assert response.status_code == 200
+
+    def test_the_refusal_does_not_claim_the_artefact_is_missing(
+        self, pipeline_client: TestClient, test_app: FastAPI, executed: str
+    ) -> None:
+        """403, not 404. The recording exists; this environment declines to
+        serve it, and saying "no such artefact" would be a lie about disk."""
+        self._with_env(test_app, app_env=AppEnv.PRODUCTION, pipeline_serve_artefacts=False)
+        refused = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/0/audio", params={"variant": "original"}
+        )
+        assert refused.status_code == 403
+        assert refused.status_code != 404

@@ -29,6 +29,7 @@ from app.caller.errors import (
 from app.core.config import Settings, get_settings
 from app.core.languages import UnsupportedLanguageError
 from app.pipeline.errors import (
+    ArtefactAccessDisabledError,
     AudioValidationError,
     BotAdapterError,
     BotAudioPendingError,
@@ -175,6 +176,10 @@ _PIPELINE_STATUS: dict[type[PipelineError], int] = {
     # unimplemented mode, an unknown adapter, a run that is not waiting for
     # audio. 422, not 500.
     PipelineConfigurationError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    # The recording exists; this environment will not stream it. Refusing a
+    # request the server understands and declines is 403, not 404 - saying
+    # "no such artefact" would be a lie about what is on disk.
+    ArtefactAccessDisabledError: status.HTTP_403_FORBIDDEN,
     # The run has already finished. The client asked too late.
     RunNotActiveError: status.HTTP_409_CONFLICT,
     RunCancelledError: status.HTTP_409_CONFLICT,

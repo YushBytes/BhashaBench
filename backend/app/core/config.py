@@ -341,6 +341,18 @@ class Settings(BaseSettings):
             "own audio profile takes precedence."
         ),
     )
+    pipeline_serve_artefacts: bool = Field(
+        default=False,
+        description=(
+            "Whether a deployed environment may stream stored conversation "
+            "audio over the API. Development always may; staging and "
+            "production refuse unless this is turned on. There is no "
+            "authentication in this application, so on a reachable host the "
+            "artefact route would let anyone hear a recorded conversation - "
+            "turning it on there is a deliberate act, and the point of the "
+            "flag is that nobody does it by accident."
+        ),
+    )
 
     @field_validator("caller_provider", mode="before")
     @classmethod

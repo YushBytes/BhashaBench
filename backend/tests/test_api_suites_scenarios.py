@@ -677,6 +677,8 @@ class TestOpenApiSurface:
             "/api/v1/test-runs/{run_id}/cancel",
             "/api/v1/test-runs/{run_id}/turns",
             "/api/v1/test-runs/{run_id}/artifacts",
+            # Phase 8: the audio the inspector plays.
+            "/api/v1/test-runs/{run_id}/artifacts/{turn_index}/audio",
             "/api/v1/test-runs/{run_id}/report",
             "/api/v1/test-runs/bot-adapters/available",
         }

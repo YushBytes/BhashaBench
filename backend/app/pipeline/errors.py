@@ -80,6 +80,19 @@ class RunCapacityExhaustedError(PipelineError):
         self.in_use = in_use
 
 
+class ArtefactAccessDisabledError(PipelineError):
+    """Stored conversation audio may not be streamed in this environment.
+
+    Not a missing artefact and not a bad request: the recording exists and the
+    reference resolves, but this process is running somewhere the route is
+    switched off. The application has no authentication, so on a reachable
+    host an open artefact route would let anyone hear a recorded conversation.
+    Development serves audio because the operator is the only listener;
+    staging and production refuse until `PIPELINE_SERVE_ARTEFACTS` says
+    otherwise.
+    """
+
+
 class AudioValidationError(PipelineError):
     """Audio entering or leaving a stage failed inspection.
 
@@ -140,6 +153,7 @@ class BotAudioPendingError(BotAdapterError):
 
 
 __all__ = [
+    "ArtefactAccessDisabledError",
     "AudioValidationError",
     "BotAdapterError",
     "BotAudioPendingError",
