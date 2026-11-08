@@ -55,7 +55,7 @@ function Hero() {
     <section id="overview" aria-labelledby="overview-heading" className="scroll-mt-20 py-16 sm:py-24">
       <StatusPill
         status="partial"
-        label={`Phase ${currentPhase} of ${totalPhases} — Foundation complete`}
+        label={`Phase ${currentPhase} of ${totalPhases} — no calls placed yet`}
       />
 
       <h1

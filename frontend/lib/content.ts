@@ -38,16 +38,20 @@ export interface Phase {
   readonly status: Status;
 }
 
-export const currentPhase = 1;
+export const currentPhase = 6;
 export const totalPhases = 15;
 
 export const phases: readonly Phase[] = [
   { number: 1, title: "Project foundation", status: "live" },
-  { number: 2, title: "Data model & persistence", status: "planned" },
-  { number: 3, title: "Scenario definition format", status: "planned" },
-  { number: 4, title: "Speech to text (Gnani Prisma)", status: "planned" },
-  { number: 5, title: "Text to speech (Gnani Timbre)", status: "planned" },
-  { number: 6, title: "AI caller simulation (Gnani Evon)", status: "planned" },
+  { number: 2, title: "Data model & persistence", status: "live" },
+  { number: 3, title: "Scenario definition format", status: "live" },
+  { number: 4, title: "Speech to text (Gnani Prisma)", status: "live" },
+  { number: 5, title: "Text to speech (Gnani Timbre)", status: "live" },
+  // "Partial", not "live": the caller engine is complete and the Gnani Evon
+  // integration the phase was scoped around is not, because no documented
+  // API access exists. Marking this "live" would be the claim the first rule
+  // in CLAUDE.md forbids.
+  { number: 6, title: "Caller simulation (rule-based)", status: "partial" },
   { number: 7, title: "Audio degradation pipeline", status: "planned" },
   { number: 8, title: "Twilio telephony & media streaming", status: "planned" },
   { number: 9, title: "Conversation orchestration engine", status: "planned" },
@@ -71,8 +75,8 @@ export const capabilities: readonly Capability[] = [
   {
     title: "Simulated callers",
     summary:
-      "An AI caller that pursues a goal instead of replaying a script, conditioned on a persona's patience, verbosity and accent.",
-    status: "planned",
+      "A caller that pursues a goal instead of replaying a script, projected from the scenario's persona. Deterministic and rule-based: Gnani Evon is not integrated, because no documented API access exists.",
+    status: "partial",
     phase: 6,
   },
   {
