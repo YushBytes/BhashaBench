@@ -16,6 +16,7 @@ from app.api.v1 import (
     scenarios,
     speech,
     suites,
+    test_runs,
     transcription,
 )
 
@@ -39,3 +40,5 @@ api_router.include_router(speech.router)
 
 # Phase 6. The simulated caller, which drives the two above.
 api_router.include_router(caller.router)
+# Phase 7. The pipeline, which drives all three.
+api_router.include_router(test_runs.router)

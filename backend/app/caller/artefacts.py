@@ -36,6 +36,21 @@ logger = logging.getLogger("bhashabench.caller.artefacts")
 # rather than a new file type on disk.
 _ALLOWED_SUFFIXES = frozenset({"wav", "mp3", "ogg", "raw", "mulaw", "alaw"})
 
+ARTEFACT_VARIANTS = frozenset({"original", "degraded"})
+"""Named versions of one turn's audio.
+
+Phase 7 degrades the caller's speech before sending it to a bot, and §8 of that
+phase requires the original to survive: a degraded artefact is only evidence if
+the thing it was derived from is still there to compare against. So one turn
+can hold two files, distinguished by this suffix.
+
+A whitelist rather than a free string, for the same reason the containers are
+one - every component of a path here is generated or validated, never supplied.
+
+Phase 6 passes no variant and keeps its original filenames, so adding this
+changed nothing already on disk.
+"""
+
 MAX_ARTEFACT_BYTES = 25 * 1024 * 1024
 """Refuse to write anything larger.
 
@@ -60,6 +75,8 @@ class StoredArtefact:
     size_bytes: int
     content_type: str
     container: str
+    variant: str | None = None
+    """Which version of the turn's audio this is, when there is more than one."""
 
 
 class AudioArtefactStore:
@@ -74,7 +91,12 @@ class AudioArtefactStore:
         return self._root
 
     def _relative_for(
-        self, conversation_id: uuid.UUID, turn_index: int, speaker: Speaker, container: str
+        self,
+        conversation_id: uuid.UUID,
+        turn_index: int,
+        speaker: Speaker,
+        container: str,
+        variant: str | None = None,
     ) -> Path:
         """Build the reference path from trusted values only.
 
@@ -89,10 +111,16 @@ class AudioArtefactStore:
             )
         if turn_index < 0:
             raise CallerError(f"turn index must not be negative, got {turn_index}")
+        if variant is not None and variant not in ARTEFACT_VARIANTS:
+            raise CallerError(
+                f"'{variant}' is not an audio variant this store will write; "
+                f"allowed variants are {sorted(ARTEFACT_VARIANTS)}"
+            )
 
         # Sharded by conversation so one directory never holds every file of
         # every run.
-        return Path(str(conversation_id)) / f"{turn_index:04d}-{speaker.value}.{container}"
+        suffix = "" if variant is None else f"-{variant}"
+        return Path(str(conversation_id)) / f"{turn_index:04d}-{speaker.value}{suffix}.{container}"
 
     def _absolute(self, relative: Path) -> Path:
         """Resolve a reference under the root, refusing anything that escapes.
@@ -120,12 +148,17 @@ class AudioArtefactStore:
         speaker: Speaker,
         container: str,
         content_type: str,
+        variant: str | None = None,
     ) -> StoredArtefact:
         """Write one turn's audio and return its reference.
 
+        `variant` distinguishes two files for the same turn - Phase 7's
+        original and degraded caller audio. Omitting it writes the filename
+        Phase 6 has always written.
+
         Raises:
             CallerError: empty audio, an oversized payload, a disallowed
-                container, or a path that would escape the root.
+                container or variant, or a path that would escape the root.
         """
         if not audio:
             raise CallerError("refusing to store an empty audio artefact")
@@ -135,7 +168,7 @@ class AudioArtefactStore:
                 f"{MAX_ARTEFACT_BYTES} byte limit for one conversation turn"
             )
 
-        relative = self._relative_for(conversation_id, turn_index, speaker, container)
+        relative = self._relative_for(conversation_id, turn_index, speaker, container, variant)
         target = self._absolute(relative)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(audio)
@@ -146,6 +179,7 @@ class AudioArtefactStore:
                 "conversation_id": str(conversation_id),
                 "turn_index": turn_index,
                 "speaker": speaker.value,
+                "variant": variant,
                 "container": container,
                 "size_bytes": len(audio),
                 # The reference, never the absolute path: an API response or a
@@ -158,6 +192,7 @@ class AudioArtefactStore:
             size_bytes=len(audio),
             content_type=content_type,
             container=container,
+            variant=variant,
         )
 
     def read(self, reference: str) -> bytes:
@@ -179,4 +214,9 @@ class AudioArtefactStore:
             return False
 
 
-__all__ = ["MAX_ARTEFACT_BYTES", "AudioArtefactStore", "StoredArtefact"]
+__all__ = [
+    "ARTEFACT_VARIANTS",
+    "MAX_ARTEFACT_BYTES",
+    "AudioArtefactStore",
+    "StoredArtefact",
+]

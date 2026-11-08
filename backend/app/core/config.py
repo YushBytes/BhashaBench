@@ -296,11 +296,63 @@ class Settings(BaseSettings):
         ),
     )
 
+    # -- Pipeline (Phase 7) --------------------------------------------------
+
+    pipeline_bot_adapter: str = Field(
+        default="scripted",
+        description=(
+            "Which bot adapter a run uses by default. 'scripted' replays "
+            "fixture audio and 'manual' waits for an operator to post the "
+            "bot's reply; neither sends a request anywhere, which is why one "
+            "of them is the default."
+        ),
+    )
+    pipeline_run_timeout_seconds: float = Field(
+        default=600.0,
+        gt=0,
+        le=7200,
+        description=(
+            "Wall-clock ceiling on one whole run, on top of the per-turn "
+            "timeout. A run that hangs holds a database session, so this bound "
+            "exists even though the turn budget also terminates."
+        ),
+    )
+    pipeline_max_concurrent_runs: int = Field(
+        default=2,
+        ge=1,
+        le=50,
+        description=(
+            "How many runs may execute at once. Bounds provider spend and "
+            "memory: each turn decodes audio into Python lists."
+        ),
+    )
+    pipeline_noise_seed: int = Field(
+        default=42,
+        description=(
+            "Default seed for audio degradation. Fixed so a run is "
+            "reproducible by default - an artefact nobody can reproduce is not "
+            "evidence."
+        ),
+    )
+    pipeline_noise_profile: str = Field(
+        default="clean",
+        description=(
+            "Degradation profile for runs that do not name one. A scenario's "
+            "own audio profile takes precedence."
+        ),
+    )
+
     @field_validator("caller_provider", mode="before")
     @classmethod
     def _normalise_caller_provider(cls, value: object) -> object:
         """Fold case and whitespace, as for the other provider settings."""
         return value.strip().lower() if isinstance(value, str) else value
+
+    @field_validator("pipeline_bot_adapter", "pipeline_noise_profile", mode="before")
+    @classmethod
+    def _normalise_pipeline_names(cls, value: object) -> object:
+        """Fold case and strip whitespace, as the provider settings do."""
+        return value.strip().casefold() if isinstance(value, str) else value
 
     @property
     def caller_audio_root(self) -> Path:

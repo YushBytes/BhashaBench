@@ -84,6 +84,16 @@ class TestOpenApiDocument:
             "/api/v1/caller/conversations/{conversation_id}/bot-audio",
             "/api/v1/caller/conversations/{conversation_id}/terminate",
             "/api/v1/caller/providers",
+            # Phase 7
+            "/api/v1/test-runs",
+            "/api/v1/test-runs/{run_id}",
+            "/api/v1/test-runs/{run_id}/start",
+            "/api/v1/test-runs/{run_id}/bot-audio",
+            "/api/v1/test-runs/{run_id}/cancel",
+            "/api/v1/test-runs/{run_id}/turns",
+            "/api/v1/test-runs/{run_id}/artifacts",
+            "/api/v1/test-runs/{run_id}/report",
+            "/api/v1/test-runs/bot-adapters/available",
         }
 
     def test_info_block_matches_settings(self, client: TestClient, settings: Settings) -> None:

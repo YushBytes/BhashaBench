@@ -28,6 +28,18 @@ from app.caller.errors import (
 )
 from app.core.config import Settings, get_settings
 from app.core.languages import UnsupportedLanguageError
+from app.pipeline.errors import (
+    AudioValidationError,
+    BotAdapterError,
+    BotAudioPendingError,
+    BotTimeoutError,
+    BotUnavailableError,
+    DegradationError,
+    PipelineConfigurationError,
+    PipelineError,
+    RunCancelledError,
+    RunNotActiveError,
+)
 from app.schemas.common import ErrorDetail, ErrorResponse, HealthResponse, ServiceIdentity
 from app.services.errors import ConflictError, NotFoundError
 from app.services.health import uptime_seconds
@@ -153,6 +165,26 @@ _SPEECH_STATUS: dict[type[SpeechError], int] = {
 }
 """Speech error type -> HTTP status. Exact types, defaulting to 502."""
 
+
+_PIPELINE_STATUS: dict[type[PipelineError], int] = {
+    # A configuration the engine cannot honour is the request's fault: an
+    # unimplemented mode, an unknown adapter, a run that is not waiting for
+    # audio. 422, not 500.
+    PipelineConfigurationError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    # The run has already finished. The client asked too late.
+    RunNotActiveError: status.HTTP_409_CONFLICT,
+    RunCancelledError: status.HTTP_409_CONFLICT,
+    # Audio that did not survive inspection, and a degradation step that could
+    # not run. Both are about the payload rather than the server.
+    AudioValidationError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    DegradationError: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    # Waiting for an operator is not an error condition; 409 says "not now"
+    # rather than 502, which would blame a bot that was never contacted.
+    BotAudioPendingError: status.HTTP_409_CONFLICT,
+    BotTimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
+    BotUnavailableError: status.HTTP_502_BAD_GATEWAY,
+    BotAdapterError: status.HTTP_502_BAD_GATEWAY,
+}
 
 _CALLER_STATUS: dict[type[CallerError], int] = {
     CallerConfigurationError: status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -297,6 +329,21 @@ def register_exception_handlers(app: FastAPI) -> None:
         if name.endswith("Error"):
             name = name[: -len("Error")]
         snake = "".join(f"_{c.lower()}" if c.isupper() else c for c in name).lstrip("_")
+        return _error_response(status_code, f"{snake}_error", redact(exc))
+
+    # -- Phase 7 pipeline errors ----------------------------------------------
+
+    @app.exception_handler(PipelineError)
+    async def handle_pipeline_error(_request: Request, exc: PipelineError) -> JSONResponse:
+        status_code = _PIPELINE_STATUS.get(type(exc), status.HTTP_422_UNPROCESSABLE_CONTENT)
+        if isinstance(exc, PipelineConfigurationError):
+            logger.error("Pipeline is misconfigured: %s", exc)
+        name = type(exc).__name__
+        if name.endswith("Error"):
+            name = name[: -len("Error")]
+        snake = "".join(f"_{c.lower()}" if c.isupper() else c for c in name).lstrip("_")
+        # Redacted: a pipeline error can carry a provider's message, and those
+        # have carried an Authorization header before now.
         return _error_response(status_code, f"{snake}_error", redact(exc))
 
     @app.exception_handler(Exception)
