@@ -50,7 +50,12 @@ from app.caller.schemas import Speaker
 from app.caller.service import CallerService
 from app.core.config import AppEnv
 from app.models.test_run import RunStatus, TestRun
-from app.pipeline.bots.registry import build_adapter, describe_adapters
+from app.pipeline.bots.registry import (
+    SCRIPTED_ADAPTER,
+    build_adapter,
+    describe_adapters,
+    fixture_replies_from_path,
+)
 from app.pipeline.concurrency import get_run_slots
 from app.pipeline.degradation import NoiseProfile
 from app.pipeline.engine import (
@@ -121,7 +126,22 @@ def get_engine_factory(
             speech=speech,
         )
         artefacts = AudioArtefactStore(settings.caller_audio_root)
-        adapter = build_adapter(adapter_name or settings.pipeline_bot_adapter)
+        # A scripted run started through the API used to have no replies at
+        # all, so it failed on turn 0 and `audio_fixture_test` was unusable
+        # outside the tests, which inject their own adapter. An operator
+        # supplies the fixture through `PIPELINE_FIXTURE_AUDIO_PATH`; unset,
+        # this resolves to `None` and the previous behaviour is unchanged.
+        #
+        # Only the scripted adapter is offered replies: the manual adapter
+        # refuses them, correctly, because its audio arrives later.
+        resolved_adapter = (adapter_name or settings.pipeline_bot_adapter or "").strip().casefold()
+        replies: tuple[bytes, ...] | None = None
+        if resolved_adapter == SCRIPTED_ADAPTER and settings.pipeline_fixture_audio_path:
+            replies = fixture_replies_from_path(
+                settings.pipeline_fixture_audio_path,
+                count=settings.caller_max_turns,
+            )
+        adapter = build_adapter(resolved_adapter or settings.pipeline_bot_adapter, replies=replies)
         orchestrator = ConversationOrchestrator(
             session=session,
             caller=caller,

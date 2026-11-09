@@ -307,6 +307,22 @@ class Settings(BaseSettings):
             "of them is the default."
         ),
     )
+    pipeline_fixture_audio_path: str | None = Field(
+        default=None,
+        description=(
+            "Path to a WAV file the 'scripted' adapter replays as the bot's "
+            "reply on every turn. **Unset by default, and unset means the "
+            "previous behaviour exactly:** a scripted run started through the "
+            "API has no replies and fails with 'the scripted bot has no reply "
+            "for turn 0'. Setting it is what makes `audio_fixture_test` "
+            "complete end to end, which is how the demonstration run works. "
+            "The audio is a fixture, not a bot: the scripted adapter reports "
+            "`received_from_bot=False`, so the run's "
+            "`bot_audio_externally_received` is False and it can never be "
+            "mistaken for an external bot test. This is an operator setting "
+            "read from the environment; no client value reaches it."
+        ),
+    )
     pipeline_run_timeout_seconds: float = Field(
         default=600.0,
         gt=0,

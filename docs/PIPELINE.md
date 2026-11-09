@@ -369,6 +369,36 @@ socket**.
 default configuration not to send audio to arbitrary external destinations, so
 the default is the adapter that sends audio nowhere at all.
 
+### Where the scripted adapter gets its fixture
+
+The tests construct `ScriptedBotAdapter` with their own payloads. A run started
+through the **API** had no such seam, so the route built the adapter with no
+replies and every `audio_fixture_test` failed on turn 0 with "the scripted bot
+has no reply for turn 0". The mode was usable only from the tests - which is
+also why the test suite never caught it: those tests replace the very seam that
+was broken.
+
+`PIPELINE_FIXTURE_AUDIO_PATH` is how an operator supplies that fixture. The
+route reads the file once and hands the scripted adapter one reply per turn,
+sized from `CALLER_MAX_TURNS`, so a run terminates on its turn budget before it
+can exhaust the replies and exhaustion stays a loud error.
+
+Four properties worth keeping:
+
+- **Unset means unchanged.** With no path configured a scripted run still has
+  no replies and still fails on turn 0. That failure is honest when no fixture
+  exists, so it was not softened into a silent stop.
+- **A fixture can never read as a bot.** The scripted adapter reports
+  `received_from_bot=False`, so `bot_audio_externally_received` is `false` on
+  such a run. This is the honesty control, and it is why the fixture is given
+  to *this* adapter and not to `manual`, whose replies are asserted to come
+  from a real bot.
+- **Only the scripted adapter is offered replies.** `manual` refuses them, and
+  correctly: its audio arrives later.
+- **No client value reaches the path.** There is no request field for it; it is
+  an environment setting an operator controls. A misconfigured path fails with
+  a message naming it, rather than resurfacing as the turn-0 error.
+
 **No third-party bot API is invented here.** A real integration is an adapter
 written against a real bot's published interface and added to `_FACTORIES` in
 `app/pipeline/bots/registry.py`. There is no plugin discovery, for the same
@@ -543,6 +573,7 @@ curl -s     $B/$RUN/report      | python -m json.tool
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `PIPELINE_BOT_ADAPTER` | `scripted` | Default adapter. Both options send audio nowhere |
+| `PIPELINE_FIXTURE_AUDIO_PATH` | _unset_ | WAV the `scripted` adapter replays per turn. Unset keeps the turn-0 failure; set, it is what lets `audio_fixture_test` complete. The reply is still not claimed as bot audio |
 | `PIPELINE_SERVE_ARTEFACTS` | `false` | Lets a *deployed* environment stream stored audio. Development always does |
 | `PIPELINE_RUN_TIMEOUT_SECONDS` | `600.0` | Wall-clock ceiling on one run |
 | `PIPELINE_MAX_CONCURRENT_RUNS` | `2` | Bounds provider spend and memory. Enforced: `POST /start` answers 503 beyond it |
