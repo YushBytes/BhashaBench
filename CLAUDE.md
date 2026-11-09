@@ -517,6 +517,8 @@ ruff check . && ruff format --check .   # from the repository root
 | `scenarios/README.md` | a reference scenario is added or changed |
 | `docs/DEVELOPMENT_ROADMAP.md` | a phase's scope or status changes |
 | `.env.example` | any configuration variable is added or renamed |
+| the path/operation counts in `README.md` and this file | an endpoint is added or removed — rerun `python scripts/api_surface.py`, never hand-count |
+| the test counts in `README.md` and this file | tests are added or removed — rerun `pytest --collect-only -q`, and keep the per-module table summing to the collected total |
 | `CLAUDE.md` | these instructions change |
 
 After editing anything in `scenarios/`, regenerate
