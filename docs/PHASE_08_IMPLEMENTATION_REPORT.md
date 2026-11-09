@@ -493,7 +493,7 @@ library lists and filters; it does not open a scenario or edit one.
 | Hash | Subject |
 |---|---|
 | `9b7c559` | `feat(api): list runs and serve stored artefact audio` |
-| *(this)* | `feat(frontend): build the operator workspace and public site` |
+| `c51e568` | `feat(frontend): build the operator workspace and public site` |
 
 ---
 
