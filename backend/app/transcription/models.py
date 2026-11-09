@@ -2,7 +2,7 @@
 
 Nothing outside `app.transcription.providers` is allowed to see a vendor's
 response shape. These models are the contract everything else codes against,
-so swapping Prisma for another engine in Phase 11 changes one adapter rather
+so swapping Prisma for another engine in Phase 12 changes one adapter rather
 than the evaluation layer.
 
 **Optional means optional.** `confidence`, `segments` and word timings are

@@ -17,7 +17,7 @@ What it owns:
 
 **No persistence.** Phase 5 stores nothing. Generated audio is returned to the
 caller and forgotten: deciding where a caller utterance belongs is conversation
-orchestration (Phase 9), and an audio artefact store with no run to attach it
+orchestration (Phase 10), and an audio artefact store with no run to attach it
 to would be guesswork. These endpoints work with PostgreSQL down.
 """
 

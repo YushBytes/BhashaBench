@@ -129,7 +129,7 @@ three.
 | `cancelled` | An operator stopped it | **no** |
 
 The last four are collected in `OUR_FAULT_OUTCOMES`. Aggregating them into a
-bot's score would blame it for our outage, so Phase 10 should exclude them from
+bot's score would blame it for our outage, so Phase 11 should exclude them from
 any quality metric; the set exists now so that decision sits where the outcomes
 are defined.
 
@@ -628,14 +628,14 @@ providers and the bot are stubs.
 
 ## Future telephony
 
-Phase 8 adds real calls. The seams are already in place: `ExecutionMode`
+Phase 9 adds real calls. The seams are already in place: `ExecutionMode`
 carries a `TELEPHONY_TEST` member that nothing can use yet, `BotAdapter` is the
 interface a telephony bridge implements, `BotReply.session_id` exists for a
 call identifier, and `CallSession` already has `provider_call_id`,
 `DIALING`, `NO_ANSWER` and `BUSY` statuses that this phase deliberately never
 sets — an offline simulation must not claim a telephony state.
 
-What Phase 8 has to add: a media-streaming bridge, the `ALLOWED_BOT_NUMBERS`
+What Phase 9 has to add: a media-streaming bridge, the `ALLOWED_BOT_NUMBERS`
 allow-list enforcement, barge-in handling, and the per-run cost caps
 (`MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS`) that
 `.env.example` already declares.

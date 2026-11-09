@@ -63,7 +63,7 @@ class AudioConfig(BaseModel):
     """How the audio should be rendered.
 
     Defaults chosen for this project rather than copied from the vendor: 8 kHz
-    mono, because an Indian phone call is 8 kHz mono and Phase 8 will put this
+    mono, because an Indian phone call is 8 kHz mono and Phase 9 will put this
     audio down a telephone line. The vendor's own default is 48 kHz, which
     would have to be downsampled - and resampling the signal under test is
     exactly what Phase 7 exists to control.

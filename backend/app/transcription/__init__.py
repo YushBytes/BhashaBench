@@ -11,6 +11,6 @@ Layering, outermost first:
 
 `models`, `errors`, `audio`, `retry` and `redaction` are shared by all of
 them. Nothing above `providers/` may import a vendor module or reference a
-vendor field name - that boundary is what lets Phase 11 benchmark a second
+vendor field name - that boundary is what lets Phase 12 benchmark a second
 engine without touching the evaluation code.
 """

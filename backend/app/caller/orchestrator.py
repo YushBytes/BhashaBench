@@ -105,7 +105,7 @@ class ConversationReport:
     outcomes_observed: tuple[str, ...]
     """Expected outcomes whose text was found in the bot's transcripts.
 
-    A keyword match, not a judgement. Phase 10 is the evaluation engine; this
+    A keyword match, not a judgement. Phase 11 is the evaluation engine; this
     is a cheap indicator so a demo can show progress, and the report says which
     it is rather than implying a score.
     """

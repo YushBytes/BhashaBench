@@ -50,7 +50,7 @@ class ExecutionMode(StrEnum):
     TELEPHONY_TEST = "telephony_test"
     """A real phone call.
 
-    **Not implemented.** Declared so that the vocabulary exists and Phase 8 has
+    **Not implemented.** Declared so that the vocabulary exists and Phase 9 has
     a value to fill rather than a value to add, and so that nothing else can be
     mistaken for it. Creating a run in this mode is refused.
     """
@@ -166,7 +166,7 @@ OUR_FAULT_OUTCOMES: frozenset[RunOutcome] = frozenset(
 )
 """Outcomes that say nothing about the bot under test.
 
-Aggregating these into a bot's score would blame it for our outage. Phase 10
+Aggregating these into a bot's score would blame it for our outage. Phase 11
 should exclude them from any quality metric; the set exists now so that
 decision is recorded where the outcomes are defined.
 """

@@ -325,6 +325,7 @@ BhashaBench/
 ├── benchmarks/                benchmark suite definitions      (Phase 12)
 ├── sample_bot/                reference bot to test against    (empty)
 ├── scripts/                   operational scripts
+│   └── api_surface.py         counts API paths/operations from the OpenAPI schema
 ├── scenarios/                 reference scenario YAML (6 languages)
 ├── docs/
 │   ├── ARCHITECTURE.md
@@ -528,6 +529,31 @@ ruff format .                        # format
 ruff format --check .                # verify formatting without writing
 
 uvicorn app.main:app --reload --app-dir backend
+```
+
+Both Ruff commands are run **from the repository root**, and their scope is
+the project's tracked Python source — currently 140 files. The scope is set in
+`pyproject.toml` and is therefore identical locally and in CI; there is no
+second, differently-scoped invocation anywhere.
+
+Two exclusions are deliberate and worth knowing about:
+
+- **Markdown is not in scope.** Ruff's default `include` carries `*.md` and so
+  formats the Python code blocks inside documentation. That made
+  `ruff format --check .` a gate over prose — the eleven files in `docs/`
+  counted as eleven "Python" files, and editing a code sample could fail the
+  check with no Python touched. `include` is set explicitly without `*.md`.
+- **`.agents/` and `.claude/` are excluded.** They are untracked local agent
+  tooling inside the working tree, and contributed 79 files to the count,
+  making the figure a property of one machine rather than of the repository.
+
+The invariant to check if you change this: Ruff's file scope should equal
+`git ls-files "*.py"` plus `pyproject.toml`, which Ruff lints for schema
+validity.
+
+```bash
+ruff check . --show-files   # the exact set Ruff considers
+git ls-files "*.py"         # what it should be, plus pyproject.toml
 ```
 
 ### Migrations

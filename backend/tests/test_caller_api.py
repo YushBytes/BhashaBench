@@ -612,7 +612,7 @@ class TestOpenAPI:
     def test_the_observed_outcomes_field_does_not_claim_to_be_a_score(
         self, caller_client: TestClient
     ) -> None:
-        """Phase 10 is the evaluation engine; a keyword indicator presented as
+        """Phase 11 is the evaluation engine; a keyword indicator presented as
         a score would be exactly the fabricated-metric problem."""
         schema = caller_client.get("/openapi.json").json()["components"]["schemas"][
             "ConversationResponse"

@@ -13,7 +13,7 @@ interleaves receiving client audio with forwarding provider events.
 **Why WebSocket for streaming.** The transport has to carry audio *up* while
 events come *down*, which rules out an HTTP streaming response. It also
 mirrors the provider's own protocol, so neither side needs buffering to adapt
-between a request-shaped and a stream-shaped API. Phase 8's Twilio Media
+between a request-shaped and a stream-shaped API. Phase 9's Twilio Media
 Streams are a WebSocket too, so this is the transport the orchestrator will
 already be speaking.
 """

@@ -46,7 +46,7 @@ for Prisma recognition, one for Timbre synthesis.
 | Requested sample rate honoured | ✅ **Verified** | **Live call.** 8 kHz requested, 8 kHz returned |
 | Adapter end-to-end after the WAV header fix | ✅ **Verified live** | **Live call.** The full path - request, binary response, sentinel header, measurement - returns a valid `SpeechResult`. Confirmed after the fix |
 | Pronunciation / prosody / intelligibility | ⚠️ **Not evaluated** | Nobody has listened to the audio. No automated test can judge this |
-| Streaming synthesis (SSE / WebSocket) | ⬜ **Not implemented** | Documented by the vendor; nothing consumes a stream before Phase 9 |
+| Streaming synthesis (SSE / WebSocket) | ⬜ **Not implemented** | Documented by the vendor; nothing consumes a stream before Phase 10 |
 
 ### Caller — deterministic engine (Phase 6)
 
@@ -124,7 +124,7 @@ deliberately malformed files. They contain **no speech**, so they have **no
 reviewed ground truth**, and no test asserts that any particular words come
 back. Nothing in this repository measures word error rate, per-language
 quality, or code-mixing handling. Treat the live result as "the pipe works",
-not "the model is good" — benchmarking recognition quality is Phase 11's job
+not "the model is good" — benchmarking recognition quality is Phase 12's job
 and needs licensed, transcribed speech.
 
 **Still open on the recognition streaming path.** The WebSocket adapter has
@@ -218,7 +218,7 @@ it was looking at.
 **The rule that makes this worth doing:** nothing above `providers/` may
 import a vendor module or reference a vendor field name. The service layer has
 never heard of `audio_file` or `detected_language_code`. That is what lets
-Phase 11 benchmark a second engine without touching the evaluation code.
+Phase 12 benchmark a second engine without touching the evaluation code.
 
 ### Adding a provider
 
@@ -261,7 +261,7 @@ dependency graph and has not been made.
 
 Phase 4 writes nothing to the database. The `TestRun`, `CallSession` and
 `ConversationTurn` tables remain foundational schema. Deciding which
-conversation turn a transcript belongs to is orchestration — Phase 9 — and a
+conversation turn a transcript belongs to is orchestration — Phase 10 — and a
 table written by nothing would be schema guesswork.
 
 A practical consequence: **the transcription endpoints work with PostgreSQL
@@ -566,7 +566,7 @@ authored in them and no caller audio can be synthesised.
 | `speed` | 0.85–1.15, or `slow` / `medium` / `fast` | provider default |
 
 **BhashaBench defaults to 8 kHz**, not the vendor's 48 kHz, because an Indian
-phone call is 8 kHz mono and Phase 8 will put this audio down a telephone line.
+phone call is 8 kHz mono and Phase 9 will put this audio down a telephone line.
 Downsampling 48 kHz later would mean resampling the signal under test, which is
 Phase 7's job to control, not a side effect of a default.
 
@@ -1048,10 +1048,10 @@ for provenance, licensing and how to add real recordings.
 - The three output modes whose literal wire values are unpublished.
 - Automatic language detection (`auto` / `indic-auto`).
 - Caller simulation (Phase 6), audio degradation (Phase 7), telephony
-  (Phase 8), orchestration (Phase 9), scoring (Phase 10).
+  (Phase 9), orchestration (Phase 10), scoring (Phase 11).
 - Any persistence of transcripts or generated audio.
 - **Timbre streaming** (SSE and WebSocket). Both are documented by the vendor
-  and neither is implemented: nothing consumes a stream before Phase 9, and an
+  and neither is implemented: nothing consumes a stream before Phase 10, and an
   unused transport is an untested transport.
 - Timbre voice cloning, which the vendor documents separately.
 - The three Timbre output modes whose literal wire values are unpublished.

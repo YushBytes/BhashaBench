@@ -174,7 +174,7 @@ library is now complete enough to drive those.
   `/api/v1/transcription/stream` WebSocket.
 - 964 tests, up from 561. 15 of them are opt-in live provider tests.
   (1327 after Phase 5; 1669 after Phase 6; 1907 after Phase 7; 1957 after
-  Phase 7.1.)
+  Phase 7.1; 1990 collected after Phase 8.)
 
 **Verified language support.** Prisma documents ten of BhashaBench's thirteen
 catalogue languages. Urdu, Odia and Assamese have no speech model: a scenario
@@ -360,7 +360,7 @@ supplied bot replies through the API. **Not met** against the local sample bot:
 **Deliberately not in this phase.** Any Evon adapter, stub or otherwise;
 telephony; audio degradation; a sample bot; scoring. Persona conditioning is
 projected from the scenario and shapes the opening utterance, but accent and
-interruption behaviour belong to Phases 7 and 8, where the audio and the call
+interruption behaviour belong to Phases 7 and 9, where the audio and the call
 exist.
 
 ---
@@ -395,7 +395,8 @@ it, and Prisma transcribes the reply.
 - **Artefact handling.** Both the original and the degraded audio survive every
   turn, the processed file names its source, and every path component is
   generated or whitelisted.
-- **Nine endpoints** under `/api/v1/test-runs`, and 238 offline tests.
+- **Nine endpoints** under `/api/v1/test-runs` as delivered here; Phase 8
+  added two more, for eleven operations across ten paths. 238 offline tests.
 - **No new table and no migration.** `alembic check` reports no drift.
 
 ### Pure Python DSP, deliberately
@@ -473,10 +474,88 @@ simulation beyond band-limiting (G.711 and AMR-NB need a codec this project
 does not carry); reverb, which needs an impulse response nobody has measured;
 any accuracy or quality score; serving stored audio over HTTP, which is an
 authorisation decision with no identity to make it against until Phase 15.
+(Phase 8 revisited the last of these: the route ships, environment-gated and
+claiming no authorisation. Real access control is still Phase 15.)
 
 ---
 
-## Phase 8 — Twilio Telephony & Media Streaming
+## Phase 8 — Operator Workspace & Public Site ✅
+
+The phase that gave the instrument a face. Building it early was deliberate:
+driving the pipeline through a UI is what made two of its own gaps visible,
+and that is worth more before telephony than after it.
+
+### Delivered
+
+- **A public site** at `/` explaining what the instrument measures, and an
+  **operator workspace** at `/app` that drives it: overview, run history with
+  filters, a conversation inspector, the new-test workflow, the scenario
+  library and provider status.
+- **Two backend endpoints**, added because the workspace could not be built
+  honestly without them. `GET /api/v1/test-runs` pages the run history with
+  filters on suite, status, mode, language, outcome and scenario name.
+  `GET /api/v1/test-runs/{run_id}/artifacts/{turn_index}/audio` serves stored
+  turn audio with single-range `bytes=` support so a player can seek.
+- **Audio playback with waveforms drawn from the decoded bytes** - or not
+  drawn at all. There is no synthetic fallback, because a generated waveform
+  is a picture of a sound that does not exist.
+- **A design system built by hand** (`components/ui/`): dependencies remain
+  exactly `next`, `react` and `react-dom`. No component library, because the
+  design avoids the two primitives that are genuinely hard - focus trapping
+  and overlay positioning - by having no modals.
+- **No mock mode and no fallback data.** `lib/api/client.ts` is the only
+  module that calls the API; a failed call renders an error state. Returning
+  plausible data when the backend is down makes a broken deployment look like
+  a working one.
+- **The honesty fields rendered structurally rather than as copy.**
+  `uses_language_model`, `bot_audio_externally_received`, `measurement_note`,
+  `evon_status` and `telephony_status` exist so a client cannot overclaim, and
+  `RunEvidence` derives its caveats from the run rather than from the mode
+  label - which is what makes a mislabelled `external_bot_test` visible.
+
+### Superseded decisions
+
+Phase 7 listed "serving stored audio over HTTP" as deliberately out of scope
+until Phase 15, on the grounds that who may hear a recorded conversation is an
+authorisation decision with no identity to make it against. That reasoning
+still holds, and the route ships anyway under three constraints: no
+client-supplied string reaches the filesystem, staging and production refuse
+with **403** unless `PIPELINE_SERVE_ARTEFACTS` is set, and it claims no
+authorisation - a run id is an identifier, not a credential. Withholding the
+route never created an authorisation model; it only put the recording out of
+reach of the one operator entitled to it. Real access control is still
+Phase 15.
+
+The old Phase 13 "React dashboard" is absorbed here.
+
+**Exit criteria.** The workspace drives a real run end to end and renders its
+transcript, stage timings and stored audio - **met**, exercised in the browser
+against the real pipeline. A run is inspectable without reading the database -
+**met**. Testing a real voice bot through it - **not met**, and not claimed.
+
+### Reported, not fixed
+
+Running the workspace surfaced two pipeline defects. Both are **still
+unresolved** and are not frontend bugs:
+
+- **`audio_fixture_test` cannot succeed through the API.** The route builds
+  the scripted adapter with no replies, so the first turn fails with "the
+  scripted bot has no reply for turn 0". The mode is usable only from tests,
+  which inject audio. Fixing it means shipping a fixture audio asset or
+  changing adapter construction - a design decision, not a typo.
+- **`offline_simulation` does not reach a terminal status.** It produces the
+  caller's opening turn and stays `running`: no audio moves, so nothing
+  supplies a bot reply and the caller never becomes terminal.
+
+**Deliberately not in this phase.** Telephony; a frontend test suite (type
+checking, linting and a production build run, but the browser verification was
+manual); run auto-refresh, where polling versus SSE is still an open question;
+scenario detail, suite management and the audio lab; and authentication, which
+remains Phase 15 for the whole application.
+
+---
+
+## Phase 9 — Twilio Telephony & Media Streaming
 
 The first phase that can place a real call, and therefore spend real money.
 
@@ -492,9 +571,9 @@ and a call to any other number is refused before dialling.
 
 ---
 
-## Phase 9 — Conversation Orchestration Engine
+## Phase 10 — Conversation Orchestration Engine
 
-Binds phases 4–8 into one run loop.
+Binds phases 4–9 into one run loop.
 
 - Run lifecycle: queued → running → completed/failed, with cancellation.
 - Barge-in, silence timeouts and per-turn deadlines.
@@ -506,7 +585,7 @@ stores a complete, inspectable transcript.
 
 ---
 
-## Phase 10 — Automated Evaluation & Scoring
+## Phase 11 — Automated Evaluation & Scoring
 
 - LLM-as-judge evaluation via Evon against the scenario's success criteria.
 - Deterministic metrics alongside the judge: latency percentiles, word error
@@ -520,7 +599,7 @@ per-criterion reasoning.
 
 ---
 
-## Phase 11 — Multilingual Benchmarking
+## Phase 12 — Multilingual Benchmarking
 
 - Curated suites across Hindi, Tamil, Telugu, Kannada, Malayalam, Marathi,
   Bengali, Gujarati, Punjabi and Indian English.
@@ -533,7 +612,7 @@ per-language scores.
 
 ---
 
-## Phase 12 — Results API & Reporting
+## Phase 13 — Results API & Reporting
 
 - Aggregate query endpoints: per-run, per-scenario, per-language, over time.
 - Run comparison and regression detection against a baseline.
@@ -541,20 +620,6 @@ per-language scores.
 - Audio and transcript artefacts served with signed, expiring URLs.
 
 **Exit criteria.** Two runs can be diffed and a regression identified.
-
----
-
-## Phase 13 — React Dashboard
-
-Replaces the Phase 1 status shell with the real product surface.
-
-- Run history, live run progress, transcript playback with aligned audio.
-- Score breakdowns and latency distributions.
-- Scenario editor with inline validation.
-- Language comparison views.
-
-**Exit criteria.** Every Phase 12 endpoint is reachable from the UI, with no
-placeholder or fabricated data anywhere in it.
 
 ---
 

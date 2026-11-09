@@ -20,6 +20,7 @@ Indian-language voice bots. It is being built in **15 controlled phases**; see
 | 5 — Text to speech (Gnani Timbre) | ✅ Complete |
 | 6 — Caller simulation (deterministic) | ✅ Complete — Evon **not** integrated |
 | 7 — End-to-end voice pipeline | ✅ Complete — no live call, no real bot |
+| 7.1 — Concurrency enforcement | ✅ Complete |
 | 8 — Operator workspace & public site | ✅ Complete — no live bot, no telephony |
 | 9–15 | ⬜ Not started |
 
@@ -69,7 +70,7 @@ Phase 6 is the first thing to write to `TestRun`, `CallSession` and
 `ConversationTurn`, and it reuses them exactly as Phase 2 shaped them: one
 conversation is a `CallSession`, one utterance a `ConversationTurn`, and the
 caller's own state lives in the existing JSONB columns under a `caller`
-namespace so Phase 8's telephony metadata can share the column. **Phase 6
+namespace so Phase 9's telephony metadata can share the column. **Phase 6
 adds no table and no migration** — keep it that way unless a real column is
 needed, and run `alembic check`.
 
@@ -78,7 +79,7 @@ No call is placed, so a conversation opens as `IN_PROGRESS`, never `PENDING`;
 must not claim.
 
 Phase 4 still persists no transcript of its own: deciding which turn a loose
-transcript belongs to is orchestration (Phase 9). The transcription and speech
+transcript belongs to is orchestration (Phase 10). The transcription and speech
 endpoints therefore work with PostgreSQL down; the caller endpoints do not.
 
 ## Architecture rules
@@ -146,7 +147,7 @@ substitute a neighbouring language.
 
 Nothing above `app/transcription/providers/` may import a vendor module or
 mention a vendor field name. The service layer has never heard of
-`audio_file` or `detected_language_code`. That boundary is what lets Phase 11
+`audio_file` or `detected_language_code`. That boundary is what lets Phase 12
 benchmark a second engine without touching the evaluation code.
 
 Adding a provider means writing an adapter, declaring a
@@ -226,7 +227,7 @@ bot that answered the objective in its first reply had the read-back rejected.
 field, deliberately, so the caller cannot recite what it is marked against.
 Outcome matching happens in the orchestrator's `report()`, and
 `outcomes_observed` is a keyword indicator, not a score — its own API
-description says so, because evaluation is Phase 10.
+description says so, because evaluation is Phase 11.
 
 **Validation runs before synthesis, always.** `CallerService.validate`
 rejects an empty or overlong utterance, an illegal transition, nine
@@ -370,6 +371,33 @@ got messages and exit codes; every other entry point got a bare `1`.
 there would shadow the `app.cli.main` submodule, so `app.cli.main` would
 resolve to a function and patching the module by path would fail.
 
+### Counting the API surface
+
+**Never count endpoints by walking `app.routes`.** The installed FastAPI
+mounts included routers lazily as internal `_IncludedRouter` objects instead
+of flattening them onto the application, so the walk yields 7 entries — the
+four docs routes plus `/` and `/health` — and reads as "the v1 API is not
+mounted". It is mounted.
+
+The generated OpenAPI document is the authority, and `scripts/api_surface.py`
+is the single place the documented figures come from:
+
+```bash
+python scripts/api_surface.py          # 35 paths, 43 operations
+python scripts/api_surface.py --json   # machine-readable
+```
+
+It counts operations by subtracting the Path Item Object's fixed
+non-operation fields (`$ref`, `summary`, `description`, `servers`,
+`parameters`) rather than matching a method allow-list, and it reports any key
+it cannot classify instead of silently miscounting. One WebSocket route
+(`/api/v1/transcription/stream`) is deliberately absent from the schema —
+OpenAPI 3.1 cannot describe a WebSocket — so it is counted separately in prose,
+never folded into the 35.
+
+If the numbers change, run the script and update `README.md` and this file
+together. Do not hardcode a figure the script does not produce.
+
 ### Database
 
 - **Alembic owns the schema.** The application must never call
@@ -409,7 +437,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # whole suite (1957 tests, 41 live ones deselected)
+pytest                                  # 1990 collected; 1949 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```
@@ -418,6 +446,17 @@ ruff check . && ruff format --check .   # from the repository root
   suite** — fix the cause rather than widening the filter. In particular use
   Starlette's current status constant names (`HTTP_413_CONTENT_TOO_LARGE`,
   `HTTP_422_UNPROCESSABLE_CONTENT`).
+- **Ruff's scope is the tracked Python source, and that is deliberate.**
+  `include` is set explicitly in `pyproject.toml` **without `*.md`**, because
+  Ruff's default includes Markdown and formats the Python blocks inside it —
+  which made `ruff format --check .` a gate over prose that could fail with no
+  Python touched. `.agents` and `.claude` are excluded as untracked local
+  tooling. The invariant: Ruff's scope equals `git ls-files "*.py"` plus
+  `pyproject.toml`. Check it with `ruff check . --show-files`, and do not
+  re-add `*.md` or drop those excludes without re-reading this.
+- **Never quote a formatted-file count you have not just measured.** The
+  figure moved three times across phases 7 and 8 because the gate's scope was
+  growing silently, not because code was added.
 - Database tests need PostgreSQL (`docker compose up -d db`). They create and
   drop their own `bhashabench_test` database and are never allowed to skip
   silently.

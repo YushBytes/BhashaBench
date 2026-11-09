@@ -4,7 +4,7 @@ Two of them, mirroring the transcription surface: generate audio, and ask what
 the provider can do.
 
 **The success response is binary audio, not JSON.** That is the right shape for
-a caller that is going to hand the bytes to a telephony stream (Phase 8) -
+a caller that is going to hand the bytes to a telephony stream (Phase 9) -
 base64 inside a JSON envelope would inflate every utterance by a third and
 force a decode step on the only consumer. The cost is that metadata cannot
 travel in the body, so it travels in `X-Speech-*` response headers, documented

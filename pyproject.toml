@@ -37,7 +37,29 @@ include = ["app*"]
 line-length = 100
 target-version = "py312"
 src = ["backend"]
-extend-exclude = [".venv", "venv", "frontend", "__pycache__", ".ruff_cache"]
+
+# Ruff's default `include` carries "*.md", so it formats and lints the Python
+# code blocks inside Markdown. That turned `ruff format --check .` into a gate
+# over documentation: the eleven files in `docs/` counted as eleven "Python"
+# files, and editing prose could fail a formatting check with no Python
+# touched - which happened. The gate measures this project's Python source, so
+# Markdown is dropped here. Everything else is Ruff's default, restated
+# because setting `include` replaces it rather than extending it.
+include = ["*.py", "*.pyi", "*.pyw", "*.ipynb", "**/pyproject.toml", "**/ruff.toml", "**/.ruff.toml"]
+
+# `.agents/` and `.claude/` are local agent tooling that lives inside the
+# working tree and is not tracked. They contributed 79 files to the formatted
+# count, so the figure was a property of one developer's machine rather than
+# of the repository.
+extend-exclude = [
+    ".venv",
+    "venv",
+    "frontend",
+    "__pycache__",
+    ".ruff_cache",
+    ".agents",
+    ".claude",
+]
 
 [tool.ruff.lint]
 select = [

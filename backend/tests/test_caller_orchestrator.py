@@ -420,7 +420,7 @@ class TestPersistence:
         scenario_ids: tuple[uuid.UUID, uuid.UUID],
         db_session: Session,
     ) -> None:
-        """Phase 8 will put telephony metadata in the same column; a namespace
+        """Phase 9 will put telephony metadata in the same column; a namespace
         is what stops the two overwriting each other."""
         report = _simulate(orchestrator, scenario_ids, ["Your claim number?"])
         conversation = repo.get_conversation(db_session, report.conversation_id)

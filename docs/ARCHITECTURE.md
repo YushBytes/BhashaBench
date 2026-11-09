@@ -63,7 +63,7 @@ reasoning behind its score.
          │              │              │              │              │
 ┌────────▼─────┐ ┌──────▼──────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌────▼──────┐
 │ Caller engine│ │ Prisma STT  │ │ Timbre TTS │ │ Degradation│ │  Twilio   │
-│ rule-based   │ │ (Phase 4)   │ │ (Phase 5)  │ │ (Phase 7)  │ │ (Phase 8) │
+│ rule-based   │ │ (Phase 4)   │ │ (Phase 5)  │ │ (Phase 7)  │ │ (Phase 9) │
 │ (Phase 6)    │ │             │ │            │ │            │ │           │
 │ no Evon      │ │             │ │            │ │            │ │ not built │
 └──────────────┘ └─────────────┘ └────────────┘ └────────────┘ └─────┬─────┘
@@ -225,7 +225,7 @@ Three decisions worth recording.
 **The provider boundary is absolute.** Nothing above
 `transcription/providers/` may import a vendor module or name a vendor field.
 The service layer has never heard of `audio_file` or
-`detected_language_code`. This is what will let Phase 11 benchmark a second
+`detected_language_code`. This is what will let Phase 12 benchmark a second
 engine without touching evaluation code, and it is enforced by review rather
 than by tooling, so it has to be stated.
 
@@ -245,7 +245,7 @@ is the right place for them. The streaming handler could not be synchronous at
 all: it interleaves receiving client audio with forwarding provider events.
 
 **Nothing is persisted.** Deciding which conversation turn a transcript
-belongs to is orchestration (Phase 9). A table written by nothing would be
+belongs to is orchestration (Phase 10). A table written by nothing would be
 schema guesswork, so the subsystem is a pure function of its input and the
 endpoints work with PostgreSQL down.
 
@@ -286,10 +286,10 @@ before it reaches speech synthesis.
 **No new tables.** Phase 2 created `TestRun → CallSession → ConversationTurn`
 as foundational schema; a caller conversation *is* a `CallSession` and an
 utterance *is* a `ConversationTurn`. The caller's evolving per-phase state
-goes in the existing JSONB columns under a `caller` namespace, so Phase 8's
+goes in the existing JSONB columns under a `caller` namespace, so Phase 9's
 telephony metadata can share the column without collision. The alternative —
 caller-specific tables — would have duplicated the relationships, needed a
-migration, and forced Phase 9 to reconcile two conversation shapes. The
+migration, and forced Phase 10 to reconcile two conversation shapes. The
 trade-off accepted is that caller state is not queryable with a typed column;
 when a field earns an index it should be promoted to one.
 
@@ -420,7 +420,7 @@ with host-built ones across the bind mount.
 
 ## 4. Planned architecture
 
-### 4.1 Run lifecycle (Phase 9 target)
+### 4.1 Run lifecycle (Phase 10 target)
 
 ```
 scenario ──▶ caller agent ──▶ Timbre TTS ──▶ degradation ──▶ Twilio ──▶ bot
@@ -467,7 +467,7 @@ provider phase should state which of the two it achieved.
 
 ### 4.4 Safety and cost control
 
-Phase 8 is the first phase that can spend money or dial a stranger, so its
+Phase 9 is the first phase that can spend money or dial a stranger, so its
 guardrails ship in the same phase as the capability:
 
 - `ALLOWED_BOT_NUMBERS` — an explicit allow-list. An empty value means **no
