@@ -160,7 +160,7 @@ the replies, not from the mode label.
 | Artefacts listed with provenance | **Verified** — 12, `derived_from` present on degraded |
 | Artefact audio streams | **Verified** — `HTTP 200`, 8044 bytes, `audio/wav` |
 | Waveform drawn from decoded bytes | **Verified** — 12 waveforms × 160 measured bars |
-| Workspace renders the run | **Verified** — screenshots in §6 of the checklist |
+| Workspace renders the run | **Verified** — see the screenshots listed in §10 |
 
 ### Steps that did **not** succeed, and why
 
