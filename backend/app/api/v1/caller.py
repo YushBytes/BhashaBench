@@ -295,7 +295,7 @@ async def submit_bot_audio(
     description=(
         "`outcomes_observed` lists the scenario's expected outcomes whose text "
         "appeared in the bot's transcripts. It is a keyword indicator so a demo "
-        "can show progress - **not** a score. Evaluation is Phase 10."
+        "can show progress - **not** a score. Evaluation is Phase 11."
     ),
     responses=_COMMON_ERRORS,
 )

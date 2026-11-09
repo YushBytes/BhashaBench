@@ -107,9 +107,18 @@ Implemented so far:
   conversations, persisted as call sessions and turns. The caller is a
   **deterministic rule engine**; Gnani Evon is *not* integrated - see
   `docs/PROVIDERS.md`.
+* **Phase 7** - the end-to-end voice pipeline: a scenario becomes a multi-turn
+  conversation with real audio, with reproducible audio degradation from a
+  fixed seed. Simulated acoustic conditions, **not** field recordings. No live
+  call is placed and no real voice bot is contacted; `telephony_test` is
+  refused.
+* **Phase 7.1** - the process-wide concurrent-run limit is enforced, refusing
+  with 503 rather than queueing.
+* **Phase 8** - run listing and stored artefact audio, which the operator
+  workspace and public site are built on.
 
-Telephony, audio degradation and automated evaluation are **not** implemented -
-see `docs/DEVELOPMENT_ROADMAP.md`.
+Telephony and automated evaluation are **not** implemented - see
+`docs/DEVELOPMENT_ROADMAP.md`.
 """
 
 

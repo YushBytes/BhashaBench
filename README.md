@@ -6,7 +6,7 @@ An automated testing and benchmarking platform for Indian-language voice
 bots — simulated callers, realistic audio degradation and automated
 conversation scoring.
 
-> ### Project status: Phases 1–5 of 15 complete
+> ### Project status: Phases 1–8 of 15 complete
 >
 > **Phase 1 — Foundation.** FastAPI backend, health endpoints, Next.js status
 > shell, Docker Compose stack, test and lint toolchain.
@@ -64,11 +64,11 @@ conversation scoring.
 > **Phase 7 — End-to-end voice pipeline.** A scenario becomes a multi-turn
 > conversation with real audio: the Phase 6 caller decides what to say, Timbre
 > synthesises it, a reproducible degradation engine makes it sound like a phone
-> call, a bot adapter carries it, and Prisma transcribes the reply. Nine
-> endpoints under `/api/v1/test-runs`, five noise profiles, both the original
-> and the degraded audio preserved for every turn, and a process-wide limit on
-> how many runs execute at once - beyond it `POST /start` answers 503 rather
-> than queueing.
+> call, a bot adapter carries it, and Prisma transcribes the reply. Eleven
+> operations across ten paths under `/api/v1/test-runs`, five noise profiles,
+> both the original and the degraded audio preserved for every turn, and a
+> process-wide limit on how many runs execute at once - beyond it
+> `POST /start` answers 503 rather than queueing.
 >
 > Every run records an **execution mode**, and that is the honesty control:
 > `offline_simulation` moves no audio, `audio_fixture_test` runs every stage
@@ -84,6 +84,34 @@ conversation scoring.
 > possible. Simulated noise is shaped white noise at a stated signal-to-noise
 > ratio, **not** a field recording. Design and limits in
 > [docs/PIPELINE.md](docs/PIPELINE.md).
+>
+> **Phase 7.1 — Concurrency enforcement.** The process-wide
+> `PIPELINE_MAX_CONCURRENT_RUNS` limit is actually read and enforced; it
+> refuses with 503 rather than queueing, and releases its slot in a `finally`
+> so a cancellation or timeout cannot leak one.
+>
+> **Phase 8 — Operator workspace & public site.** A public site at `/` that
+> explains what the instrument measures, and an operator workspace at `/app`
+> that drives it: run history with filters, a conversation inspector, audio
+> playback with waveforms drawn from the decoded bytes, the scenario library
+> and provider status. Two backend endpoints were added because the workspace
+> could not be built honestly without them — run listing and stored artefact
+> audio.
+>
+> The frontend renders **no sample analytics and has no mock mode**: a failed
+> API call renders an error state, because plausible data returned while the
+> backend is down makes a broken deployment look like a working one. The
+> honesty fields (`uses_language_model`, `bot_audio_externally_received`,
+> `measurement_note`, `evon_status`, `telephony_status`) are rendered
+> structurally rather than as copy.
+>
+> **Not tested:** no live voice bot and no telephony went through the
+> workspace. **Known gaps, unresolved:** `audio_fixture_test` cannot complete
+> through the API, and `offline_simulation` does not reach a terminal status —
+> both are documented in
+> [docs/PHASE_08_IMPLEMENTATION_REPORT.md](docs/PHASE_08_IMPLEMENTATION_REPORT.md).
+> There is no frontend test suite, no run auto-refresh and no authentication.
+> Design in [docs/FRONTEND.md](docs/FRONTEND.md).
 >
 > **No calls are placed and no scores are produced yet.** Telephony and
 > automated evaluation arrive in later phases — see
@@ -146,7 +174,7 @@ explicit criteria.
 
 ## What BhashaBench will do
 
-Phases 1 to 7 are delivered. Nothing else below is implemented yet; each item
+Phases 1 to 8 are delivered. Nothing else below is implemented yet; each item
 names the phase that delivers it.
 
 | Capability | What it does | Phase |
@@ -170,7 +198,7 @@ names the phase that delivers it.
 
 ```
    ┌───────────────────────┐
-   │  Next.js dashboard    │   implemented: status shell only
+   │  Next.js frontend     │   implemented: public site + workspace
    └───────────┬───────────┘
                │ JSON over HTTP
    ┌───────────▼───────────┐
@@ -185,7 +213,7 @@ names the phase that delivers it.
    │                        │                      │
 ┌──▼──────────────┐  ┌──────▼────────┐   ┌─────────▼─────────┐
 │ Orchestrator    │  │ Scenario      │   │ PostgreSQL 16     │
-│ (Phase 9)       │  │ engine        │   │ 5 tables, owned   │
+│ (Phase 10)      │  │ engine        │   │ 5 tables, owned   │
 └──┬──────────────┘  │ implemented   │   │ by Alembic        │
    │                 └───────────────┘   └───────────────────┘
    ├── Caller engine — rule-based     (Phase 6; Evon not integrated)
@@ -276,7 +304,7 @@ BhashaBench/
 │   │   │                      default sends audio nowhere
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 1957 tests across 33 modules
+│   ├── tests/                 1990 tests across 33 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -294,7 +322,7 @@ BhashaBench/
 │   ├── lib/content.ts         public-site copy and phase status
 │   ├── public/
 │   └── Dockerfile             multi-stage: development / builder / production
-├── benchmarks/                benchmark suite definitions      (Phase 11)
+├── benchmarks/                benchmark suite definitions      (Phase 12)
 ├── sample_bot/                reference bot to test against    (empty)
 ├── scripts/                   operational scripts
 ├── scenarios/                 reference scenario YAML (6 languages)
@@ -469,11 +497,11 @@ their phase lands.
 | `GNANI_API_KEY`, `GNANI_API_BASE_URL` | 4–5 |
 | `GNANI_STT_MODEL` | 4 |
 | `SPEECH_PROVIDER`, `SPEECH_TIMEOUT_SECONDS`, `SPEECH_MAX_ATTEMPTS`, `SPEECH_MAX_TEXT_CHARS`, `SPEECH_LIVE_TESTS`, `GNANI_TTS_MODEL`, `GNANI_TTS_VOICE` | 5 |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | 8 |
-| `PUBLIC_BASE_URL` | 8 |
-| `ALLOWED_BOT_NUMBERS`, `MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS` | 8 |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | 9 |
+| `PUBLIC_BASE_URL` | 9 |
+| `ALLOWED_BOT_NUMBERS`, `MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS` | 9 |
 | `AUDIO_STORAGE_PATH`, `NOISE_MASTER_SEED` | superseded by `CALLER_AUDIO_STORAGE_DIR` and `PIPELINE_NOISE_SEED` in Phase 7 |
-| `JUDGE_RETRIES`, `PASS_THRESHOLD` | 10 |
+| `JUDGE_RETRIES`, `PASS_THRESHOLD` | 11 |
 
 No endpoint paths, authentication schemes or request parameters for
 third-party providers are assumed anywhere in this repository. Those are
@@ -548,8 +576,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite has **1957 tests** in thirty-three modules. 1916 run by
-default; the 41 live provider tests are deselected unless you opt in:
+The backend suite **collects 1990 tests** across thirty-three modules.
+**1949 run by default and pass**; the 41 live provider tests are *collected
+and skipped* unless you opt in. They are skipped, not deselected — which is
+why the collected total (1990) exceeds the number that run (1949):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -583,7 +613,7 @@ default; the 41 live provider tests are deselected unless you opt in:
 | `test_pipeline_degradation.py` | 87 | The DSP: resampling, channel conversion, bandpass, noise at a measured SNR, clipping, packet loss, every profile, reproducibility from a seed |
 | `test_pipeline_bots.py` | 35 | The bot adapter protocol, both adapters and the registry - including that neither contacts anything and the default sends audio nowhere |
 | `test_pipeline_engine.py` | 61 | Multi-turn audio runs against real PostgreSQL: the full workflow, every failure path, cancellation, the manual flow, reproducibility |
-| `test_pipeline_api.py` | 64 | The nine test-run routes: creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, the 503 at the concurrency limit, OpenAPI |
+| `test_pipeline_api.py` | 97 | The eleven test-run operations: creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, the 503 at the concurrency limit, OpenAPI, plus the Phase 8 run listing (filters, pagination window, ILIKE wildcard escape, caller-only exclusion) and artefact audio (range handling, traversal through the turn index, per-environment access) |
 | `test_pipeline_concurrency.py` | 41 | The admission limiter: the configured maximum is never exceeded, capacity frees up for the next run, and exceptions, cancellation and timeouts all release it |
 | `test_speech_live.py` | 26 | **Opt-in, billable.** Real Gnani Timbre calls. Skipped unless `SPEECH_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
 
@@ -613,7 +643,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 1916 passed, 41 skipped in 78.70s ================
+================ 1949 passed, 41 skipped in 192.93s ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -658,6 +688,20 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 ---
 
 ## API endpoints
+
+The API exposes **35 paths and 43 HTTP operations**, plus one WebSocket route
+that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 36
+documented paths in total.
+
+Those figures come from the generated OpenAPI document, never from a hand
+count and never from walking `app.routes` — the installed FastAPI mounts
+included routers lazily, so that walk sees only the routes declared directly
+on `app` and wrongly reads as "the v1 API is not mounted". Recompute them with:
+
+```bash
+python scripts/api_surface.py          # paths, operations and the full table
+python scripts/api_surface.py --json   # same, machine-readable
+```
 
 ### Meta and health
 
@@ -704,12 +748,14 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 | `POST` | `/api/v1/caller/conversations/{id}/terminate` | Ends a conversation; outcome `aborted`, which is not a bot defect |
 | `GET` | `/api/v1/caller/providers` | Caller providers with their capabilities and limits, plus an `evon_status` field stating that Gnani Evon is not implemented |
 | `POST` | `/api/v1/test-runs` | 201. Creates a test run for one scenario and records its execution mode. Executes nothing |
+| `GET` | `/api/v1/test-runs` | Paginated run history, newest first. Filters on `suite_id`, `status`, `mode`, `language`, `outcome` and `scenario`. Only runs the pipeline created are listed; a caller-only conversation records no pipeline metadata and stays addressable through `/api/v1/caller` |
 | `POST` | `/api/v1/test-runs/{id}/start` | Runs turns until terminal, or until the run needs audio from outside. A run left `running` with `awaiting_bot_audio_for_turn` is waiting, not failed |
 | `POST` | `/api/v1/test-runs/{id}/bot-audio` | Supplies the bot's reply as audio; it is validated, transcribed and the run continues |
 | `POST` | `/api/v1/test-runs/{id}/cancel` | Stops a run. Outcome `cancelled`, never `failed` - an operator's decision is not a finding about the bot |
 | `GET` | `/api/v1/test-runs/{id}` | State, counters and outcome |
 | `GET` | `/api/v1/test-runs/{id}/turns` | Every utterance of the run's conversation |
 | `GET` | `/api/v1/test-runs/{id}/artifacts` | Audio references and measured metadata. A degraded artefact names the original it came from |
+| `GET` | `/api/v1/test-runs/{id}/artifacts/{turn_index}/audio` | The stored audio for one turn (`?variant=original\|processed`), with single-range `bytes=` support so a player can seek. Staging and production refuse with **403** unless `PIPELINE_SERVE_ARTEFACTS` is set - 403 and not 404, because the recording exists and the environment declines. It claims no authorisation: a run id is an identifier, not a credential |
 | `GET` | `/api/v1/test-runs/{id}/report` | Full evidence: state, artefacts, caller state transitions and every stage with its measured duration. Measurements, not scores |
 | `GET` | `/api/v1/test-runs/bot-adapters/available` | Bot adapters with their capabilities, plus the execution modes a run may use |
 | `WS` | `/api/v1/transcription/stream` | Streaming transcription. Send PCM frames, receive `started` / `final_transcript` / `completed` events. Not in the OpenAPI document - OpenAPI 3.1 cannot describe a WebSocket; see [docs/PROVIDERS.md](docs/PROVIDERS.md) |
@@ -782,16 +828,23 @@ documentation. Full detail in
 | 3 | Scenario library & tooling | ✅ Complete |
 | 4 | Speech to text (Gnani Prisma) | ✅ Complete |
 | 5 | Text to speech (Gnani Timbre) | ✅ Complete |
-| 6 | AI caller simulation (Gnani Evon) | ⬜ Not started |
-| 7 | Audio degradation pipeline | ⬜ Not started |
-| 8 | Twilio telephony & media streaming | ⬜ Not started |
-| 9 | Conversation orchestration engine | ⬜ Not started |
-| 10 | Automated evaluation & scoring | ⬜ Not started |
-| 11 | Multilingual benchmarking | ⬜ Not started |
-| 12 | Results API & reporting | ⬜ Not started |
-| 13 | React dashboard | ⬜ Not started |
+| 6 | Caller simulation — deterministic engine | ✅ Complete (Evon **not** integrated) |
+| 7 | End-to-end voice pipeline & audio degradation | ✅ Complete (no live call, no real bot) |
+| 7.1 | Concurrency enforcement | ✅ Complete |
+| 8 | Operator workspace & public site | ✅ Complete (no live bot, no telephony) |
+| 9 | Twilio telephony & media streaming | ⬜ Not started |
+| 10 | Conversation orchestration engine | ⬜ Not started |
+| 11 | Automated evaluation & scoring | ⬜ Not started |
+| 12 | Multilingual benchmarking | ⬜ Not started |
+| 13 | Results API & reporting | ⬜ Not started |
 | 14 | CI regression testing | ⬜ Not started |
 | 15 | Hardening, observability & release | ⬜ Not started |
+
+> The old Phase 13 "React dashboard" is **absorbed into Phase 8**, which
+> delivered the operator workspace early; telephony moved from 8 to 9 and
+> everything below it shifted by one. This table is the same one in
+> [`docs/DEVELOPMENT_ROADMAP.md`](docs/DEVELOPMENT_ROADMAP.md) and
+> [`CLAUDE.md`](CLAUDE.md) — all three must agree.
 
 ---
 

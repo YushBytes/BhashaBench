@@ -130,7 +130,7 @@ class ConversationResponse(BaseModel):
     )
     outcomes_observed: list[str] = Field(
         description="Expected outcomes whose text appeared in the bot's "
-        "transcripts. A keyword indicator, not a score - evaluation is Phase 10."
+        "transcripts. A keyword indicator, not a score - evaluation is Phase 11."
     )
     rule_ids_fired: list[str] = Field(default_factory=list)
     error: str | None = None
