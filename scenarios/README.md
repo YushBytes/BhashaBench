@@ -19,6 +19,24 @@ bundle, built with the same serialiser the export endpoint uses. Importing it
 and exporting the suite reproduces the file byte for byte; a test asserts that
 against a real database.
 
+## `demo/` — not part of the reference set
+
+`demo/tamil_crop_insurance.yaml` is the scenario used for the recorded
+demonstration: a crop-insurance claim under a government scheme, Tamil with
+English for the policy number and the amount, on a rural mobile line at 10 dB
+SNR with 8% packet loss.
+
+It is deliberately **not** in this directory's top level. The six files above
+are a survey with one scenario per language, and `test_languages_are_distinct`
+enforces that — a second Tamil file here would fail it. The reference glob
+(`scenarios/*.yaml`) is not recursive, so `demo/` is invisible to it and to the
+bundle. The demo scenario is a first-class scenario in every other respect:
+the same schema, the same validator, the same import path, and it validates
+against the live API.
+
+Adding a file to `demo/` therefore does **not** require regenerating the
+bundle. Adding one to the top level does.
+
 ---
 
 ## Using them

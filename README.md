@@ -126,6 +126,7 @@ conversation scoring.
 
 ## Table of contents
 
+- [Run the demo](#run-the-demo)
 - [The problem](#the-problem)
 - [What BhashaBench will do](#what-bhashabench-will-do)
 - [Architecture overview](#architecture-overview)
@@ -140,6 +141,110 @@ conversation scoring.
 - [API endpoints](#api-endpoints)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
+
+---
+
+## Run the demo
+
+A reproducible end-to-end demonstration: a Tamil crop-insurance call executed
+through the whole pipeline, inspectable in the operator workspace.
+
+**Competition submission** — [one-page pitch](docs/COMPETITION_ONE_PAGE_PITCH.md)
+· [recording script](docs/COMPETITION_DEMO_SCRIPT.md)
+· [readiness report](docs/COMPETITION_READINESS_REPORT.md)
+· demo video: **_pending upload_**
+
+### Prerequisites
+
+Python 3.12+, Node 20+, Docker (for PostgreSQL only), and a `.env` copied from
+[`.env.example`](.env.example).
+
+### Start the stack
+
+Three terminals. This is the configuration that was verified end to end.
+
+```bash
+# 1. PostgreSQL only
+docker compose up -d db
+
+# 2. Backend. PIPELINE_FIXTURE_AUDIO_PATH is what lets a fixture run complete;
+#    without it a scripted run has no replies and fails on turn 0, by design.
+#    PowerShell: $env:PIPELINE_FIXTURE_AUDIO_PATH="backend/tests/fixtures/audio/tone_8k_mono.wav"
+PIPELINE_FIXTURE_AUDIO_PATH=backend/tests/fixtures/audio/tone_8k_mono.wav   python -m uvicorn app.main:app --app-dir backend --port 8000
+
+# 3. Frontend - keep it on port 3000, which is what CORS_ORIGINS allows
+cd frontend && npm run dev
+```
+
+| Surface | URL |
+|---|---|
+| Public site | <http://localhost:3000> |
+| Operator workspace | <http://localhost:3000/app> |
+| API | <http://localhost:8000> |
+| API documentation | <http://localhost:8000/docs> |
+| Health | <http://localhost:8000/api/v1/health> |
+
+Check it is up before going further — all three components should read `ok`:
+
+```bash
+curl http://localhost:8000/api/v1/health
+```
+
+### Load the scenario and execute a run
+
+```bash
+python scripts/demo.py setup   # load the demo scenario (idempotent)
+python scripts/demo.py run     # execute one run and print its evidence
+```
+
+`run` prints the workspace URL for the run it just executed. Open it to see the
+transcript, the stage timings, both audio variants per turn and the waveforms.
+
+The script creates a suite and a scenario if they are absent and reuses them
+otherwise. **It deletes nothing and calls no paid API** — the demonstration uses
+the offline `fake` speech and transcription providers, so no Gnani request is
+made and no credit is consumed.
+
+### What the demo does and does not establish
+
+**Does:** a scenario becomes a multi-turn Tamil conversation; the caller's
+speech is synthesised, degraded from a fixed seed, carried to a bot adapter and
+transcribed; every turn is persisted with both audio variants; and the run
+terminates with a recorded outcome.
+
+**Does not:** test a real voice bot. The bot is stubbed with fixture audio and
+the providers are the offline fakes, so **the bot transcript on screen is
+scripted stub output and the waveform is flat because the fake synthesiser
+emits a constant tone.** No accuracy, word error rate or quality score is
+computed anywhere. `bot_audio_externally_received` is `false` on this run, which
+is the platform refusing to claim otherwise.
+
+### Shut down
+
+```bash
+# Ctrl+C the backend and the frontend, then:
+docker compose stop db      # keeps the data
+# docker compose down       # also removes the containers; the named volume survives
+```
+
+### Known rough edges
+
+- **Do not run the whole stack with `docker compose up`** for the demo. The
+  frontend's server components fetch the API from inside the container, where
+  `localhost:8000` is the container itself, so the workspace renders "The API is
+  not reachable". Run the frontend on the host instead.
+- If the frontend 404s on `/app` after pulling changes, its build cache volume
+  is stale: `docker compose up -d --force-recreate --renew-anon-volumes frontend`.
+- Audio playback needs the frontend on port 3000, or the browser fetch is
+  blocked by CORS.
+
+### Screenshots
+
+Captured from the running application, in
+[`docs/competition/screenshots/`](docs/competition/screenshots/): the public
+site, the workspace overview, run history, the conversation inspector, the
+scenario library, provider status and the new-test workflow, at 1440 px and
+390 px.
 
 ---
 
@@ -304,7 +409,7 @@ BhashaBench/
 │   │   │                      default sends audio nowhere
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 1990 tests across 33 modules
+│   ├── tests/                 1999 tests across 34 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -602,10 +707,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 1990 tests** across thirty-three modules.
-**1949 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 1999 tests** across thirty-four modules.
+**1958 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (1990) exceeds the number that run (1949):
+why the collected total (1999) exceeds the number that run (1958):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -640,6 +745,7 @@ why the collected total (1990) exceeds the number that run (1949):
 | `test_pipeline_bots.py` | 35 | The bot adapter protocol, both adapters and the registry - including that neither contacts anything and the default sends audio nowhere |
 | `test_pipeline_engine.py` | 61 | Multi-turn audio runs against real PostgreSQL: the full workflow, every failure path, cancellation, the manual flow, reproducibility |
 | `test_pipeline_api.py` | 97 | The eleven test-run operations: creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, the 503 at the concurrency limit, OpenAPI, plus the Phase 8 run listing (filters, pagination window, ILIKE wildcard escape, caller-only exclusion) and artefact audio (range handling, traversal through the turn index, per-environment access) |
+| `test_pipeline_fixture_audio.py` | 9 | The fixture audio an API-started scripted run replays: the file read and repeated per turn, a missing/empty/directory path refused, the real engine factory wiring it to the scripted adapter, the reply still marked as not received from a bot, and the unset setting leaving the turn-0 failure intact |
 | `test_pipeline_concurrency.py` | 41 | The admission limiter: the configured maximum is never exceeded, capacity frees up for the next run, and exceptions, cancellation and timeouts all release it |
 | `test_speech_live.py` | 26 | **Opt-in, billable.** Real Gnani Timbre calls. Skipped unless `SPEECH_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
 
@@ -669,7 +775,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 1949 passed, 41 skipped in 192.93s ================
+================ 1958 passed, 41 skipped in 168.97s ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

@@ -148,3 +148,8 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Playwright MCP scratch output: page snapshots, console logs and network
+# dumps written while driving the browser. Evidence that is worth keeping is
+# committed deliberately under docs/, never from here.
+.playwright-mcp/

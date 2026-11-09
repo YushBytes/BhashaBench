@@ -1,0 +1,84 @@
+# =============================================================================
+# BhashaBench demo scenario: tamil_crop_insurance
+# =============================================================================
+# Why this file is in `scenarios/demo/` and not in `scenarios/`:
+#
+# The six files in `scenarios/` are a deliberate survey - one scenario per
+# language - and `test_languages_are_distinct` enforces that. A second Tamil
+# scenario there would fail that test, so this one lives in a subdirectory the
+# reference glob does not read. It is a first-class scenario in every other
+# respect: the same schema, the same validator, the same import path.
+#
+# The subject is a crop-insurance claim under a government scheme, which is
+# where Indian-language voice support is hardest and most consequential: the
+# caller is a farmer on a rural mobile connection, the policy number and the
+# scheme name are said in English, and the amount decides whether a claim is
+# paid correctly.
+
+name: tamil_crop_insurance
+description: >-
+  A farmer calls the crop-insurance helpline to check a claim filed after
+  unseasonal rain, mixing English for the policy number, the scheme name and
+  the amount.
+language: ta-IN
+
+tags:
+  - insurance
+  - agriculture
+  - code-mixing
+  - demo
+
+persona:
+  identity: Smallholder paddy farmer near Thanjavur
+  speaking_style: elderly
+  traits:
+    - speaks slowly
+    - repeats the policy number
+    - unfamiliar with insurance vocabulary
+
+goal:
+  objective: >-
+    Find out whether the crop-loss claim has been assessed and what amount
+    will be paid.
+  max_turns: 16
+
+known_facts:
+  policy_number: "PMFBY2026114827"
+  registered_name: Ramasamy Durai
+  survey_number: "142/3B"
+  crop: paddy
+  sowing_season: Samba
+
+expected_outcomes:
+  - Confirm the policy number back to the caller
+  - State the claim status
+  - State the assessed payout amount
+  - State when the payment will arrive
+
+# Rural mobile: a weak signal and a low signal-to-noise ratio, with enough
+# packet loss to break a word rather than a whole turn.
+audio:
+  noise_profile: rural
+  snr_db: 10
+  packet_loss_percent: 8
+
+code_mixing:
+  primary: ta-IN
+  secondary:
+    - en-IN
+  expected: true
+  secondary_ratio: 0.35
+  switch_triggers:
+    - numbers
+    - technical_terms
+  sample_utterances:
+    - Enakku crop insurance claim status theriyanum
+    - Policy number PMFBY two zero two six one one four eight two seven
+    - Samba season la mazhai la paddy poyiduchu
+    - Claim amount evlo varum?
+
+constraints:
+  max_silence_seconds: 4.0
+  allow_interruptions: true
+  required_phrases:
+    - policy number
