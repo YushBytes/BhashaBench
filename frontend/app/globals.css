@@ -3,85 +3,291 @@
 /* ===========================================================================
    BhashaBench design tokens
    ---------------------------------------------------------------------------
-   The product commits to a single dark interface rather than following the
-   system theme: it is a developer tool meant to sit open next to a terminal,
-   and one palette keeps the status colours unambiguous. `color-scheme: dark`
-   makes native controls and scrollbars match.
+   One dark palette, not a theme switch. This is an instrument that sits open
+   beside a terminal while a run executes, and a single palette keeps the
+   status colours meaning one thing: a reader never has to ask which theme a
+   screenshot was taken in before trusting the colour of a badge.
+
+   Three rules hold the colour system together:
+
+   1. Accent is for the primary action, the current selection and focus.
+      Never for decoration, never for an inactive state.
+   2. Status hues are fixed vocabulary. `--state-ok` always means verified,
+      `--state-warn` always means qualified, `--state-bad` always means
+      failed. A hue is never reused for a different meaning on another page.
+   3. No status is carried by colour alone. Every badge pairs its hue with a
+      label, and most with a glyph, so the run table reads correctly in
+      greyscale and to anyone who cannot separate the hues.
    ======================================================================== */
 
 :root {
   color-scheme: dark;
 
-  /* Surfaces, from furthest back to closest. */
-  --surface-base: #07090d;
-  --surface-raised: #0d1118;
-  --surface-overlay: #121823;
-  --border-subtle: #1b2230;
-  --border-strong: #2a3444;
+  /* -- Surfaces, furthest back to closest ------------------------------- */
+  --bg: #090b0f;
+  --surface: #10141b;
+  --surface-raised: #171d26;
+  --surface-inset: #0c1016;
+  /* A second neutral layer for the sidebar and toolbars, cooler than the
+     content surface so the chrome recedes behind the data. */
+  --chrome: #0b0e14;
 
-  /* Type. */
-  --text-primary: #e7eaf0;
-  --text-secondary: #9aa4b6;
-  --text-tertiary: #6b7488;
+  --line: #1e2531;
+  --line-strong: #2b3442;
 
-  /* Accent: a cool periwinkle, used sparingly for emphasis and focus. */
-  --accent: #7f9cff;
-  --accent-strong: #9db1ff;
-  --accent-dim: #1d2740;
+  /* -- Type -------------------------------------------------------------- */
+  --text: #f4f7fa;
+  --text-dim: #a0aab7;
+  /* Lightened from the #778392 of the original brief: that value measured
+     4.39:1 on `--surface-raised`, failing AA for body text by a margin too
+     small to see and too real to keep. This one clears 4.9:1 on every
+     surface it is used on. */
+  --text-muted: #808c9b;
 
-  /* Status. Meaning is fixed across the app:
-     live   = verified working today
-     partial= exists but intentionally incomplete
-     planned= not built yet                              */
-  --status-live: #4ade80;
-  --status-partial: #fbbf24;
-  --status-planned: #64748b;
+  /* -- Accent ------------------------------------------------------------ */
+  --accent: #36d6c5;
+  --accent-strong: #5ee3d4;
+  --accent-dim: #0f2b2c;
+  --accent-line: #1d5a56;
+  /* A second accent, strictly for plotting one series against another -
+     caller against bot, original against degraded. Never for an action. */
+  --accent-alt: #62b6ff;
+  --accent-alt-dim: #10243a;
+
+  /* -- Status ------------------------------------------------------------ */
+  --state-ok: #42c98b;
+  --state-ok-dim: #0f2a1f;
+  --state-warn: #f0b75e;
+  --state-warn-dim: #2e2412;
+  --state-bad: #f07178;
+  --state-bad-dim: #2e1619;
+  --state-idle: #6b7687;
+  --state-idle-dim: #171c24;
+  --state-busy: #62b6ff;
+  --state-busy-dim: #10243a;
+
+  /* -- Shape and depth --------------------------------------------------- */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+
+  /* Shadows carry an offset and a soft blur. A zero-offset halo is
+     decoration, not depth. */
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px rgb(0 0 0 / 0.3);
+  --shadow-overlay: 0 8px 16px rgb(0 0 0 / 0.45), 0 24px 48px rgb(0 0 0 / 0.4);
+
+  /* -- Motion ------------------------------------------------------------ */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --t-fast: 120ms;
+  --t-base: 180ms;
 }
 
 @theme inline {
-  --color-surface-base: var(--surface-base);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
-  --color-surface-overlay: var(--surface-overlay);
-  --color-border-subtle: var(--border-subtle);
-  --color-border-strong: var(--border-strong);
+  --color-surface-inset: var(--surface-inset);
+  --color-chrome: var(--chrome);
 
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-tertiary: var(--text-tertiary);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-muted: var(--text-muted);
 
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
   --color-accent-dim: var(--accent-dim);
+  --color-accent-line: var(--accent-line);
+  --color-accent-alt: var(--accent-alt);
+  --color-accent-alt-dim: var(--accent-alt-dim);
 
-  --color-status-live: var(--status-live);
-  --color-status-partial: var(--status-partial);
-  --color-status-planned: var(--status-planned);
+  --color-ok: var(--state-ok);
+  --color-ok-dim: var(--state-ok-dim);
+  --color-warn: var(--state-warn);
+  --color-warn-dim: var(--state-warn-dim);
+  --color-bad: var(--state-bad);
+  --color-bad-dim: var(--state-bad-dim);
+  --color-idle: var(--state-idle);
+  --color-idle-dim: var(--state-idle-dim);
+  --color-busy: var(--state-busy);
+  --color-busy-dim: var(--state-busy-dim);
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-body {
-  background-color: var(--surface-base);
-  color: var(--text-primary);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
+/* ===========================================================================
+   Base
+   ======================================================================== */
+
+html {
+  /* A fixed rem scale, not a fluid one. Operators view at a consistent DPI,
+     and a heading that shrinks inside a panel looks worse, not better. */
+  font-size: 16px;
 }
 
-/* A single, consistent focus ring for keyboard users. */
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Machine values - ids, references, durations, seeds, language tags - are set
+   in mono because they are data to be compared character by character, not
+   because mono reads as technical. Tabular figures so columns of numbers
+   line up. */
+code,
+kbd,
+samp,
+pre,
+.tabular {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===========================================================================
+   Browser surfaces
+   ---------------------------------------------------------------------------
+   The parts not drawn by hand still carry the design. Left at their defaults
+   these are the cheapest tell that a page was assembled rather than built.
+   ======================================================================== */
+
+::selection {
+  background: var(--accent-dim);
+  color: var(--accent-strong);
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
 }
 
-/* Respect a reduced-motion preference; the UI uses very little motion as it
-   is, but transitions should still stop. */
+/* Focus belongs to the keyboard. A mouse press on a button should not leave
+   a ring behind it. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3b4756;
+}
+
+a {
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+}
+
+/* The caret in a dark field defaults to a colour belonging to no palette. */
+input,
+textarea,
+select {
+  caret-color: var(--accent);
+}
+
+/* The native dialog backdrop, so an overlay sits in this world rather than
+   the browser's. */
+dialog::backdrop {
+  background: rgb(4 6 9 / 0.72);
+  backdrop-filter: blur(2px);
+}
+
+dialog {
+  color: var(--text);
+}
+
+/* ===========================================================================
+   Motion
+   ======================================================================== */
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
+}
+
+/* A loading skeleton, not a spinner in the middle of content. */
+@keyframes bb-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.bb-skeleton {
+  background: var(--surface-raised);
+  border-radius: var(--r-sm);
+  animation: bb-pulse 1.6s var(--ease) infinite;
+}
+
+/* The one authored entrance: content arriving after a fetch settles in from
+   an already-visible default rather than fading up from nothing. */
+@keyframes bb-settle {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.bb-settle {
+  animation: bb-settle var(--t-base) var(--ease) both;
+}
+
+/* A run that is executing. Used on one dot, never on a region. */
+@keyframes bb-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+}
+
+.bb-live-dot {
+  animation: bb-breathe 1.8s var(--ease) infinite;
 }

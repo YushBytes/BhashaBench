@@ -682,9 +682,7 @@ def read_artefact_audio(
     )
     if record is None:
         named = "no variant" if variant is None else f"the '{variant}' variant"
-        raise NotFoundError(
-            f"stored audio for turn {turn_index} with {named} of run", run_id
-        )
+        raise NotFoundError(f"stored audio for turn {turn_index} with {named} of run", run_id)
 
     try:
         payload = engine.artefact_store.read(record.reference)
@@ -692,9 +690,7 @@ def read_artefact_audio(
         # The run recorded an artefact the store cannot produce: the file was
         # removed, or the configured root moved. 404 rather than 500 - the
         # server is fine, the recording is not there.
-        raise NotFoundError(
-            f"a readable recording for turn {turn_index} of run", run_id
-        ) from exc
+        raise NotFoundError(f"a readable recording for turn {turn_index} of run", run_id) from exc
 
     return _audio_response(payload, record.content_type, range_header)
 

@@ -77,7 +77,7 @@ reasoning behind its score.
 
 ---
 
-## 3. Implemented today (Phases 1–7)
+## 3. Implemented today (Phases 1–8)
 
 ### 3.1 Backend — `backend/app/`
 
@@ -341,11 +341,46 @@ Execution modes, profiles, adapters and limits are in [PIPELINE.md](PIPELINE.md)
 
 ### 3.3 Frontend — `frontend/`
 
-Next.js App Router with TypeScript and Tailwind CSS. Phase 1 ships a
-dark-first status shell: product identity, the current phase, and the planned
-test-suite capabilities labelled as planned. It renders **no analytics and no
-fabricated data**, because there is nothing real to show yet. Phase 13
-replaces it with the operational dashboard.
+Next.js App Router with TypeScript and Tailwind CSS v4. Phase 8 replaced the
+Phase 1 status shell with two surfaces built from one visual system:
+
+- **The public site, `/`.** Static. Explains what the instrument measures and
+  gives its limitations a section of their own rather than a footnote. Reads
+  no API; its copy and phase status live in `lib/content.ts`.
+- **The operator workspace, `/app`.** Overview, run history, conversation
+  inspector, new-test workflow, scenario library and provider status. Reads
+  the live API for everything it shows.
+
+Four structural decisions:
+
+**Server components by default.** Five modules are client components — the
+nav, the marketing chrome, the run filters, the new-test form and the audio
+player — each for a named reason. Everything else renders on the server, so
+the workspace ships roughly 138 KB of JavaScript, most of it the React and
+Next runtime.
+
+**One module calls the API.** `lib/api/client.ts` owns timeouts, the error
+envelope and query serialisation. There is no mock mode and no fallback data:
+when the backend is unreachable the UI says so. Returning plausible figures
+would make a broken deployment look like a working one, which is the single
+thing this product may not do.
+
+**Cache Components is on,** so route segment configs (`dynamic`,
+`revalidate`, `fetchCache`) are forbidden and every data read sits behind a
+`<Suspense>` boundary. Each workspace route is therefore a prerendered static
+shell with live state streamed into it.
+
+**No component library.** Runtime dependencies are `next`, `react` and
+`react-dom`. The flow avoids modals entirely, uses native `<select>` and
+`<details>`, and draws its own icons — so the primitives a headless library
+exists to provide are not needed yet.
+
+The honesty rules the API enforces are rendered structurally rather than as
+copy: `uses_language_model`, `bot_audio_externally_received`,
+`measurement_note`, `evon_status` and `telephony_status` each drive a
+component, and `RunEvidence` derives its caveats from the run rather than
+from the mode it was labelled with. Waveforms are drawn from decoded audio
+or not drawn at all. See [FRONTEND.md](FRONTEND.md).
 
 ### 3.4 Configuration
 

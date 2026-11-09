@@ -156,12 +156,12 @@ names the phase that delivers it.
 | ~~Text to speech~~ | **Done (Phase 5).** Synthesise caller speech via Gnani Timbre - 13 voices, 10 languages, telephony-rate audio | 5 |
 | ~~Simulated callers~~ | **Done (Phase 6).** A caller that pursues a goal rather than replaying a script - deterministic and rule-based. Gnani Evon is **not** integrated: no documented API access exists | 6 |
 | ~~Audio degradation~~ | **Done (Phase 7).** Band-limiting, background noise at a measured SNR, clipping, level and packet loss, reproducible from a fixed seed. Simulated conditions, not field recordings | 7 |
-| Live telephony | Outbound calls with Twilio bidirectional media streaming and barge-in handling | 8 |
-| Orchestration | Run a full conversation end to end and persist every turn | 9 |
-| Automated scoring | Per-criterion pass/fail with reasoning, plus latency, word error rate and task completion | 10 |
-| Multilingual benchmarks | Comparable suites across ten Indian languages plus code-mixed speech | 11 |
-| Reporting | Aggregate queries, run comparison and regression detection | 12 |
-| Dashboard | Run history, transcript playback and score breakdowns | 13 |
+| ~~Operator workspace~~ | **Done (Phase 8).** A public site at `/` and a workspace at `/app`: run history, a conversation inspector with audio playback and waveforms drawn from the stored bytes, scenario library and provider status | 8 |
+| Live telephony | Outbound calls with Twilio bidirectional media streaming and barge-in handling | 9 |
+| Orchestration | Run a full conversation end to end and persist every turn | 10 |
+| Automated scoring | Per-criterion pass/fail with reasoning, plus latency, word error rate and task completion | 11 |
+| Multilingual benchmarks | Comparable suites across ten Indian languages plus code-mixed speech | 12 |
+| Reporting | Aggregate queries, run comparison and regression detection | 13 |
 | CI regression testing | Every pull request runs the suite and fails on quality regression | 14 |
 
 ---
@@ -192,7 +192,7 @@ names the phase that delivers it.
    ├── Speech to text — Gnani Prisma  (Phase 4)
    ├── Text to speech — Gnani Timbre  (Phase 5)
    ├── Audio degradation             (Phase 7)
-   └── Telephony — Twilio            (Phase 8) ──▶ bot under test
+   └── Telephony — Twilio            (Phase 9) ──▶ bot under test
 ```
 
 The backend is layered so that logic stays testable without HTTP and each
@@ -216,6 +216,8 @@ Further reading:
 - [`docs/PROVIDERS.md`](docs/PROVIDERS.md) — provider contracts and what is
   actually verified
 - [`docs/CALLER.md`](docs/CALLER.md) — the caller engine: states, rules, limits
+- [`docs/FRONTEND.md`](docs/FRONTEND.md) — the public site and the operator
+  workspace: routes, design tokens, the API client and the honesty rules
 - [`docs/PIPELINE.md`](docs/PIPELINE.md) — the voice pipeline: execution modes,
   degradation, bot adapters
 
@@ -279,10 +281,17 @@ BhashaBench/
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
 │   └── Dockerfile             multi-stage: development / production
-├── frontend/
-│   ├── app/                   App Router pages, layout, global styles
-│   ├── components/            header, footer, section, status pill, cards
-│   ├── lib/content.ts         typed product copy and phase status
+├── frontend/                  public site and operator workspace (Phase 8)
+│   ├── app/page.tsx           the public site
+│   ├── app/app/               the workspace: overview, runs, new-test,
+│   │                          scenarios, providers
+│   ├── components/ui/         primitives, status vocabulary, loading states
+│   ├── components/shell/      sidebar, mobile drawer, page header
+│   ├── components/domain/     runs table, conversation inspector, audio
+│   │                          player, stage timeline, evidence notices
+│   ├── components/marketing/  public header/footer, pipeline diagram
+│   ├── lib/api/               the ONLY place the frontend calls the API
+│   ├── lib/content.ts         public-site copy and phase status
 │   ├── public/
 │   └── Dockerfile             multi-stage: development / builder / production
 ├── benchmarks/                benchmark suite definitions      (Phase 11)
@@ -295,6 +304,7 @@ BhashaBench/
 │   ├── CLI.md
 │   ├── DATABASE.md
 │   ├── DEVELOPMENT_ROADMAP.md
+│   ├── FRONTEND.md
 │   ├── PIPELINE.md
 │   ├── PROVIDERS.md
 │   └── SCENARIO_FORMAT.md
@@ -398,7 +408,14 @@ npm install
 npm run dev
 ```
 
-The dashboard is then on <http://localhost:3000>.
+The public site is then on <http://localhost:3000> and the operator
+workspace on <http://localhost:3000/app>.
+
+The workspace calls the API **from the browser** to stream audio, so the
+origin it is served from must appear in the backend's `CORS_ORIGINS`.
+Serving the frontend on any port other than 3000 means adding that origin,
+or audio playback fails as an opaque console error rather than a useful
+status code.
 
 ### Database only
 

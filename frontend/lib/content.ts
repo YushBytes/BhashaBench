@@ -1,71 +1,127 @@
 /**
- * Single source of truth for the copy and status data rendered by the shell.
+ * Copy and status data for the public site.
  *
- * Kept as typed constants rather than fetched from the API on purpose: the
- * endpoints that would serve roadmap and capability data do not exist yet,
- * and inventing a client for them would mean shipping a fake integration.
- * Phase 13 replaces this module with real data from the results API.
+ * Typed constants rather than API reads, deliberately: the landing page
+ * describes the *project* — what is built, what is partial, what is not
+ * started — and no endpoint serves that. The workspace at `/app` is where
+ * live server state belongs, and it fetches everything it shows.
+ *
+ * **Every claim here is checkable against the repository.** When a phase's
+ * status changes, this file and the phase tables in README.md, CLAUDE.md
+ * and docs/DEVELOPMENT_ROADMAP.md change together; they are the first thing
+ * a reader checks to learn what actually works.
  */
 
 export const site = {
   name: "BhashaBench",
-  tagline: "Test your voice AI before India tests it for you.",
+  tagline: "Does your voice AI actually understand India?",
   description:
-    "An automated testing and benchmarking platform for Indian-language voice bots. " +
-    "Simulated callers, realistic audio degradation and automated conversation scoring.",
+    "Test Indian-language voice AI under real-world conversational conditions — " +
+    "from code-mixing and interruptions to noisy environments.",
   repository: "https://github.com/YushBytes/BhashaBench",
 } as const;
 
-/** Where the FastAPI backend is reachable from the browser. */
 export const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-/**
- * Status vocabulary, used consistently everywhere in the UI.
- * `live` is reserved for behaviour that genuinely works today.
- */
-export type Status = "live" | "partial" | "planned";
+export const currentPhase = 8;
+export const totalPhases = 15;
 
-export const statusLabel: Record<Status, string> = {
-  live: "Live",
-  partial: "Partial",
-  planned: "Planned",
-};
+/** Status vocabulary, matching the badges used across the product. */
+export type Status = "built" | "partial" | "planned";
 
 export interface Phase {
   readonly number: number;
   readonly title: string;
   readonly status: Status;
+  readonly note?: string;
 }
 
-export const currentPhase = 7;
-export const totalPhases = 15;
-
 export const phases: readonly Phase[] = [
-  { number: 1, title: "Project foundation", status: "live" },
-  { number: 2, title: "Data model & persistence", status: "live" },
-  { number: 3, title: "Scenario definition format", status: "live" },
-  { number: 4, title: "Speech to text (Gnani Prisma)", status: "live" },
-  { number: 5, title: "Text to speech (Gnani Timbre)", status: "live" },
-  // "Partial", not "live": the caller engine is complete and the Gnani Evon
-  // integration the phase was scoped around is not, because no documented
-  // API access exists. Marking this "live" would be the claim the first rule
-  // in CLAUDE.md forbids.
-  { number: 6, title: "Caller simulation (rule-based)", status: "partial" },
-  // "Partial", not "live": the pipeline runs end to end offline, and no real
-  // voice bot or live provider call has gone through it.
-  { number: 7, title: "End-to-end voice pipeline", status: "partial" },
-  { number: 8, title: "Twilio telephony & media streaming", status: "planned" },
-  { number: 9, title: "Conversation orchestration engine", status: "planned" },
-  { number: 10, title: "Automated evaluation & scoring", status: "planned" },
-  { number: 11, title: "Multilingual benchmarking", status: "planned" },
-  { number: 12, title: "Results API & reporting", status: "planned" },
-  { number: 13, title: "React dashboard", status: "planned" },
+  { number: 1, title: "Project foundation", status: "built" },
+  { number: 2, title: "Data model and persistence", status: "built" },
+  { number: 3, title: "Scenario definition format", status: "built" },
+  { number: 4, title: "Speech to text (Gnani Prisma)", status: "built" },
+  { number: 5, title: "Text to speech (Gnani Timbre)", status: "built" },
+  {
+    number: 6,
+    title: "Caller simulation",
+    status: "partial",
+    note:
+      "The rule engine is complete. Gnani Evon is not integrated: no " +
+      "text-generation endpoint is published and the released model has no " +
+      "hosted inference provider.",
+  },
+  {
+    number: 7,
+    title: "End-to-end voice pipeline",
+    status: "partial",
+    note:
+      "Runs end to end offline. No live provider call and no real voice bot " +
+      "has gone through it.",
+  },
+  {
+    number: 8,
+    title: "Operator workspace",
+    status: "partial",
+    note: "This interface. Run history, conversation inspector and audio playback.",
+  },
+  { number: 9, title: "Telephony and media streaming", status: "planned" },
+  { number: 10, title: "Conversation orchestration", status: "planned" },
+  { number: 11, title: "Automated evaluation and scoring", status: "planned" },
+  { number: 12, title: "Multilingual benchmarking", status: "planned" },
+  { number: 13, title: "Results API and reporting", status: "planned" },
   { number: 14, title: "CI regression testing", status: "planned" },
-  { number: 15, title: "Hardening, observability & release", status: "planned" },
+  { number: 15, title: "Hardening, observability and release", status: "planned" },
 ] as const;
 
-/** What the finished test suite will do. Every entry is labelled honestly. */
+/** The seven steps a run actually performs, in order. */
+export const workflow = [
+  {
+    step: "Select a scenario",
+    detail:
+      "A persona, an objective, known facts the caller may quote, and the " +
+      "acoustic environment the test assumes. Authored as YAML.",
+  },
+  {
+    step: "Generate caller speech",
+    detail:
+      "Gnani Timbre synthesises the caller's turn at 8 kHz — the rate an " +
+      "Indian phone call actually runs at.",
+  },
+  {
+    step: "Apply acoustic conditions",
+    detail:
+      "Band-limiting, background noise at a measured signal-to-noise ratio, " +
+      "clipping and packet loss. Reproducible from a fixed seed.",
+  },
+  {
+    step: "Supply the bot's reply",
+    detail:
+      "A scripted fixture, or audio an operator captured from the bot under " +
+      "test and posted back.",
+  },
+  {
+    step: "Transcribe with Prisma",
+    detail:
+      "Gnani Prisma turns the bot's audio into text. A transcription failure " +
+      "is recorded as a failure, never as silence.",
+  },
+  {
+    step: "Continue the conversation",
+    detail:
+      "The caller's state machine decides the next turn from what the bot " +
+      "actually said, and the loop repeats until the goal or the budget ends it.",
+  },
+  {
+    step: "Inspect the evidence",
+    detail:
+      "Every turn, both audio variants, each pipeline stage with its measured " +
+      "duration, and the outcome the run reached.",
+  },
+] as const;
+
+/** What exists, with the phase that delivered it. */
 export interface Capability {
   readonly title: string;
   readonly summary: string;
@@ -75,76 +131,91 @@ export interface Capability {
 
 export const capabilities: readonly Capability[] = [
   {
-    title: "Simulated callers",
+    title: "Indian-language scenarios",
     summary:
-      "A caller that pursues a goal instead of replaying a script, projected from the scenario's persona. Deterministic and rule-based: Gnani Evon is not integrated, because no documented API access exists.",
+      "Thirteen languages in the catalogue, each with its endonym, script and " +
+      "locale. Ten are transcribable and speakable today; Urdu, Odia and " +
+      "Assamese are authorable and not yet covered by a provider.",
+    status: "built",
+    phase: 3,
+  },
+  {
+    title: "Gnani Prisma transcription",
+    summary:
+      "Batch and streaming speech to text behind a provider-independent " +
+      "interface. Confidence and word timings stay empty because Prisma does " +
+      "not report them — not defaulted to a number that would read as certainty.",
+    status: "built",
+    phase: 4,
+  },
+  {
+    title: "Gnani Timbre synthesis",
+    summary:
+      "Thirteen documented voices across ten languages, at telephony sample " +
+      "rates. Every returned file's rate and duration is read from the bytes, " +
+      "never echoed back from the request.",
+    status: "built",
+    phase: 5,
+  },
+  {
+    title: "Deterministic caller",
+    summary:
+      "A caller that pursues a goal rather than replaying a script, driven by " +
+      "a state machine and reviewed phrase tables. The same context always " +
+      "produces the same turn, which is what makes a benchmark reproducible.",
     status: "partial",
     phase: 6,
   },
   {
-    title: "Realistic audio degradation",
+    title: "Audio degradation",
     summary:
-      "Band-limiting, background noise at a measured signal-to-noise ratio, clipping and packet loss, applied from a seed so every run reproduces exactly. Simulated conditions, not field recordings.",
+      "Noise scaled from each utterance's own RMS so the stated ratio holds, " +
+      "with the achieved ratio asserted to better than 0.5 dB. The original " +
+      "always survives beside the processed file.",
     status: "partial",
     phase: 7,
   },
   {
-    title: "Live telephony",
+    title: "Multi-turn pipeline",
     summary:
-      "Outbound calls over Twilio with bidirectional media streaming, barge-in handling and a hard allow-list on dialable numbers.",
-    status: "planned",
-    phase: 8,
-  },
-  {
-    title: "Automated scoring",
-    summary:
-      "Per-criterion pass/fail with reasoning, alongside deterministic metrics: latency percentiles, word error rate and task completion.",
-    status: "planned",
-    phase: 10,
-  },
-  {
-    title: "Multilingual benchmarks",
-    summary:
-      "Suites spanning ten Indian languages plus code-mixed speech, normalised per language so scores stay comparable.",
-    status: "planned",
-    phase: 11,
-  },
-  {
-    title: "Regression testing in CI",
-    summary:
-      "Every pull request runs the suite against the sample bot and fails when conversation quality drops below the baseline.",
-    status: "planned",
-    phase: 14,
+      "Caller, synthesis, degradation, bot exchange, transcription and the " +
+      "next decision, each stage timed. Outcomes are structured; none of them " +
+      "is a score.",
+    status: "partial",
+    phase: 7,
   },
 ] as const;
 
-/**
- * The service-level endpoints, listed because they take no arguments and so
- * are the quickest check that a deployment is alive. This is deliberately a
- * subset: the API serves 41 operations across 34 paths, and the full list
- * belongs in the generated OpenAPI document rather than being duplicated —
- * and drifting — here. Re-derive the totals with
- * `create_app().openapi()["paths"]` when they are quoted in copy.
- */
-export interface Endpoint {
-  readonly method: "GET";
-  readonly path: string;
-  readonly summary: string;
-}
-
-export const endpoints: readonly Endpoint[] = [
-  { method: "GET", path: "/", summary: "Service identity and version" },
-  { method: "GET", path: "/health", summary: "Liveness probe" },
+/** Stated plainly, because the product is a measurement instrument. */
+export const limitations = [
   {
-    method: "GET",
-    path: "/api/v1/health",
-    summary: "Structured per-subsystem health",
+    title: "Gnani Evon is not integrated",
+    detail:
+      "No text-generation endpoint is published for it and the released model " +
+      "has no hosted inference provider. The caller is a rule engine, named " +
+      "for what it is. Configuring `evon` as a provider fails with an error " +
+      "explaining why.",
   },
-] as const;
-
-export const navigation = [
-  { label: "Overview", href: "#overview" },
-  { label: "Test suite", href: "#test-suite" },
-  { label: "API", href: "#api" },
-  { label: "Roadmap", href: "#roadmap" },
+  {
+    title: "No telephone call has been placed",
+    detail:
+      "There is no telephony or SIP integration. `telephony_test` exists in " +
+      "the execution-mode enum and is excluded from the set a run can be " +
+      "created in — an unusable enum member is the honest record of the gap.",
+  },
+  {
+    title: "No real external bot has been tested end to end",
+    detail:
+      "Both shipping bot adapters are offline. One replays fixture audio; the " +
+      "other waits for an operator to supply the bot's reply by hand. A run " +
+      "reports whether every reply genuinely came from outside the process, " +
+      "so a mislabelled test is visible.",
+  },
+  {
+    title: "Nothing here is an accuracy score",
+    detail:
+      "There is no word error rate, no accuracy figure and no quality verdict, " +
+      "because none is computable without a reviewed reference transcript. " +
+      "The pipeline measures and counts; evaluation is a later phase.",
+  },
 ] as const;

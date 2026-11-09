@@ -12,6 +12,13 @@ phase, not as existing behaviour.
 
 ---
 
+> **Phase 8 renumbered the tail.** The React dashboard was Phase 13 and the
+> operator workspace was not a phase at all. Building the workspace early
+> made the pipeline's own gaps visible — `audio_fixture_test` cannot succeed
+> through the API, and an offline run never terminates — which is worth more
+> before telephony than after it. Telephony moved from 8 to 9 and everything
+> below it shifted by one; the old Phase 13 is absorbed into Phase 8.
+
 ## Phase status
 
 | # | Phase | Status |
@@ -24,12 +31,12 @@ phase, not as existing behaviour.
 | 6 | Caller Simulation — deterministic engine | ✅ Complete (Evon **not** integrated) |
 | 7 | End-to-End Voice Pipeline & Audio Degradation | ✅ Complete (no live call, no real bot) |
 | 7.1 | Concurrency Enforcement | ✅ Complete |
-| 8 | Twilio Telephony & Media Streaming | ⬜ Not started |
-| 9 | Conversation Orchestration Engine | ⬜ Not started |
-| 10 | Automated Evaluation & Scoring | ⬜ Not started |
-| 11 | Multilingual Benchmarking | ⬜ Not started |
-| 12 | Results API & Reporting | ⬜ Not started |
-| 13 | React Dashboard | ⬜ Not started |
+| 8 | Operator Workspace & Public Site | ✅ Complete (no live bot, no telephony) |
+| 9 | Twilio Telephony & Media Streaming | ⬜ Not started |
+| 10 | Conversation Orchestration Engine | ⬜ Not started |
+| 11 | Automated Evaluation & Scoring | ⬜ Not started |
+| 12 | Multilingual Benchmarking | ⬜ Not started |
+| 13 | Results API & Reporting | ⬜ Not started |
 | 14 | CI Regression Testing (GitHub Actions) | ⬜ Not started |
 | 15 | Hardening, Observability & Release | ⬜ Not started |
 

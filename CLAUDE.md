@@ -9,7 +9,7 @@ BhashaBench is an automated testing and benchmarking platform for
 Indian-language voice bots. It is being built in **15 controlled phases**; see
 `docs/DEVELOPMENT_ROADMAP.md`.
 
-**Phases 1 to 7 are complete.** Phase 8 has not started.
+**Phases 1 to 8 are complete.** Phase 9 has not started.
 
 | Phase | Status |
 |-------|--------|
@@ -20,7 +20,12 @@ Indian-language voice bots. It is being built in **15 controlled phases**; see
 | 5 — Text to speech (Gnani Timbre) | ✅ Complete |
 | 6 — Caller simulation (deterministic) | ✅ Complete — Evon **not** integrated |
 | 7 — End-to-end voice pipeline | ✅ Complete — no live call, no real bot |
-| 8–15 | ⬜ Not started |
+| 8 — Operator workspace & public site | ✅ Complete — no live bot, no telephony |
+| 9–15 | ⬜ Not started |
+
+Phase 8 renumbered the tail: telephony moved from 8 to 9 and everything
+below shifted by one. The old Phase 13 "React dashboard" is absorbed into
+Phase 8.
 
 ## The two rules that matter most
 
@@ -35,7 +40,7 @@ Indian-language voice bots. It is being built in **15 controlled phases**; see
 ## Phase discipline
 
 Do not implement functionality belonging to a future phase, even if it seems
-convenient. A pull request that does will be asked to split. Phase 8+ work —
+convenient. A pull request that does will be asked to split. Phase 9+ work —
 telephony, multi-scenario orchestration, evaluation — is explicitly out of
 scope until its phase. In particular, do not add a Twilio client or any
 telephony bridge, and do not set `CallSession`'s `DIALING`, `NO_ANSWER` or
@@ -296,6 +301,59 @@ malformed *upload* is refused with a 4xx and leaves the run waiting, so the
 operator can retry — a mistyped filename is not a reason to discard a
 conversation.
 
+### The frontend (Phase 8)
+
+Two surfaces, one visual system, separate chrome. The root layout carries
+the document and the fonts only; `/` supplies a marketing header and `/app`
+supplies the operator rail.
+
+```
+frontend/
+  app/page.tsx          the public site
+  app/app/              the workspace: overview, runs, new-test,
+                        scenarios, providers
+  components/ui/        primitives, the status vocabulary, loading states
+  components/shell/     sidebar, mobile drawer, page header, wordmark
+  components/domain/    runs table, conversation, audio, stage timeline,
+                        evidence, filters, the new-test form
+  components/marketing/ public header/footer, pipeline diagram
+  lib/api/              the ONLY place the frontend calls the API
+```
+
+Six rules that are easy to break:
+
+**`lib/api/client.ts` is the only module that calls the API.** One `request`
+function owns the timeout, the error envelope and query serialisation. There
+is no mock mode and no fallback data: a failed call renders an error state,
+because returning plausible data when the backend is down makes a broken
+deployment look like a working one.
+
+**`lib/api/types.ts` is transcribed, not invented.** No field appears there
+that the API does not return, and a field the API returns as `null` because
+a provider does not report it is typed `| null` and rendered "not reported".
+A misspelled query parameter is *ignored* by FastAPI, not rejected — which is
+how a search box can appear to filter while showing everything.
+
+**The honesty fields are rendered structurally, not as copy.**
+`uses_language_model`, `bot_audio_externally_received`, `measurement_note`,
+`evon_status` and `telephony_status` exist so a client cannot overclaim.
+`RunEvidence` derives its caveats from the run, never from the mode label —
+which is what makes a mislabelled `external_bot_test` visible.
+
+**Three failure modes stay three things.** An empty transcript is the bot
+saying nothing; `text: null` plus a `transcription_error` is our failure; a
+run failing `audio_validation_failed` is neither. Merging any two of them
+attributes our fault to the system under test.
+
+**The waveform is drawn from decoded audio or not at all.** No synthetic
+fallback. A generated waveform is a picture of a sound that does not exist.
+
+**`cacheComponents` is on, so `export const dynamic` is forbidden** — it
+errors at build. Data access goes behind `<Suspense>` with a skeleton, which
+is what keeps every route a static shell with streamed content. `min-w-0` on
+grid and flex children is load-bearing: without it a panel holding a
+`min-w-max` table inflates its own track and the page scrolls sideways.
+
 ### Front ends share services, not messages
 
 The API and the CLI both call `services/`. A domain error that suggests a
@@ -415,6 +473,7 @@ ruff check . && ruff format --check .   # from the repository root
 | `docs/PROVIDERS.md` | a provider contract, capability, limitation or verification status changes |
 | `docs/CALLER.md` | a caller state, rule, validation check, limit or endpoint changes |
 | `docs/PIPELINE.md` | an execution mode, degradation profile, bot adapter, artefact rule or run endpoint changes |
+| `docs/FRONTEND.md` | a route, design token, primitive or API-client rule changes |
 | `backend/tests/fixtures/audio/README.md` | an audio fixture is added or changed |
 | `scenarios/README.md` | a reference scenario is added or changed |
 | `docs/DEVELOPMENT_ROADMAP.md` | a phase's scope or status changes |
