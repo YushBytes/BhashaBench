@@ -44,7 +44,7 @@ established.
 | **Gnani Prisma** (speech to text) behind a provider-independent interface | Implemented; live-verified 2026-11-07 (auth, real batch request, response parsing) |
 | **Gnani Timbre** (text to speech) — 13 voices, 10 languages, 8 kHz telephony audio | Implemented; live-verified 2026-11-07 (auth, request shape, decodable 8 kHz mono audio) |
 | Deterministic caller engine — 9-state machine, 11 ordered rules, decision validation | Implemented |
-| Audio degradation — band-limiting, noise at a measured SNR, clipping, packet loss, reproducible from a fixed seed | Implemented; achieved SNR asserted to better than 0.5 dB |
+| Audio degradation — band-limiting, noise at a measured SNR, clipping, packet loss, reproducible from a fixed seed | Implemented; achieved SNR asserted to better than 0.5 dB. Runs apply fixed named presets: a scenario's declared SNR and packet loss are not applied, and no preset applies packet loss |
 | Pipeline orchestration — execution modes, artefact store, process-wide concurrency limit | Implemented |
 | Operator workspace and public site | Implemented |
 
@@ -56,8 +56,12 @@ drift.
 
 `scenarios/demo/tamil_crop_insurance.yaml` — a smallholder paddy farmer near
 Thanjavur calls a crop-insurance helpline about a claim filed after unseasonal
-rain. Tamil with English for the policy number, the scheme name and the amount;
-rural mobile conditions at **10 dB SNR with 8% packet loss**.
+rain. Tamil with English for the policy number, the scheme name and the amount.
+The run applies **light background noise at 25 dB SNR on the 300–3400 Hz phone
+band, with no packet loss**. The scenario file declares rural conditions at
+10 dB SNR with 8% packet loss, but **the current engine does not apply those
+declared values** — it maps the profile name `rural` to a fixed preset, and
+each degraded artefact records the parameters actually used.
 
 The recorded run completed five caller turns and four bot turns, transcribed
 four replies, stored **12 audio artefacts** (original and degraded for each

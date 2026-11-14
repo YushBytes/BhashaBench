@@ -11,7 +11,7 @@ when demonstrating the library commands.
 | `tamil_electricity_bill.yaml` | `ta-IN` Tamil | Heavy Tanglish — account numbers and amounts in English, over market noise. The mixed tokens are the ones that decide whether the payment is right. |
 | `bengali_balance_enquiry.yaml` | `bn-IN` Bengali | An elderly caller who pauses mid-sentence on a noisy line. Long silences that are not end-of-turn. |
 | `marathi_delivery_reschedule.yaml` | `mr-IN` Marathi | A frustrated repeat caller who falls back to Hindi and English — mixing triggered by frustration, exactly when recognition can least afford it. |
-| `telugu_order_tracking.yaml` | `te-IN` Telugu | The worst channel this bench simulates: 6 dB SNR, 18% packet loss. Everything else is deliberately simple so a failure points at the audio. |
+| `telugu_order_tracking.yaml` | `te-IN` Telugu | The worst channel the file declares: `worst_case`, 6 dB SNR, 18% packet loss. **The current engine does not apply the declared SNR or packet loss**: `worst_case` maps to the `heavy_background_noise` preset — phone band, 7 dB SNR, no packet loss. Everything else is deliberately simple so a failure points at the audio. |
 | `english_insurance_claim.yaml` | `en-IN` Indian English | The control: `code_mixing.expected: false` asserts the caller stays monolingual, so a regression that starts mixing gets caught. |
 
 `bundles/indian_language_reference.yaml` holds all six as one importable
@@ -23,8 +23,15 @@ against a real database.
 
 `demo/tamil_crop_insurance.yaml` is the scenario used for the recorded
 demonstration: a crop-insurance claim under a government scheme, Tamil with
-English for the policy number and the amount, on a rural mobile line at 10 dB
-SNR with 8% packet loss.
+English for the policy number and the amount, on a rural mobile line.
+
+> **Declared, not applied.** The file declares `noise_profile: rural` with
+> `snr_db: 10` and `packet_loss_percent: 8`. The current pipeline engine reads
+> only the profile name and maps `rural` to the fixed `light_background_noise`
+> preset, so a run applies 8 kHz mono, 300–3400 Hz phone-band filtering, noise
+> at **25 dB SNR** and **no packet loss**. Each degraded artefact records the
+> parameters actually used — quote those. The same mapping applies to every
+> scenario here; see `docs/PIPELINE.md`.
 
 It is deliberately **not** in this directory's top level. The six files above
 are a survey with one scenario per language, and `test_languages_are_distinct`

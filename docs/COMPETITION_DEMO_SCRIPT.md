@@ -51,12 +51,22 @@ Run `python scripts/demo.py run` **before** recording so a completed run
 already exists. Note the run id it prints; the script also prints the exact
 workspace URL to open.
 
-## 2. The one thing not to overclaim
+## 2. The things not to overclaim
 
 **The waveform is real but flat.** It is drawn from decoded audio bytes — 160
 bars per artefact, measured, with no synthetic fallback. It looks flat because
 the configured text-to-speech is the offline fake, which emits a
 constant-amplitude tone. Say so. The line is in the 1:20 segment below.
+
+**The noise on screen is lighter than the scenario file declares.** The
+scenario declares `rural` with 10 dB SNR and 8% packet loss. **The current
+engine does not apply those two numbers.** It maps the profile name `rural` to
+the fixed `light_background_noise` preset and applies exactly that: 8 kHz mono,
+300–3400 Hz phone-band filtering, background noise at **25 dB SNR**, and **no
+packet loss**. The run inspector shows it honestly — *Scenario declared: Rural*
+beside *Noise applied: Light background noise* — and every degraded artefact
+records `snr_db: 25.0` with no `packet_loss` step. Narrate the applied
+condition, never the declared one.
 
 Likewise the bot transcript on screen reads `namaste, main aapki kya madad kar
 sakta hoon` — scripted stub output from the fake transcription provider, not
@@ -119,9 +129,10 @@ then **New test**.
 > demo scenario: a paddy farmer near Thanjavur calling a crop-insurance
 > helpline about a claim after unseasonal rain. He speaks Tamil, but the policy
 > number and the amount come out in English — which is exactly where
-> recognition breaks. The line is rural mobile: ten decibels signal-to-noise,
-> eight per cent packet loss. On the New test page those conditions are
-> selectable, and so is the execution mode. Note what is *not* offered —
+> recognition breaks. Each caller turn is degraded the way a phone line
+> degrades it: cut to the 300 to 3400 hertz phone band, with background noise
+> mixed in at twenty-five decibels signal-to-noise. On the New test page those
+> conditions are selectable, and so is the execution mode. Note what is *not* offered —
 > telephony, because no telephony exists yet."
 
 **Clicks:** Scenarios → scroll to `tamil_crop_insurance` (ta-IN, தமிழ்) → New
@@ -165,7 +176,8 @@ conversation turns → press play on one artefact → scroll to the stage timeli
 - `Completed` and `No progress` badges
 - the caveat panels: **"No external bot was contacted"**, **"The caller is a
   rule engine, not a language model"**, **"Measurements, not scores"**
-- Configuration showing `fake` / `fake` / `scripted`, seed 42
+- Configuration showing `fake` / `fake` / `scripted`, seed 42, and
+  *Noise applied: Light background noise* beside *Scenario declared: Rural*
 - Counted: caller turns 5, bot turns 4, transcribed 4, audio 8.00 s
 - Tamil-script caller utterances
 
@@ -228,5 +240,8 @@ Do not claim, in any take:
 - that Evon is integrated or that the caller uses a language model
 - any accuracy, word error rate, or quality score
 - that the noise is a field recording
+- that the run used 10 dB SNR or 8% packet loss — those are the scenario's
+  declared values and the current engine does not apply them (§2); the applied
+  condition is light background noise at 25 dB SNR, phone band, no packet loss
 - that the transcript demonstrates recognition quality — with the fake
   provider it is scripted stub output

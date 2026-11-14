@@ -45,6 +45,10 @@ to make a credible demonstration possible at all.
    any previous report. §6.
 6. **`offline_simulation` is narrower than documented**, not broader: it does
    reach a terminal state, but only across repeated `/start` calls. §6.
+7. **A scenario's declared SNR and packet loss are not applied** — only the
+   profile name is. The demo's declared 10 dB / 8% is in fact 25 dB / no packet
+   loss; the competition material quoted the declared figures and has been
+   corrected. §6.4.
 
 **The demonstration** is a Tamil crop-insurance claim that runs the whole
 pipeline and terminates with the outcome `no_progress` — the instrument
@@ -99,9 +103,18 @@ different matter — §9.
 `scenarios/demo/tamil_crop_insurance.yaml` — a smallholder paddy farmer near
 Thanjavur calling a crop-insurance helpline about a claim filed after
 unseasonal rain. Tamil, with English for the policy number, the scheme name
-and the amount. Rural mobile conditions: **noise profile `rural`, 10 dB SNR,
-8% packet loss.** Validated through `POST /api/v1/scenarios/validate` →
+and the amount. Validated through `POST /api/v1/scenarios/validate` →
 `valid: true, errors: []`.
+
+**Audio — declared versus applied.** The file *declares* rural mobile
+conditions: `noise_profile: rural`, `snr_db: 10`, `packet_loss_percent: 8`.
+**The current engine does not apply the declared 10 dB SNR or 8% packet
+loss.** It reads only the profile name and maps `rural` to the fixed
+`light_background_noise` preset, so what a run *applies* is: 8 kHz mono,
+300–3400 Hz phone-band filtering, background noise at **25 dB SNR**, and **no
+packet loss**. Run `479ecd51`'s degraded artefacts record exactly that
+(`transformations: [to_mono, resample, bandpass, add_noise]`, `snr_db: 25.0`).
+Defect §6.4.
 
 **Why it is in `scenarios/demo/` rather than `scenarios/`:** the six files in
 `scenarios/` are a survey with one scenario per language and
@@ -254,6 +267,27 @@ permanent hang that was recorded. Unresolved.
 Was: fails on turn 0 through the API. Now: completes when a fixture is
 configured; unchanged when it is not.
 
+### 6.4 A scenario's declared `snr_db` and `packet_loss_percent` are not applied — **Verified**
+
+The pipeline maps a scenario's `audio.noise_profile` name to a fixed preset
+(`_SCENARIO_PROFILES` in `backend/app/pipeline/engine.py`) and ignores the
+scenario's own `snr_db` and `packet_loss_percent`. `docs/PIPELINE.md` already
+states that no profile applies packet loss; what was wrong was the
+competition material, which quoted the declared numbers as if they were
+applied.
+
+| Scenario | Declared | Applied by the current engine |
+|---|---|---|
+| `tamil_crop_insurance` (demo) | `rural`, 10 dB SNR, 8% packet loss | `light_background_noise`: phone band, **25 dB SNR**, **no packet loss** |
+| `telugu_order_tracking` | `worst_case`, 6 dB SNR, 18% packet loss | `heavy_background_noise`: phone band, **7 dB SNR** (not 6), **no packet loss** |
+
+Every degraded artefact records the parameters actually used, and the run
+inspector shows *Noise applied* beside *Scenario declared*, so the product
+itself never overclaimed. The demo script, this report, the pitch, the
+LinkedIn post and `scenarios/README.md` have been corrected to quote the
+applied condition. Not fixed: honouring the declared values is a behavioural
+change to degradation and was not approved.
+
 ## 7. Quality gates — **Verified**
 
 Every figure below is command output from after the final edit.
@@ -386,6 +420,8 @@ to `.gitignore` so browser scratch output is never committed.
    unresolved.
 3. Server-side rendering is broken under full Docker Compose (§9) —
    unresolved; the demo avoids it.
+4. A scenario's declared `snr_db` and `packet_loss_percent` are not applied;
+   only the profile name is (§6.4) — unresolved, by decision.
 
 **Capability limits, by design and documented**
 

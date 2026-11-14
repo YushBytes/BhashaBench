@@ -30,9 +30,9 @@ people under the conditions they really call in.
 
 How it works: a scenario declares who is calling, in which language, what they
 want, and what the line sounds like. The platform then synthesises the caller's
-speech with **Gnani Timbre**, degrades it the way a real network does —
-band-limiting, background noise at a measured signal-to-noise ratio, clipping,
-packet loss, all reproducible from a fixed seed — carries it to the bot under
+speech with **Gnani Timbre**, degrades it the way a phone line does —
+band-limiting and background noise at a measured signal-to-noise ratio,
+reproducible from a fixed seed — carries it to the bot under
 test, transcribes the reply with **Gnani Prisma**, and decides what the caller
 says next. Every turn is stored with its audio, its timings and its state
 transitions.
@@ -40,7 +40,11 @@ transitions.
 The demo scenario is a paddy farmer near Thanjavur ringing a crop-insurance
 helpline about a claim after unseasonal rain. He speaks Tamil, but the policy
 number and the amount come out in English — which is exactly where recognition
-breaks. The run completed five caller turns, transcribed four bot replies and
+breaks. The caller's audio was cut to the phone band with background noise at
+25 dB signal-to-noise and no packet loss. (The scenario declares a harsher 10 dB
+with 8% packet loss; today's engine applies a fixed preset instead, and the run
+records what it actually applied.) The run completed five caller turns,
+transcribed four bot replies and
 stored twelve audio artefacts, keeping both the original and the degraded
 version of every turn so the evidence can be reproduced.
 
