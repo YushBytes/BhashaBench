@@ -29,8 +29,9 @@ docker compose up -d db
 PIPELINE_FIXTURE_AUDIO_PATH=backend/tests/fixtures/audio/tone_8k_mono.wav \
   python -m uvicorn app.main:app --app-dir backend --port 8000
 
-# 3. frontend, in a second terminal
-cd frontend && npm run dev
+# 3. frontend, in a second terminal - bound to loopback so other devices on
+#    the network cannot reach the demo
+cd frontend && npm run dev -- --hostname 127.0.0.1 --port 3000
 
 # 4. load the demo scenario and execute one run
 python scripts/demo.py run
@@ -42,6 +43,12 @@ container, where `localhost:8000` is the container itself, so the workspace
 renders "The API is not reachable"; and artefact audio written by one backend
 is not visible to the other. Both are recorded as defects in
 `docs/COMPETITION_READINESS_REPORT.md`.
+
+**Bind the frontend to `127.0.0.1`.** A bare `npm run dev` listens on every
+interface, so the demo is reachable from other devices on the same network.
+The `--hostname 127.0.0.1` flag keeps it on this machine; `package.json` and the
+Docker image are deliberately unchanged, because the container must listen on
+`0.0.0.0` for its port mapping to work.
 
 **Keep the frontend on port 3000.** `CORS_ORIGINS` allows `http://localhost:3000`
 only, and audio playback is a browser fetch — on any other port it fails with a
@@ -91,7 +98,8 @@ recognition of the audio. The script says this out loud at 1:45.
 **Evidence on screen:** the headline and the problem section.
 
 **If it fails:** if the page does not load, the frontend is not up. `cd
-frontend && npm run dev`, wait for "Ready", reload.
+frontend && npm run dev -- --hostname 127.0.0.1 --port 3000`, wait for
+"Ready", reload.
 
 ---
 
@@ -224,7 +232,7 @@ their documented gaps; the `evon_status` and `telephony_status` text.
 
 - [ ] `docker compose up -d db` — database up
 - [ ] Backend started **with** `PIPELINE_FIXTURE_AUDIO_PATH`
-- [ ] Frontend on **port 3000**
+- [ ] Frontend on **port 3000**, bound to `127.0.0.1`
 - [ ] `python scripts/demo.py run` completed; run id noted
 - [ ] Browser at 1440×900 or wider, zoom 100%
 - [ ] Close unrelated tabs; hide bookmarks and any personal information

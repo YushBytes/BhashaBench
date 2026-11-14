@@ -172,8 +172,9 @@ docker compose up -d db
 #    PowerShell: $env:PIPELINE_FIXTURE_AUDIO_PATH="backend/tests/fixtures/audio/tone_8k_mono.wav"
 PIPELINE_FIXTURE_AUDIO_PATH=backend/tests/fixtures/audio/tone_8k_mono.wav   python -m uvicorn app.main:app --app-dir backend --port 8000
 
-# 3. Frontend - keep it on port 3000, which is what CORS_ORIGINS allows
-cd frontend && npm run dev
+# 3. Frontend - keep it on port 3000, which is what CORS_ORIGINS allows, and
+#    bind it to loopback so other devices on the network cannot reach it
+cd frontend && npm run dev -- --hostname 127.0.0.1 --port 3000
 ```
 
 | Surface | URL |
@@ -237,6 +238,11 @@ docker compose stop db      # keeps the data
   is stale: `docker compose up -d --force-recreate --renew-anon-volumes frontend`.
 - Audio playback needs the frontend on port 3000, or the browser fetch is
   blocked by CORS.
+- A bare `npm run dev` listens on every network interface, so the demo is
+  reachable from other devices on the same network. `--hostname 127.0.0.1`
+  keeps it on this machine. `package.json` and the frontend Dockerfile are
+  deliberately unchanged: inside the container the server must listen on
+  `0.0.0.0` for Compose's port mapping to work.
 
 ### Screenshots
 
