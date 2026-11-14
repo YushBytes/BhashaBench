@@ -9,7 +9,7 @@ merges.
 ## Before you start
 
 BhashaBench is built in [15 controlled phases](docs/DEVELOPMENT_ROADMAP.md),
-and **the current phase boundary is enforced**. A pull request that
+and **the current phase boundary is enforced**. A change that
 implements functionality belonging to a future phase will be asked to split,
 even if the code is good. The reason is reviewability: each phase is meant to
 be verifiable on its own.
@@ -57,46 +57,17 @@ docker compose up --build
 
 ## Branching
 
-`main` is the **single authoritative branch**. It holds the complete approved
-project history, and every completed and approved phase is integrated into it.
+**`main` is the only branch.** All work is committed directly on `main`;
+feature branches are not used. A `develop` branch existed while Phases 1
+and 2 were being built and was removed once both were integrated; the
+history it carried is preserved in `main`.
 
-| Branch | Purpose |
-|--------|---------|
-| `main` | The authoritative branch. All approved work lives here. |
-| `feature/*` | A temporary branch for one unit of work. Branch from `main`. |
-
-There is no long-lived integration branch. A `develop` branch existed while
-Phases 1 and 2 were being built and was removed once both were integrated into
-`main`; the history it carried is preserved in `main`.
-
-Feature branches are optional and temporary: start one from the latest `main`,
-and delete it once its work is integrated and verified.
-
-### Naming
-
-Phase work is named by its phase number, so the branch states which
-increment it belongs to:
-
-```
-feature/phase-01-foundation
-feature/phase-02-data-model
-feature/phase-04-prisma-stt
-```
-
-Other work uses a type prefix and a short kebab-case description:
-
-```
-feature/scenario-yaml-loader
-fix/health-timestamp-timezone
-docs/architecture-provider-isolation
-chore/bump-ruff
-refactor/split-health-service
-test/config-validation-cases
-```
-
-Keep branches short-lived. Rebase onto `main` rather than merging it back into
-your branch, so history stays linear and the eventual integration can be a
-fast-forward.
+- Start from the latest `main` and keep each commit to one concern.
+- Stage explicit paths. Never `git add .` or `git add -A`: local tooling
+  directories sit in the working tree and are excluded only locally.
+- Commit locally and push only with the owner's explicit approval.
+- Never force-push and never rewrite pushed history. Undo a change with
+  `git revert`.
 
 ---
 
@@ -188,7 +159,7 @@ the value committed in .env.example.
 
 - No placeholder implementations, stubbed return values or fabricated sample
   data on a path a user can reach.
-- No new dependency without a reason in the pull request description. Prefer
+- No new dependency without a reason in the commit message. Prefer
   the standard library.
 - Split files that grow past roughly 300 lines along a real seam.
 
@@ -222,40 +193,37 @@ warning fails the suite. Fix the cause rather than widening the filter.
 
 ---
 
-## Pull requests
+## Integrating a change
 
-### Before opening
+### Before committing
 
-- [ ] Branched from `main` and rebased onto its current tip
-- [ ] `pytest` passes
+- [ ] On `main`, up to date with `origin/main`
+- [ ] `pytest` passes, with PostgreSQL running (database tests must not skip)
 - [ ] `ruff check .` and `ruff format --check .` pass
 - [ ] `npm run lint`, `npm run typecheck` and `npm run build` pass
 - [ ] `docker compose config --quiet` passes, if you touched Compose
 - [ ] New configuration documented in `.env.example` **and** the README
-- [ ] `git diff --cached` reviewed — no secrets, no build artefacts
+- [ ] `git diff --cached` reviewed — no secrets, no build artefacts, no
+      unrelated hunks
 - [ ] Documentation updated if behaviour or setup changed
 
-### Description
+### The commit
 
-State what changed and why, how you verified it, which phase the work belongs
-to, and anything a reviewer should look at closely. Include before/after
-output for a behaviour change, and a screenshot for a UI change.
+State what changed and why in the body, how it was verified, and which
+phase it belongs to. A behaviour change says so explicitly.
 
-### Review
+### Pushing
 
-- Target `main`. Integration is preferably a fast-forward, which is why
-  rebasing onto the current `main` before opening the request matters.
-- Never force-push, and never rewrite history that has been pushed.
-- One approval required; CI must be green.
-- Squash-merge, with a conventional-commit subject on the squashed commit.
-- Address feedback with new commits rather than force-pushing over it, so
-  reviewers can see what changed.
+- Push to `main` only after the owner approves; CI runs on every push and
+  must be green.
+- Never force-push, and never rewrite history that has been pushed. Fix a
+  mistake with a new commit or a `git revert`.
 
 ---
 
 ## Documentation
 
-Update documentation in the same pull request as the code:
+Update documentation in the same commit as the code:
 
 | File | When |
 |------|------|

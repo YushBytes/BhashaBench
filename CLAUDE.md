@@ -49,7 +49,7 @@ telephony is Phase 8, the real-time engine Phase 9, evaluation Phase 11.
 ## Phase discipline
 
 Do not implement functionality belonging to a future phase, even if it seems
-convenient. A pull request that does will be asked to split. Telephony
+convenient. A change that does will be asked to split. Telephony
 (Phase 8), real-time orchestration (Phase 9) and evaluation (Phase 11) are
 explicitly out of scope until their phase. In particular, do not add a Twilio client or any
 telephony bridge, and do not set `CallSession`'s `DIALING`, `NO_ANSWER` or
@@ -496,15 +496,20 @@ ruff check . && ruff format --check .   # from the repository root
 
 ## Git
 
-- `main` is the single authoritative branch and holds all approved work.
-  Start new work from the latest `main`, on a temporary branch named
-  `feature/phase-NN-short-description`. Delete it after integration.
-  There is no `develop` branch - it was removed once Phases 1 and 2 were
-  integrated into `main`.
+- **`main` only.** Work is committed directly on `main`; do not create
+  feature branches. There is no `develop` branch - it was removed once
+  Phases 1 and 2 were integrated, and its history is preserved in `main`.
+- **Never push without the owner's explicit approval.** Commit locally,
+  report, and wait; approval for one push does not extend to the next.
+- **Stage explicit paths**, never `git add .` or `git add -A`. Local agent
+  tooling (`.agents/`, `.claude/`, `skills-lock.json`) is excluded through
+  `.git/info/exclude` and must never be committed.
+- One concern per commit. Never bundle unrelated changes; split a file
+  that mixes concerns rather than committing it whole.
 - Conventional Commits. Explain **why** in the body, not just what.
 - Never force-push or rewrite pushed history.
-- Never merge into `main` without being asked, and never integrate a phase
-  before the owner has approved it.
+- Never start a phase before the owner has approved the previous one.
+- Roll back with `git revert`, never with `reset` on pushed history.
 - Review `git diff --cached` before committing: no secrets, no build
   artefacts.
 

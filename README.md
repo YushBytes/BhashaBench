@@ -994,7 +994,7 @@ documentation. Full detail in
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for branch naming, commit message
-conventions, testing expectations and the pull request process.
+conventions, testing expectations and the main-only commit workflow.
 
 ## License
 
