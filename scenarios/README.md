@@ -33,6 +33,10 @@ English for the policy number and the amount, on a rural mobile line.
 > parameters actually used — quote those. The same mapping applies to every
 > scenario here; see `docs/PIPELINE.md`.
 
+The caller's spoken opening is built from `persona.identity` and
+`goal.objective`, so in this file both are written as first-person colloquial
+Tamil rather than as English authoring notes.
+
 It is deliberately **not** in this directory's top level. The six files above
 are a survey with one scenario per language, and `test_languages_are_distinct`
 enforces that — a second Tamil file here would fail it. The reference glob

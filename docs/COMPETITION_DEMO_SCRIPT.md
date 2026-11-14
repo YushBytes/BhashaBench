@@ -213,7 +213,7 @@ their documented gaps; the `evon_status` and `telephony_status` text.
 
 **Narration:**
 
-> "Nineteen hundred and ninety-nine automated tests, and every number on screen
+> "Two thousand and six automated tests, and every number on screen
 > was measured rather than estimated. BhashaBench makes Indian-language voice
 > quality something you can test on purpose instead of discovering in
 > production."

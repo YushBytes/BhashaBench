@@ -28,8 +28,16 @@ tags:
   - code-mixing
   - demo
 
+# The deterministic caller speaks `persona.identity` and `goal.objective`
+# verbatim in its Tamil opening ("வணக்கம், நான் {identity}. {objective}"), so
+# both are written as first-person colloquial Tamil rather than as authoring
+# notes. English is kept only where this scenario's own code_mixing section
+# says a farmer switches: the season, the scheme vocabulary and the amount.
+# In English: "I farm paddy near Thanjavur. The Samba-season rain damaged my
+# crop, so I filed a crop insurance claim. I want to know whether it has been
+# assessed and how much will be paid."
 persona:
-  identity: Smallholder paddy farmer near Thanjavur
+  identity: தஞ்சாவூர் பக்கத்துல நெல் விவசாயம் பண்றவன்
   speaking_style: elderly
   traits:
     - speaks slowly
@@ -38,8 +46,9 @@ persona:
 
 goal:
   objective: >-
-    Find out whether the crop-loss claim has been assessed and what amount
-    will be paid.
+    Samba season-ல மழையால பயிர் சேதமாச்சு, அதுக்கு crop insurance claim
+    போட்டிருக்கேன். அந்த claim assess ஆயிடுச்சா, எவ்வளவு amount வரும்னு
+    தெரிஞ்சுக்கணும்.
   max_turns: 16
 
 known_facts:

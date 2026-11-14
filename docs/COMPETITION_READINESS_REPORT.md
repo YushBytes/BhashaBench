@@ -116,6 +116,17 @@ packet loss**. Run `479ecd51`'s degraded artefacts record exactly that
 (`transformations: [to_mono, resample, bandpass, add_noise]`, `snr_db: 25.0`).
 Defect §6.4.
 
+**The spoken opening.** The deterministic caller speaks `persona.identity` and
+`goal.objective` verbatim in its opening, and both were originally English
+authoring notes, so the Tamil opening read *"வணக்கம், நான் Smallholder paddy
+farmer near Thanjavur. Find out whether the crop-loss claim has been
+assessed…"* aloud (run `479ecd51`, preserved unchanged as recorded). Both
+fields are now first-person colloquial Tamil, code-mixed only where the
+scenario declares it (*Samba season, crop insurance, claim, assess, amount*).
+`known_facts`, `expected_outcomes`, the rule order and determinism are
+unchanged, and `backend/tests/test_demo_scenario.py` pins all four. This is a
+scenario-data change; the caller engine was not modified.
+
 **Why it is in `scenarios/demo/` rather than `scenarios/`:** the six files in
 `scenarios/` are a survey with one scenario per language and
 `test_languages_are_distinct` enforces that. A second Tamil file there would
