@@ -127,8 +127,11 @@ three.
 | `audio_validation_failed` | Audio did not survive inspection | **no** |
 | `external_bot_unavailable` | The bot could not be reached | **no** |
 | `cancelled` | An operator stopped it | **no** |
+| `abandoned` | Left in flight with nothing executing it; closed by `bhashabench runs recover-stale --apply` | **no** |
 
-The last four are collected in `OUR_FAULT_OUTCOMES`. Aggregating them into a
+`provider_error`, `audio_validation_failed`, `external_bot_unavailable` and
+`abandoned` are collected in `OUR_FAULT_OUTCOMES`; `cancelled` is likewise not
+about the bot. Aggregating them into a
 bot's score would blame it for our outage, so Phase 11 should exclude them from
 any quality metric; the set exists now so that decision sits where the outcomes
 are defined.

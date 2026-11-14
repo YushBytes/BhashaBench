@@ -147,6 +147,9 @@ class RunOutcome(StrEnum):
     AUDIO_VALIDATION_FAILED = "audio_validation_failed"
     EXTERNAL_BOT_UNAVAILABLE = "external_bot_unavailable"
     CANCELLED = "cancelled"
+    ABANDONED = "abandoned"
+    """Closed by stale-run recovery: the run was left in flight with nothing
+    executing it. Never a statement about the bot."""
 
 
 SUCCESS_OUTCOMES: frozenset[RunOutcome] = frozenset({RunOutcome.GOAL_ACHIEVED})
@@ -162,6 +165,7 @@ OUR_FAULT_OUTCOMES: frozenset[RunOutcome] = frozenset(
         RunOutcome.PROVIDER_ERROR,
         RunOutcome.AUDIO_VALIDATION_FAILED,
         RunOutcome.EXTERNAL_BOT_UNAVAILABLE,
+        RunOutcome.ABANDONED,
     }
 )
 """Outcomes that say nothing about the bot under test.

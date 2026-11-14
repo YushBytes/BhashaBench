@@ -838,6 +838,7 @@ bhashabench suite create "Reference"
 bhashabench scenario list --language ta-IN --tag payment
 bhashabench import scenarios/bundles/indian_language_reference.yaml --suite "$ID" --dry-run
 bhashabench export "$ID" --output bundle.yaml
+bhashabench runs recover-stale --older-than 24h          # dry run; --apply to close
 ```
 
 Exit codes are distinguished so a shell script can act on them: `0` success,

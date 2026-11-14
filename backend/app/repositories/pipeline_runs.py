@@ -228,6 +228,16 @@ def mark_running(session: Session, run: TestRun, metadata: dict[str, Any]) -> Te
     return update_pipeline_metadata(session, run, metadata)
 
 
+def runs_in_status(session: Session, status: RunStatus) -> list[TestRun]:
+    """Every run whose column status is `status`, oldest first.
+
+    For stale-run recovery, which then inspects each run's pipeline metadata;
+    the volume of runs stuck in one status is small by construction.
+    """
+    statement = select(TestRun).where(TestRun.status == status).order_by(TestRun.created_at)
+    return list(session.scalars(statement))
+
+
 def finish_run(
     session: Session,
     run: TestRun,
@@ -259,6 +269,7 @@ __all__ = [
     "get_run",
     "mark_running",
     "pipeline_metadata_of",
+    "runs_in_status",
     "search_runs",
     "turn_counts_for_runs",
     "update_pipeline_metadata",

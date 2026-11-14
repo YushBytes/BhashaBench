@@ -44,7 +44,8 @@ export type RunOutcome =
   | "provider_error"
   | "audio_validation_failed"
   | "external_bot_unavailable"
-  | "cancelled";
+  | "cancelled"
+  | "abandoned";
 
 export type CallerState =
   | "initial"

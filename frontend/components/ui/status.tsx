@@ -155,6 +155,11 @@ const OUTCOME: Record<RunOutcome, { tone: Tone; label: string; hint: string }> =
     label: "Cancelled",
     hint: "Stopped by an operator.",
   },
+  abandoned: {
+    tone: "idle",
+    label: "Abandoned",
+    hint: "Left in flight with nothing executing it, then closed by stale-run recovery. Not a statement about the bot.",
+  },
 };
 
 export function OutcomeBadge({ outcome }: { outcome: RunOutcome | null }) {

@@ -278,6 +278,42 @@ The bundle format is documented in
 
 ---
 
+## Runs
+
+### `runs recover-stale`
+
+Lists pipeline runs left in flight with nothing executing them, and closes
+them only when asked.
+
+```bash
+# Dry run - the default. Reads and reports; changes nothing.
+bhashabench runs recover-stale --older-than 24h
+
+# Close the listed runs.
+bhashabench runs recover-stale --older-than 24h --apply
+```
+
+A run is listed when its recorded status is `running` or `initializing`, it
+is **not** waiting for an operator (no `awaiting_bot_audio_for_turn` or
+`awaiting_bot_text_for_turn` — waiting is healthy however long it lasts), and
+its row has not changed for longer than `--older-than` (`90s`, `30m`, `6h`,
+`2d`). The threshold may not be shorter than `PIPELINE_RUN_TIMEOUT_SECONDS`:
+no request can still be executing a run past its own ceiling, so a shorter
+threshold could close a run that is merely busy. That is refused with exit
+code `2`.
+
+`--apply` finishes each listed run as `failed` with outcome **`abandoned`**,
+closes a still-open conversation as operator-terminated, appends a
+`recovery` stage event and a `recovered` record (when, last activity, previous
+status), and sets `error_message`. **Nothing is deleted or rewritten**: turns,
+earlier events, artefacts and `started_at` are kept. `finished_at` is the
+recovery time, and the `recovered` record says so. `abandoned` is never a
+statement about the bot.
+
+There is deliberately no automatic sweeper: deciding a run is dead rather
+than slow is a judgement, made explicitly and dry-run first. `--json` reports
+`applied`, the threshold and the runs.
+
 ## Worked example: a Tamil-English suite from scratch
 
 ```bash

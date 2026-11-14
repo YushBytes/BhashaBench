@@ -8,9 +8,11 @@ implementation.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import timedelta
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -31,12 +33,15 @@ from app.cli.output import (
     write_output,
 )
 from app.core import languages
+from app.core.config import get_settings
 from app.db.session import session_scope
+from app.pipeline import recovery
 from app.schemas.scenario_spec import SPEC_VERSION, ScenarioSpec
 from app.services import scenario_service, suite_service
 from app.services.bundle import BUNDLE_FORMAT, parse_bundle
 from app.services.errors import ConflictError, NotFoundError
 from app.services.scenario_loader import ScenarioLoadError, spec_from_yaml, spec_to_yaml
+from app.utils.timing import utc_now
 
 
 class DomainErrorGroup(TyperGroup):
@@ -76,8 +81,10 @@ app = typer.Typer(
 
 suite_app = typer.Typer(help="Manage test suites.", no_args_is_help=True)
 scenario_app = typer.Typer(help="Manage scenarios.", no_args_is_help=True)
+runs_app = typer.Typer(help="Inspect and maintain test runs.", no_args_is_help=True)
 app.add_typer(suite_app, name="suite")
 app.add_typer(scenario_app, name="scenario")
+app.add_typer(runs_app, name="runs")
 
 JsonFlag = Annotated[bool, typer.Option("--json", help="Emit machine-readable JSON.")]
 
@@ -608,6 +615,102 @@ def export_suite(
         document = scenario_service.export_suite(session, identifier)
 
     write_output(document, output)
+
+
+# ---------------------------------------------------------------------------
+# Run maintenance
+# ---------------------------------------------------------------------------
+
+_DURATION = re.compile(r"^\s*(\d+)\s*([smhd])\s*$")
+_UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def _parse_duration(value: str) -> timedelta:
+    """Parse `90s`, `30m`, `6h` or `2d`, failing with exit code 2."""
+    match = _DURATION.match(value.lower())
+    if match is None:
+        fail(
+            f"--older-than '{value}' is not a duration; use a number and a unit, "
+            "e.g. 30m, 6h or 2d",
+            ExitCode.INVALID_INPUT,
+        )
+        raise AssertionError("unreachable")  # pragma: no cover
+    return timedelta(seconds=int(match.group(1)) * _UNIT_SECONDS[match.group(2)])
+
+
+@runs_app.command("recover-stale")
+def runs_recover_stale(
+    older_than: Annotated[
+        str,
+        typer.Option(
+            "--older-than",
+            help="Idle time before a run counts as abandoned, e.g. 6h or 2d. "
+            "May not be shorter than PIPELINE_RUN_TIMEOUT_SECONDS.",
+        ),
+    ],
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Close the runs listed. Without it nothing changes."),
+    ] = False,
+    as_json: JsonFlag = False,
+) -> None:
+    """List runs left in flight with nothing executing them; close them with --apply.
+
+    A dry run by default: it reads and reports, and changes nothing. Runs
+    waiting for an operator are never listed. With --apply each listed run is
+    finished as `failed` with outcome `abandoned`; its turns, events and
+    artefacts are kept untouched and a `recovery` event records what happened.
+    """
+    threshold = _parse_duration(older_than)
+    ceiling = get_settings().pipeline_run_timeout_seconds
+    if threshold.total_seconds() < ceiling:
+        fail(
+            f"--older-than must be at least PIPELINE_RUN_TIMEOUT_SECONDS ({ceiling:g}s): "
+            "a run quieter than that may still be executing inside a request",
+            ExitCode.INVALID_INPUT,
+        )
+
+    now = utc_now()
+    with _session() as session:
+        stale = recovery.find_stale_runs(session, older_than=threshold, now=now)
+        rows = [
+            {
+                "run_id": str(item.run.id),
+                "scenario": item.scenario_name,
+                "mode": item.mode,
+                "status": item.pipeline_status,
+                "last_activity_at": item.last_activity_at.isoformat(),
+                "idle_hours": round(item.idle.total_seconds() / 3600, 1),
+            }
+            for item in stale
+        ]
+        if apply:
+            for item in stale:
+                recovery.abandon(session, item, now=now)
+        elif session.new or session.dirty or session.deleted:
+            # A dry run must not persist anything. If a later change ever made
+            # the read path touch a row, fail loudly before the scope commits
+            # rather than quietly writing.
+            raise RuntimeError("recover-stale dry run attempted to modify the database")
+
+    if as_json:
+        emit_json({"applied": apply, "older_than_seconds": threshold.total_seconds(), "runs": rows})
+        return
+    if not rows:
+        typer.echo("no abandoned runs found")
+        return
+    for row in rows:
+        typer.echo(
+            f"{row['run_id']}  {row['scenario']}  {row['mode']}  {row['status']}  "
+            f"idle {row['idle_hours']}h since {row['last_activity_at']}"
+        )
+    if apply:
+        typer.echo(f"closed {len(rows)} run(s) as abandoned")
+    else:
+        typer.echo(
+            f"DRY RUN: {len(rows)} run(s) would be closed. "
+            "Nothing was changed; re-run with --apply."
+        )
 
 
 def main() -> None:
