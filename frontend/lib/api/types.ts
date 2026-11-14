@@ -328,6 +328,14 @@ export interface RunSummary {
   error: string | null;
 }
 
+/** A scenario setting the run declares and nothing in it enforces. */
+export interface SettingNotEnforced {
+  /** Dotted path in the scenario, e.g. `constraints.allow_interruptions`. */
+  setting: string;
+  declared: unknown;
+  reason: string;
+}
+
 /** What each degraded caller turn was asked for (requested, not achieved). */
 export interface DegradationRequested {
   source: "scenario" | "operator";
@@ -362,6 +370,8 @@ export interface Run {
   termination_reason: TerminationReason | null;
   goal_achieved: boolean;
   total_audio_seconds: number;
+  /** `null` for runs created before it was recorded: unknown, not "all enforced". */
+  settings_not_enforced: SettingNotEnforced[] | null;
   /** `null` for runs that move no audio and for runs created before it was recorded. */
   degradation_requested: DegradationRequested | null;
   /** Offline run with the manual adapter, waiting for `POST /bot-text`. */

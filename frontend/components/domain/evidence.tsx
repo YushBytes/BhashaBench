@@ -4,7 +4,8 @@
  * These are not decoration and not optional. The API carries fields that
  * exist specifically so a client cannot misrepresent a run -
  * `bot_audio_externally_received`, `uses_language_model`,
- * `measurement_note`, `evon_status`, `telephony_status` - and these are the
+ * `measurement_note`, `evon_status`, `telephony_status`,
+ * `settings_not_enforced` - and these are the
  * components that render them. Structural rather than copy, so a new page
  * cannot forget to be honest.
  */
@@ -12,7 +13,7 @@
 import type { ReactNode } from "react";
 
 import { cx } from "@/components/ui/primitives";
-import type { ExecutionMode, Run } from "@/lib/api/types";
+import type { ExecutionMode, Run, SettingNotEnforced } from "@/lib/api/types";
 
 type Level = "note" | "caution";
 
@@ -123,6 +124,57 @@ export function RunEvidence({ run }: { run: Run }) {
           {caveat.body}
         </Caveat>
       ))}
+      <SettingsNotEnforced settings={run.settings_not_enforced} />
+    </div>
+  );
+}
+
+/**
+ * Scenario settings the run declared and nothing enforced.
+ *
+ * Rendered from `settings_not_enforced`, never from a hard-coded list, so it
+ * cannot claim interruption handling, silence detection or phrase checks
+ * exist. A missing field means the run predates the record - unknown, which
+ * is said as such rather than read as "everything was enforced".
+ */
+export function SettingsNotEnforced({
+  settings,
+}: {
+  settings: SettingNotEnforced[] | null | undefined;
+}) {
+  if (settings == null) {
+    return (
+      <Caveat title="Declared-but-not-enforced settings were not recorded for this run">
+        This run predates that record, so which of its scenario settings were
+        enforced is unknown. It does not mean they all were.
+      </Caveat>
+    );
+  }
+  if (settings.length === 0) return null;
+  return (
+    <div className="flex gap-2.5 rounded-md border border-line bg-surface-inset px-3 py-2.5">
+      <span
+        aria-hidden="true"
+        className="mt-1.5 inline-block size-1.5 shrink-0 rounded-full bg-text-muted"
+      />
+      <div className="min-w-0">
+        <p className="text-[13px] font-medium text-text">
+          Declared by the scenario, not enforced by this run
+        </p>
+        <ul className="mt-1 space-y-1">
+          {settings.map((entry) => (
+            <li key={entry.setting} className="text-[13px] leading-relaxed text-text-dim">
+              <code className="font-mono text-[12px] text-text">{entry.setting}</code>
+              {" = "}
+              <code className="font-mono text-[12px] break-all">
+                {JSON.stringify(entry.declared)}
+              </code>
+              {" — "}
+              {entry.reason}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

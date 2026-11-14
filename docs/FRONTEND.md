@@ -157,6 +157,8 @@ rendered structurally, so a new page cannot forget them.
 | `bot_audio_externally_received` | whether a run may be described as testing a bot |
 | `measurement_note` | printed verbatim wherever counts appear |
 | `evon_status`, `telephony_status` | printed verbatim; never paraphrased |
+| `settings_not_enforced` | each declared-but-unenforced setting listed with its reason; `null` shown as "not recorded", never as "all enforced" |
+| `degradation_requested` | the run's *Noise applied* as requested SNR and packet loss, not a preset name |
 | `selected: "fake"` | a visible warning that such runs establish nothing |
 | `confidence: null` | "not reported" |
 

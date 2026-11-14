@@ -1331,3 +1331,130 @@ class TestDeclaredScenarioAudioIsApplied:
             assert artefact.degradation_parameters["snr_db"] == 25.0
             assert "packet_loss" not in artefact.transformations
             assert "requested_from" not in artefact.degradation_parameters
+
+
+# ---------------------------------------------------------------------------
+# Settings a scenario declares and the run does not enforce
+# ---------------------------------------------------------------------------
+
+CONSTRAINED_SPEC: dict[str, Any] = {
+    **SPEC,
+    "constraints": {
+        "max_silence_seconds": 3.0,
+        "allow_interruptions": True,
+        "required_phrases": ["claim number"],
+        "forbidden_phrases": ["I am a bot"],
+    },
+    "code_mixing": {
+        "primary": "ta-IN",
+        "secondary": ["en-IN"],
+        "expected": True,
+        "switch_triggers": ["numbers"],
+    },
+}
+
+
+def _unenforced(
+    db_session: Session,
+    settings: Settings,
+    store: AudioArtefactStore,
+    *,
+    mode: ExecutionMode,
+    spec: dict[str, Any],
+) -> dict[str, Any]:
+    suite, scenario = _make_scenario(db_session, spec=spec)
+    engine = _engine(db_session, settings, store)
+    run = engine.create(suite_id=suite.id, scenario_id=scenario.id, config=RunConfig(mode=mode))
+    report = engine.report(run.id)
+    assert report.settings_not_enforced is not None
+    return {entry["setting"]: entry for entry in report.settings_not_enforced}
+
+
+class TestSettingsNotEnforced:
+    def test_interruptions_and_silence_are_always_listed(
+        self, db_session: Session, pipeline_settings: Settings, store: AudioArtefactStore
+    ) -> None:
+        """Nothing in the pipeline handles either, so no run may imply it did."""
+        found = _unenforced(
+            db_session,
+            pipeline_settings,
+            store,
+            mode=ExecutionMode.AUDIO_FIXTURE_TEST,
+            spec=CONSTRAINED_SPEC,
+        )
+
+        assert found["constraints.allow_interruptions"]["declared"] is True
+        assert found["constraints.max_silence_seconds"]["declared"] == 3.0
+        assert "Phase 9" in found["constraints.allow_interruptions"]["reason"]
+
+    def test_declared_phrases_code_mixing_and_style_are_listed(
+        self, db_session: Session, pipeline_settings: Settings, store: AudioArtefactStore
+    ) -> None:
+        found = _unenforced(
+            db_session,
+            pipeline_settings,
+            store,
+            mode=ExecutionMode.AUDIO_FIXTURE_TEST,
+            spec=CONSTRAINED_SPEC,
+        )
+
+        assert found["constraints.required_phrases"]["declared"] == ["claim number"]
+        assert found["constraints.forbidden_phrases"]["declared"] == ["I am a bot"]
+        assert found["code_mixing"]["declared"]["secondary"] == ["en-IN"]
+        assert found["persona.speaking_style"]["declared"] == "confused"
+        assert found["persona.traits"]["declared"] == ["unfamiliar with insurance terminology"]
+
+    def test_empty_phrase_lists_and_unexpected_mixing_are_not_listed(
+        self, db_session: Session, pipeline_settings: Settings, store: AudioArtefactStore
+    ) -> None:
+        """Only what is actually declared: an empty list asks for nothing."""
+        found = _unenforced(
+            db_session,
+            pipeline_settings,
+            store,
+            mode=ExecutionMode.AUDIO_FIXTURE_TEST,
+            spec=SPEC,
+        )
+
+        assert "constraints.required_phrases" not in found
+        assert "constraints.forbidden_phrases" not in found
+        assert "code_mixing" not in found
+
+    def test_an_audio_run_does_not_list_audio_but_an_offline_run_does(
+        self, db_session: Session, pipeline_settings: Settings, store: AudioArtefactStore
+    ) -> None:
+        """Declared audio is applied to audio runs now; offline moves none."""
+        audio_run = _unenforced(
+            db_session,
+            pipeline_settings,
+            store,
+            mode=ExecutionMode.AUDIO_FIXTURE_TEST,
+            spec=SPEC,
+        )
+        offline_run = _unenforced(
+            db_session,
+            pipeline_settings,
+            store,
+            mode=ExecutionMode.OFFLINE_SIMULATION,
+            spec=SPEC,
+        )
+
+        assert "audio" not in audio_run
+        assert offline_run["audio"]["declared"]["noise_profile"] == "clean"
+
+    def test_a_run_created_before_the_record_reports_none(
+        self, db_session: Session, pipeline_settings: Settings, store: AudioArtefactStore
+    ) -> None:
+        """Unknown, which is not the same as "everything was enforced"."""
+        suite, scenario = _make_scenario(db_session, spec=SPEC)
+        engine = _engine(db_session, pipeline_settings, store)
+        run = engine.create(
+            suite_id=suite.id,
+            scenario_id=scenario.id,
+            config=RunConfig(mode=ExecutionMode.AUDIO_FIXTURE_TEST),
+        )
+        meta = dict(repo.pipeline_metadata_of(run))
+        meta.pop("settings_not_enforced")
+        repo.update_pipeline_metadata(db_session, run, meta)
+
+        assert engine.report(run.id).settings_not_enforced is None

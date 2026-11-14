@@ -345,7 +345,9 @@ how a search box can appear to filter while showing everything.
 
 **The honesty fields are rendered structurally, not as copy.**
 `uses_language_model`, `bot_audio_externally_received`, `measurement_note`,
-`evon_status` and `telephony_status` exist so a client cannot overclaim.
+`evon_status`, `telephony_status` and `settings_not_enforced` exist so a
+client cannot overclaim. A missing `settings_not_enforced` means unknown, never
+"everything was enforced".
 `RunEvidence` derives its caveats from the run, never from the mode label —
 which is what makes a mislabelled `external_bot_test` visible.
 

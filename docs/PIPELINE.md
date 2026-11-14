@@ -224,6 +224,24 @@ Several environments share a severity, which loses information — so a run
 records **both** the declared environment and the profile applied, and the
 report shows both rather than implying the environment was recreated.
 
+### Settings declared but not enforced
+
+A scenario can declare more than the platform acts on. Every run records
+`settings_not_enforced` at creation — each entry a `setting`, its `declared`
+value and the `reason` — and the API and inspector show it:
+
+| Setting | Listed when | Why |
+|---|---|---|
+| `constraints.allow_interruptions` | always | turns strictly alternate; no barge-in (Phase 9) |
+| `constraints.max_silence_seconds` | always | no silence detection or re-prompt timer (Phase 9) |
+| `constraints.required_phrases`, `forbidden_phrases` | non-empty | nothing checks the bot's replies (Phase 11) |
+| `code_mixing` | `expected: true`, deterministic caller | the caller speaks monolingual phrase tables |
+| `persona.speaking_style`, `persona.traits` | deterministic caller | the phrase tables do not vary by them |
+| `audio` | `offline_simulation` | no audio moves |
+
+`null` on a run created before the record means unknown — never "everything
+was enforced".
+
 ### A scenario's declared SNR and packet loss are applied
 
 The environment name chooses the **channel** (the profile's rate and band).

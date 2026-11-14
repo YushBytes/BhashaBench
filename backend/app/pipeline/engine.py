@@ -170,6 +170,81 @@ class RunConfig:
         return self.mode is not ExecutionMode.OFFLINE_SIMULATION
 
 
+def settings_not_enforced(
+    spec: ScenarioSpec, *, uses_audio: bool, caller_provider: str | None
+) -> list[dict[str, Any]]:
+    """Scenario settings this run declares and nothing in it enforces.
+
+    A scenario can declare more than the platform can act on, and a report
+    that stayed silent about it would let `allow_interruptions: true` read as
+    "interruptions were tested". Each entry names the setting, its declared
+    value and why it was not enforced. Computed once, when the run is
+    created, from the spec the run actually used.
+
+    The caller-dependent entries apply to the deterministic caller only: it
+    composes from fixed phrase tables, so style, traits and code-mixing do not
+    change what it says. A caller that honours them must stop listing them.
+    """
+    document = spec.model_dump(mode="json")
+    constraints = document.get("constraints") or {}
+    entries: list[dict[str, Any]] = []
+
+    def add(setting: str, declared: Any, reason: str) -> None:
+        entries.append({"setting": setting, "declared": declared, "reason": reason})
+
+    add(
+        "constraints.allow_interruptions",
+        constraints.get("allow_interruptions", True),
+        "Turns strictly alternate. Nothing talks over the bot or detects the bot "
+        "talking over the caller; interruption handling is Phase 9.",
+    )
+    add(
+        "constraints.max_silence_seconds",
+        constraints.get("max_silence_seconds", 5.0),
+        "There is no silence detection or re-prompt timer; a turn ends when its "
+        "audio or text is complete. Silence handling is Phase 9.",
+    )
+    if constraints.get("required_phrases"):
+        add(
+            "constraints.required_phrases",
+            constraints["required_phrases"],
+            "Nothing checks the bot's replies for these phrases; evaluation is Phase 11.",
+        )
+    if constraints.get("forbidden_phrases"):
+        add(
+            "constraints.forbidden_phrases",
+            constraints["forbidden_phrases"],
+            "Nothing checks the bot's replies for these phrases; evaluation is Phase 11.",
+        )
+    if caller_provider == "deterministic":
+        mixing = document.get("code_mixing") or {}
+        if mixing.get("expected"):
+            add(
+                "code_mixing",
+                {"expected": True, "secondary": mixing.get("secondary", [])},
+                "The deterministic caller speaks from monolingual phrase tables and "
+                "does not generate code-mixed speech, beyond scenario text it quotes.",
+            )
+        add(
+            "persona.speaking_style",
+            document["persona"].get("speaking_style"),
+            "The deterministic caller's phrase tables do not vary by speaking style.",
+        )
+        if document["persona"].get("traits"):
+            add(
+                "persona.traits",
+                document["persona"]["traits"],
+                "The deterministic caller's phrase tables do not vary by trait.",
+            )
+    if not uses_audio:
+        add(
+            "audio",
+            document.get("audio"),
+            "An offline simulation moves no audio, so no acoustic condition is applied.",
+        )
+    return entries
+
+
 def _with_source(parameters: dict[str, Any], requested: dict[str, Any] | None) -> dict[str, Any]:
     """Degradation parameters plus who asked for them."""
     out = dict(parameters)
@@ -279,6 +354,10 @@ class RunReport:
     would imply a market was synthesised.
     """
     degradation_seed: int | None
+    settings_not_enforced: list[dict[str, Any]] | None
+    """Scenario settings declared but not enforced by this run, each with
+    `setting`, `declared` and `reason`. `None` for runs created before this
+    was recorded - unknown, not "everything enforced"."""
     degradation_requested: dict[str, Any] | None
     """`source` (`scenario` or `operator`), `snr_db` and
     `packet_loss_percent` each degraded turn was asked for. The achieved
@@ -483,6 +562,11 @@ class RunEngine:
             # Read back per turn; a run created before this existed has no
             # entry and keeps its preset exactly.
             "degradation_requested": requested,
+            "settings_not_enforced": settings_not_enforced(
+                spec,
+                uses_audio=config.uses_audio,
+                caller_provider=caller_meta.get("provider"),
+            ),
             "degrade_caller_audio": config.degrade_caller_audio and config.uses_audio,
             "degradation_seed": self._resolve_seed(config),
             "turn_budget": budget,
@@ -1536,6 +1620,7 @@ class RunEngine:
             scenario_noise_profile=meta.get("scenario_noise_profile"),
             degradation_seed=meta.get("degradation_seed"),
             degradation_requested=meta.get("degradation_requested"),
+            settings_not_enforced=meta.get("settings_not_enforced"),
             awaiting_bot_text_for_turn=meta.get("awaiting_bot_text_for_turn"),
             awaiting_bot_audio_for_turn=meta.get("awaiting_bot_audio_for_turn"),
             caller_turns=caller_turns,

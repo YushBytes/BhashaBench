@@ -180,6 +180,13 @@ class RunResponse(BaseModel):
         "measured. Containers this project cannot inspect contribute nothing "
         "rather than a guess.",
     )
+    settings_not_enforced: list[SettingNotEnforcedResponse] | None = Field(
+        default=None,
+        description="Scenario settings this run declares that nothing in it "
+        "enforces - interruptions, silence handling, phrase checks, and caller "
+        "style the deterministic caller ignores. `null` for runs created before "
+        "this was recorded, which means unknown, not fully enforced.",
+    )
     degradation_requested: DegradationRequestedResponse | None = Field(
         default=None,
         description="The SNR and packet loss requested for each degraded turn. "
@@ -256,6 +263,16 @@ class RunReportResponse(BaseModel):
         description="Stated on the API surface so a consumer cannot mistake "
         "these counts for a quality score.",
     )
+
+
+class SettingNotEnforcedResponse(BaseModel):
+    """One scenario setting the run declares and nothing in it enforces."""
+
+    setting: str = Field(
+        description="Dotted path in the scenario, e.g. `constraints.allow_interruptions`."
+    )
+    declared: Any = Field(description="The value the scenario declares.")
+    reason: str = Field(description="Why it was not enforced, and which phase would.")
 
 
 class DegradationRequestedResponse(BaseModel):
