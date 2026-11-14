@@ -52,6 +52,7 @@ from app.core.config import AppEnv
 from app.models.test_run import RunStatus, TestRun
 from app.pipeline.bots.registry import (
     SCRIPTED_ADAPTER,
+    available_adapters,
     build_adapter,
     describe_adapters,
     fixture_replies_from_path,
@@ -65,7 +66,7 @@ from app.pipeline.engine import (
     RunEngine,
     RunReport,
 )
-from app.pipeline.errors import ArtefactAccessDisabledError
+from app.pipeline.errors import ArtefactAccessDisabledError, PipelineConfigurationError
 from app.pipeline.modes import (
     IMPLEMENTED_MODES,
     ExecutionMode,
@@ -179,12 +180,68 @@ EngineFactoryDep = Annotated[
 ]
 
 
-def get_engine(factory: EngineFactoryDep) -> Iterator[RunEngine]:
-    """Provide an engine using the configured default adapter."""
-    yield from factory(None)
+def _recorded_adapter(session: DbSession, run_id: uuid.UUID) -> str | None:
+    """The bot adapter this run recorded when it was created, if any.
+
+    `None` for an unknown run: the route then raises its usual 404 from the
+    engine, so this lookup never invents a status of its own.
+    """
+    run = pipeline_repo.get_run(session, run_id)
+    if run is None:
+        return None
+    name = pipeline_repo.pipeline_metadata_of(run).get("bot_adapter")
+    return str(name) if name else None
+
+
+def get_engine(
+    run_id: uuid.UUID, factory: EngineFactoryDep, session: DbSession
+) -> Iterator[RunEngine]:
+    """Provide an engine built with the adapter the run recorded at creation.
+
+    For the routes that exchange audio with the bot (`/start`, `/bot-audio`).
+    This used to build the *settings default* for every run, so a run created
+    with `bot_adapter: "manual"` was executed by the scripted adapter and
+    failed with its error - the API accepted, stored and reported a choice it
+    then ignored. A recorded name that is no longer registered is refused
+    with a message naming it, never silently swapped for the default.
+    """
+    recorded = _recorded_adapter(session, run_id)
+    built = factory(recorded)
+    # Only construction is wrapped. Exceptions from the route body are thrown
+    # back into this generator at the `yield`, and an unrelated configuration
+    # error there ("not waiting for audio") must not be relabelled as an
+    # adapter failure.
+    try:
+        engine = next(built)
+    except PipelineConfigurationError as exc:
+        if recorded is None:
+            raise
+        raise PipelineConfigurationError(
+            f"run {run_id} recorded the bot adapter '{recorded}', which cannot be built: {exc}"
+        ) from exc
+    try:
+        yield engine
+    finally:
+        built.close()
+
+
+def get_reading_engine(
+    run_id: uuid.UUID, factory: EngineFactoryDep, session: DbSession
+) -> Iterator[RunEngine]:
+    """An engine for routes that never call the bot adapter.
+
+    Reads and `/cancel` use the run's recorded adapter when it is still
+    registered and the default otherwise: the adapter is never invoked on these
+    paths, and a run whose adapter has since been removed must stay readable
+    and cancellable rather than locking its own evidence away.
+    """
+    recorded = _recorded_adapter(session, run_id)
+    usable = recorded if recorded in available_adapters() else None
+    yield from factory(usable)
 
 
 EngineDep = Annotated[RunEngine, Depends(get_engine)]
+ReadingEngineDep = Annotated[RunEngine, Depends(get_reading_engine)]
 
 _CAPACITY_ERROR: dict[int | str, dict[str, object]] = {
     status.HTTP_503_SERVICE_UNAVAILABLE: {
@@ -550,7 +607,7 @@ async def submit_bot_audio(
     ),
     responses=_COMMON_ERRORS,
 )
-def cancel_run(run_id: uuid.UUID, engine: EngineDep, session: DbSession) -> RunResponse:
+def cancel_run(run_id: uuid.UUID, engine: ReadingEngineDep, session: DbSession) -> RunResponse:
     """Stop a run from outside."""
     engine.cancel(run_id)
     session.commit()
@@ -563,7 +620,7 @@ def cancel_run(run_id: uuid.UUID, engine: EngineDep, session: DbSession) -> RunR
     summary="Read a run's state",
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "No such run."}},
 )
-def read_run(run_id: uuid.UUID, engine: EngineDep) -> RunResponse:
+def read_run(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunResponse:
     """A run's current state and, once finished, its outcome."""
     return _run(engine.report(run_id))
 
@@ -574,7 +631,7 @@ def read_run(run_id: uuid.UUID, engine: EngineDep) -> RunResponse:
     summary="Read a run's conversation",
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "No such run."}},
 )
-def read_turns(run_id: uuid.UUID, engine: EngineDep, session: DbSession) -> RunTurnsResponse:
+def read_turns(run_id: uuid.UUID, engine: ReadingEngineDep, session: DbSession) -> RunTurnsResponse:
     """Every utterance of the run's conversation, in order."""
     report = engine.report(run_id)
     turns: list[RunTurnResponse] = []
@@ -613,7 +670,7 @@ def read_turns(run_id: uuid.UUID, engine: EngineDep, session: DbSession) -> RunT
     ),
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "No such run."}},
 )
-def read_artefacts(run_id: uuid.UUID, engine: EngineDep) -> RunArtefactsResponse:
+def read_artefacts(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunArtefactsResponse:
     """Every audio artefact the run produced."""
     report = engine.report(run_id)
     return RunArtefactsResponse(
@@ -667,7 +724,7 @@ def read_artefacts(run_id: uuid.UUID, engine: EngineDep) -> RunArtefactsResponse
 def read_artefact_audio(
     run_id: uuid.UUID,
     turn_index: Annotated[int, Path(ge=0, description="Turn the audio belongs to.")],
-    engine: EngineDep,
+    engine: ReadingEngineDep,
     settings: SettingsDep,
     variant: Annotated[
         Literal["original", "degraded"] | None,
@@ -728,7 +785,7 @@ def read_artefact_audio(
     ),
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "No such run."}},
 )
-def read_report(run_id: uuid.UUID, engine: EngineDep) -> RunReportResponse:
+def read_report(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunReportResponse:
     """The run's complete evidence."""
     report = engine.report(run_id)
     return RunReportResponse(
@@ -781,4 +838,4 @@ def list_adapters(settings: SettingsDep) -> BotAdapterListResponse:
     )
 
 
-__all__ = ["get_engine", "get_engine_factory", "router"]
+__all__ = ["get_engine", "get_engine_factory", "get_reading_engine", "router"]

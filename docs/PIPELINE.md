@@ -422,6 +422,14 @@ exists:
 So the audio exchange is genuinely with the bot under test, while the transport
 is a person rather than a protocol this project guessed at.
 
+**The adapter a run records is the adapter that runs it.** Every route after
+creation builds its engine from the `bot_adapter` stored on the run, not from
+`PIPELINE_BOT_ADAPTER`. `/start` and `/bot-audio`, which call the adapter,
+refuse a recorded name that is no longer registered with a 422 naming it;
+reads and `/cancel` never call the adapter and stay available. (Until
+Phase 0 every route after creation used the settings default, so a `manual`
+run was executed by the scripted adapter and failed with its error.)
+
 Audio supplied this way is recorded as externally obtained, because posting it
 asserts that it came from the bot. **The pipeline cannot verify that claim and
 does not pretend to** — the report names the adapter so a reader can weigh it.

@@ -34,6 +34,7 @@ from app.pipeline.bots.registry import build_adapter
 from app.pipeline.bots.scripted import ScriptedBotAdapter
 from app.pipeline.concurrency import RunSlots
 from app.pipeline.engine import MAX_BOT_AUDIO_BYTES, RunEngine
+from app.repositories import pipeline_runs as pipeline_repo
 from app.speech.models import AudioConfig
 from app.speech.providers.fake import FakeSpeechScript, FakeSynthesisProvider
 from app.speech.service import SpeechService
@@ -135,9 +136,17 @@ def pipeline_client(
         }
     )
     store = AudioArtefactStore(settings.caller_audio_root)
-    state: dict[str, Any] = {"adapter": None, "transcription": None, "slots": None}
+    state: dict[str, Any] = {
+        "adapter": None,
+        "transcription": None,
+        "slots": None,
+        # Every adapter name an engine was built with, in order - so a test can
+        # assert which adapter a route asked for, not just what happened.
+        "requested": [],
+    }
 
     def factory(adapter_name: str | None) -> Iterator[RunEngine]:
+        state["requested"].append(adapter_name)
         caller = CallerService(
             DeterministicCallerProvider(),
             settings=settings,
@@ -1346,3 +1355,139 @@ class TestArtefactAccessGuard:
         )
         assert refused.status_code == 403
         assert refused.status_code != 404
+
+
+# ---------------------------------------------------------------------------
+# The run's recorded bot adapter is the one that executes it
+# ---------------------------------------------------------------------------
+
+
+class TestRoutesRequestTheRecordedAdapter:
+    """Which adapter each route asks the factory for.
+
+    The engine dependency used to call `factory(None)` - the settings default -
+    on every route after creation, so a `manual` run was executed by the
+    scripted adapter. These assert the name each route requests.
+    """
+
+    def test_start_requests_the_recorded_manual_adapter(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        run = _create(
+            pipeline_client, scenario_ids, mode="audio_fixture_test", bot_adapter="manual"
+        )
+        requested = pipeline_client.pipeline_state["requested"]  # type: ignore[attr-defined]
+        requested.clear()
+
+        pipeline_client.post(f"{BASE}/{run['run_id']}/start")
+
+        assert requested == ["manual"]
+
+    def test_reads_and_cancel_request_the_recorded_adapter(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        run = _create(
+            pipeline_client, scenario_ids, mode="audio_fixture_test", bot_adapter="manual"
+        )
+        requested = pipeline_client.pipeline_state["requested"]  # type: ignore[attr-defined]
+        requested.clear()
+
+        for path in ("", "/turns", "/artifacts", "/report"):
+            assert pipeline_client.get(f"{BASE}/{run['run_id']}{path}").status_code == 200
+        assert pipeline_client.post(f"{BASE}/{run['run_id']}/cancel").status_code == 200
+
+        assert requested == ["manual"] * 5
+
+    def test_a_scripted_run_requests_scripted(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        run = _create(pipeline_client, scenario_ids, mode="audio_fixture_test")
+        requested = pipeline_client.pipeline_state["requested"]  # type: ignore[attr-defined]
+        requested.clear()
+
+        pipeline_client.post(f"{BASE}/{run['run_id']}/start")
+
+        assert requested == ["scripted"]
+
+
+@pytest.fixture
+def real_factory_client(
+    api_client: TestClient, test_app: FastAPI, tmp_path: Path
+) -> Iterator[TestClient]:
+    """The API with the production engine factory, not a test double.
+
+    The test settings select the offline fake providers, so nothing leaves the
+    process; only the audio directory is moved somewhere disposable.
+    """
+    original = test_app.dependency_overrides[get_settings]
+    settings = original().model_copy(update={"caller_audio_storage_dir": str(tmp_path / "audio")})
+    test_app.dependency_overrides[get_settings] = lambda: settings
+    yield api_client
+    test_app.dependency_overrides[get_settings] = original
+
+
+class TestRecordedAdapterThroughTheRealFactory:
+    """End to end, through `get_engine_factory` as production builds it."""
+
+    def test_a_manual_run_waits_for_the_operator_instead_of_failing(
+        self,
+        real_factory_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+        wav: bytes,
+    ) -> None:
+        run = _create(
+            real_factory_client, scenario_ids, mode="audio_fixture_test", bot_adapter="manual"
+        )
+
+        started = real_factory_client.post(f"{BASE}/{run['run_id']}/start")
+
+        assert started.status_code == 200, started.text
+        body = started.json()
+        # Before the fix this was `failed` with "the scripted bot has no reply
+        # for turn 0" - the scripted adapter's error on a manual run.
+        assert body["status"] == "running"
+        assert body["awaiting_bot_audio_for_turn"] == 0
+        assert body["error"] is None
+        assert body["bot_adapter"] == "manual"
+
+        supplied = real_factory_client.post(
+            f"{BASE}/{run['run_id']}/bot-audio",
+            files={"audio": ("reply.wav", wav, "audio/wav")},
+        )
+        assert supplied.status_code == 200, supplied.text
+        assert supplied.json()["run"]["bot_turns"] == 1
+
+    def test_a_scripted_run_without_a_fixture_still_fails_as_scripted(
+        self, real_factory_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        """The default is untouched: no fixture configured, a clear failure."""
+        run = _create(real_factory_client, scenario_ids, mode="audio_fixture_test")
+
+        body = real_factory_client.post(f"{BASE}/{run['run_id']}/start").json()
+
+        assert body["status"] == "failed"
+        assert "no reply for turn 0" in (body["error"] or "")
+
+    def test_an_unbuildable_recorded_adapter_is_refused_by_name(
+        self,
+        real_factory_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+        db_session: Session,
+    ) -> None:
+        run = _create(real_factory_client, scenario_ids, mode="audio_fixture_test")
+        row = pipeline_repo.get_run(db_session, uuid.UUID(run["run_id"]))
+        assert row is not None
+        meta = dict(pipeline_repo.pipeline_metadata_of(row))
+        meta["bot_adapter"] = "carrier_pigeon"
+        pipeline_repo.update_pipeline_metadata(db_session, row, meta)
+        db_session.flush()
+
+        started = real_factory_client.post(f"{BASE}/{run['run_id']}/start")
+
+        assert started.status_code == 422
+        assert "recorded the bot adapter 'carrier_pigeon'" in started.text
+
+        # Never silently swapped for the default - and the run stays readable
+        # and cancellable, because those paths never call the adapter.
+        assert real_factory_client.get(f"{BASE}/{run['run_id']}").status_code == 200
+        assert real_factory_client.post(f"{BASE}/{run['run_id']}/cancel").status_code == 200

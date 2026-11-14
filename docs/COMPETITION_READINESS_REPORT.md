@@ -250,6 +250,9 @@ pipeline, engine, caller, schema or migration logic was touched.
 
 ### 6.1 The per-run bot adapter is ignored at execution — **Verified**, new
 
+> **Resolved in Phase 0** (`fix(pipeline): honour the run's recorded bot
+> adapter`). The text below is the record as found.
+
 `get_engine` yields `factory(None)`, so `/start`, `/bot-audio` and `/cancel`
 build the **settings-default** adapter and disregard the `bot_adapter` recorded
 when the run was created. A run created with `bot_adapter: "manual"` still
