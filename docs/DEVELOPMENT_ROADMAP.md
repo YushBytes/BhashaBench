@@ -7,7 +7,8 @@ updated documentation.
 **Current status: Phases 1–5 complete; Phase 6 blocked on Evon access (a
 deterministic substitute is delivered); Phases 7, 9, 10, 12, 13 and 15
 partially complete; Phases 8, 11 and 14 not started. Phase 0 — a baseline and
-defect-remediation pass before new functionality — is in progress.**
+defect-remediation pass before new functionality — is complete locally and
+awaiting the owner's review.**
 
 Where this document describes an unfinished phase in the present tense, read
 it as the intended design, not as existing behaviour.
@@ -47,7 +48,7 @@ keep the numbering they were written in. Use this table to translate.
 
 | # | Phase | Status |
 |---|-------|--------|
-| 0 | Baseline & defect remediation | 🔧 In progress |
+| 0 | Baseline & defect remediation | ✅ Complete locally — awaiting owner review |
 | 1 | Project Foundation | ✅ Complete |
 | 2 | Database & Scenario Engine | ✅ Complete |
 | 3 | Scenario Library & Tooling | ✅ Complete |
@@ -66,7 +67,7 @@ keep the numbering they were written in. Use this table to translate.
 
 ---
 
-## Phase 0 — Baseline & defect remediation 🔧
+## Phase 0 — Baseline & defect remediation ✅ (awaiting owner review)
 
 A pass before any new functionality, so later phases build on a repository
 that is honest about itself.
@@ -86,6 +87,13 @@ that is honest about itself.
 **Exit criteria.** Each defect has a test that fails before its fix and
 passes after; CI is green locally; the status tables in this file, README and
 CLAUDE.md agree.
+
+**Delivered.** All four defects fixed with fail-before tests; the declared-
+but-not-enforced settings reported per run; an explicit, dry-run-first
+`bhashabench runs recover-stale` (not applied to the two historical runs);
+`.github/workflows/ci.yml` verified locally against a tree with no `.env`
+but **not yet run on GitHub**, which needs a push. 2066 tests collected,
+2025 pass, 41 opt-in live tests skipped; API 36 paths / 44 operations.
 
 ---
 

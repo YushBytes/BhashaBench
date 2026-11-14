@@ -10,11 +10,12 @@ Indian-language voice bots. It is being built in **15 controlled phases**; see
 `docs/DEVELOPMENT_ROADMAP.md`.
 
 **The original 15-phase plan is in force.** Phase 0 (baseline and defect
-remediation) is in progress; no new phase starts until it is approved.
+remediation) is complete locally and awaiting the owner's review; no new
+phase starts until it is approved.
 
 | # | Phase | Status |
 |---|-------|--------|
-| 0 | Baseline & defect remediation | 🔧 In progress |
+| 0 | Baseline & defect remediation | ✅ Complete locally — awaiting owner review |
 | 1 | Project foundation | ✅ Complete |
 | 2 | Database & scenario engine | ✅ Complete |
 | 3 | Scenario library & tooling | ✅ Complete |
@@ -447,7 +448,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2006 collected; 1965 pass, 41 live ones skipped
+pytest                                  # 2066 collected; 2025 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```
