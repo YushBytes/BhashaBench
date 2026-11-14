@@ -644,22 +644,30 @@ def runs_recover_stale(
         str,
         typer.Option(
             "--older-than",
-            help="Idle time before a run counts as abandoned, e.g. 6h or 2d. "
+            help="Idle time before a run counts as stale, e.g. 6h or 2d. "
             "May not be shorter than PIPELINE_RUN_TIMEOUT_SECONDS.",
         ),
     ],
     apply: Annotated[
         bool,
-        typer.Option("--apply", help="Close the runs listed. Without it nothing changes."),
+        typer.Option(
+            "--apply",
+            help="Close the runs listed: database status `failed`, outcome `abandoned`. "
+            "Without it nothing changes.",
+        ),
     ] = False,
     as_json: JsonFlag = False,
 ) -> None:
     """List runs left in flight with nothing executing them; close them with --apply.
 
     A dry run by default: it reads and reports, and changes nothing. Runs
-    waiting for an operator are never listed. With --apply each listed run is
-    finished as `failed` with outcome `abandoned`; its turns, events and
-    artefacts are kept untouched and a `recovery` event records what happened.
+    waiting for an operator are never listed, and neither are the two protected
+    historical runs. With --apply each listed run is finished with database
+    status `failed` and outcome `abandoned`; its turns, events and artefacts
+    are kept untouched and a `recovery` event records what happened.
+
+    `abandoned` is an outcome stored in the run's metadata, not a database
+    status: recovery adds no status value and needs no migration.
     """
     threshold = _parse_duration(older_than)
     ceiling = get_settings().pipeline_run_timeout_seconds
@@ -697,7 +705,7 @@ def runs_recover_stale(
         emit_json({"applied": apply, "older_than_seconds": threshold.total_seconds(), "runs": rows})
         return
     if not rows:
-        typer.echo("no abandoned runs found")
+        typer.echo("no stale runs found")
         return
     for row in rows:
         typer.echo(
@@ -705,7 +713,7 @@ def runs_recover_stale(
             f"idle {row['idle_hours']}h since {row['last_activity_at']}"
         )
     if apply:
-        typer.echo(f"closed {len(rows)} run(s) as abandoned")
+        typer.echo(f"closed {len(rows)} run(s): status failed, outcome abandoned")
     else:
         typer.echo(
             f"DRY RUN: {len(rows)} run(s) would be closed. "

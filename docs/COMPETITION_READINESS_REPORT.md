@@ -315,8 +315,9 @@ change to degradation and was not approved.
 ### 6.5 Two abandoned runs remain in `running` — **Verified**, left unchanged
 
 > **Phase 0 update.** An explicit recovery mechanism now exists —
-> `bhashabench runs recover-stale` (dry run by default; `--apply` marks
-> eligible runs `abandoned` without deleting anything) — and the offline
+> `bhashabench runs recover-stale` (dry run by default; `--apply` closes
+> eligible runs with database status `failed` and outcome `abandoned`,
+> without deleting anything) — and the offline
 > defect that produced these runs is fixed. **It has not been run against
 > `e5160aa5` or `285e4fe9`**, which remain exactly as stored. The owner has
 > since decided they are kept permanently: the command excludes both by

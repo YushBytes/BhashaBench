@@ -302,13 +302,21 @@ no request can still be executing a run past its own ceiling, so a shorter
 threshold could close a run that is merely busy. That is refused with exit
 code `2`.
 
-`--apply` finishes each listed run as `failed` with outcome **`abandoned`**,
-closes a still-open conversation as operator-terminated, appends a
+`--apply` finishes each listed run with database status **`failed`** and
+outcome **`abandoned`**, closes a still-open conversation as
+operator-terminated, appends a
 `recovery` stage event and a `recovered` record (when, last activity, previous
 status), and sets `error_message`. **Nothing is deleted or rewritten**: turns,
 earlier events, artefacts and `started_at` are kept. `finished_at` is the
 recovery time, and the `recovered` record says so. `abandoned` is never a
 statement about the bot.
+
+**`abandoned` is an outcome, not a database status.** `test_runs.status`
+keeps its five values (`pending`, `running`, `completed`, `failed`,
+`cancelled`) and a recovered run is stored as `failed`. `abandoned` is the
+pipeline outcome recorded in the run's metadata, alongside outcomes such as
+`provider_error`. Recovery therefore adds no status value and needs no
+migration; to find recovered runs, filter on the outcome, not the status.
 
 **Two runs are permanently excluded.** `e5160aa5-d690-4eca-aaf7-e75612af03ea`
 and `285e4fe9-f464-4e1c-bb7f-8eb2f7b4cd88` are the historical

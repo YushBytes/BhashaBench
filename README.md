@@ -736,7 +736,7 @@ why the collected total (2073) exceeds the number that run (2032):
 | `test_bundle.py` | 39 | Bundle parsing and building: per-entry error collection, duplicate rejection, the 500-entry cap, byte-identical round-trips, no ids or timestamps in output |
 | `test_api_library.py` | 74 | Search, filters, pagination and ordering; suite `PATCH` and guarded `DELETE`; copy and move; import dry-run and atomicity; export round-trip |
 | `test_database_gate.py` | 16 | `BHASHABENCH_REQUIRE_DATABASE`: an unreachable test database skips by default and fails when required - including a real pytest subprocess against a closed port |
-| `test_pipeline_recovery.py` | 20 | `bhashabench runs recover-stale` through the real Typer app: eligibility, the dry-run default, the timeout floor, `--apply` closing a stuck run as `abandoned` without deleting turns, events or artefacts, and the two protected historical runs staying excluded and unchanged with or without `--apply` |
+| `test_pipeline_recovery.py` | 20 | `bhashabench runs recover-stale` through the real Typer app: eligibility, the dry-run default, the timeout floor, `--apply` closing a stuck run as status `failed`, outcome `abandoned`, without deleting turns, events or artefacts, and the two protected historical runs staying excluded and unchanged with or without `--apply` |
 | `test_cli.py` | 65 | Argument parsing, exit codes and output for every command through Typer's `CliRunner`, plus that no connection string reaches the terminal on a database outage |
 | `test_reference_scenarios.py` | 40 | Every committed scenario in `scenarios/` validates and round-trips, the set covers six languages and the documented audio and code-mixing cases, and the generated bundle is not stale |
 | `test_demo_scenario.py` | 7 | The recorded demo's scenario file: it validates, its facts and marking criteria are unchanged, and its spoken Tamil opening passes caller validation, is deterministic and contains no English beyond the declared code-mixed terms |
@@ -840,7 +840,7 @@ bhashabench suite create "Reference"
 bhashabench scenario list --language ta-IN --tag payment
 bhashabench import scenarios/bundles/indian_language_reference.yaml --suite "$ID" --dry-run
 bhashabench export "$ID" --output bundle.yaml
-bhashabench runs recover-stale --older-than 24h          # dry run; --apply to close
+bhashabench runs recover-stale --older-than 24h          # dry run; --apply closes as failed/abandoned
 ```
 
 Exit codes are distinguished so a shell script can act on them: `0` success,

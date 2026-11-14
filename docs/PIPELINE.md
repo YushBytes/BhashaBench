@@ -127,7 +127,7 @@ three.
 | `audio_validation_failed` | Audio did not survive inspection | **no** |
 | `external_bot_unavailable` | The bot could not be reached | **no** |
 | `cancelled` | An operator stopped it | **no** |
-| `abandoned` | Left in flight with nothing executing it; closed by `bhashabench runs recover-stale --apply` | **no** |
+| `abandoned` | Left in flight with nothing executing it; closed by `bhashabench runs recover-stale --apply`. An outcome only: the run's database status is `failed` | **no** |
 
 `provider_error`, `audio_validation_failed`, `external_bot_unavailable` and
 `abandoned` are collected in `OUR_FAULT_OUTCOMES`; `cancelled` is likewise not
