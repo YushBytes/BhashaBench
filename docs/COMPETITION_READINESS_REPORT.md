@@ -49,6 +49,7 @@ to make a credible demonstration possible at all.
    profile name is. The demo's declared 10 dB / 8% is in fact 25 dB / no packet
    loss; the competition material quoted the declared figures and has been
    corrected. §6.4.
+8. **Two abandoned runs remain `running`**, left unchanged. §6.5.
 
 **The demonstration** is a Tamil crop-insurance claim that runs the whole
 pipeline and terminates with the outcome `no_progress` — the instrument
@@ -299,6 +300,36 @@ LinkedIn post and `scenarios/README.md` have been corrected to quote the
 applied condition. Not fixed: honouring the declared values is a behavioural
 change to degradation and was not approved.
 
+### 6.5 Two abandoned runs remain in `running` — **Verified**, left unchanged
+
+`e5160aa5-d690-4eca-aaf7-e75612af03ea` and
+`285e4fe9-f464-4e1c-bb7f-8eb2f7b4cd88` — `english_insurance_claim`,
+`offline_simulation`, created 2026-11-09 01:26 and 01:52 IST during Phase 8
+development. They are **abandoned, not active**:
+
+- each has exactly one caller turn, zero bot turns and one stage event
+  (`caller_turn`, turn 0, `ok`) — the signature of a single `/start` on an
+  `offline_simulation` run, which is defect §6.2;
+- neither is waiting for an operator (`awaiting_bot_audio_for_turn` is null);
+- nothing executes a run in the background: a run advances only inside a
+  request, and the concurrency limiter is in-process and has been reset by
+  every backend restart since.
+
+**No automatic recovery exists** — there is no stale-run sweeper, timeout
+reaper or resume-on-startup. Two documented, manual mechanisms exist, and
+**neither was used**, so that the historical record is preserved exactly:
+
+- `POST /api/v1/test-runs/{id}/cancel` (`docs/PIPELINE.md`) records
+  `cancelled` / outcome `cancelled`, terminates the conversation and deletes
+  nothing — but it stamps today's date as the finish time and labels the run
+  as operator-stopped;
+- repeating `POST /api/v1/test-runs/{id}/start` is how §6.2 measured an
+  `offline_simulation` run reaching a terminal state — but it would append new
+  turns to a three-day-old run.
+
+They therefore show as *Running* in the workspace's recent-runs list. That is
+accurate to the stored state, and is a limitation, not live activity.
+
 ## 7. Quality gates — **Verified**
 
 Every figure below is command output from after the final edit.
@@ -433,6 +464,8 @@ to `.gitignore` so browser scratch output is never committed.
    unresolved; the demo avoids it.
 4. A scenario's declared `snr_db` and `packet_loss_percent` are not applied;
    only the profile name is (§6.4) — unresolved, by decision.
+5. Two abandoned `offline_simulation` runs show as `running`; no automatic
+   recovery exists (§6.5) — left unchanged, by decision.
 
 **Capability limits, by design and documented**
 
