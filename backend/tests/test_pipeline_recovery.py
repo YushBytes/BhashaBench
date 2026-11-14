@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import delete, insert, select, update
 from sqlalchemy.orm import Session
 from typer.testing import CliRunner
 
@@ -26,8 +26,10 @@ from app.caller.artefacts import AudioArtefactStore
 from app.cli.main import app
 from app.cli.output import ExitCode
 from app.core.config import AppEnv, Settings
+from app.models import CallSession
 from app.models import TestRun as RunModel
 from app.models.test_run import RunStatus
+from app.pipeline import recovery
 from app.pipeline.bots.manual import ManualBotAdapter
 from app.pipeline.engine import RunConfig
 from app.pipeline.modes import OUR_FAULT_OUTCOMES, ExecutionMode, RunOutcome
@@ -274,6 +276,166 @@ class TestApply:
 
         assert code == ExitCode.OK
         assert str(run_id) not in [row["run_id"] for row in json.loads(output)["runs"]]
+
+
+# ---------------------------------------------------------------------------
+# The two protected historical runs
+# ---------------------------------------------------------------------------
+
+PROTECTED_E5 = uuid.UUID("e5160aa5-d690-4eca-aaf7-e75612af03ea")
+PROTECTED_28 = uuid.UUID("285e4fe9-f464-4e1c-bb7f-8eb2f7b4cd88")
+
+
+def _as_protected(session: Session, run_id: uuid.UUID, protected_id: uuid.UUID) -> None:
+    """Re-key a stuck run to a protected id, in the test database only.
+
+    The historical rows live in the development database and are never read or
+    written here. This gives a throwaway run in `bhashabench_test` the same id,
+    inside the rolled-back transaction of the test, so the exclusion is
+    exercised against the real ids without touching the real runs.
+    """
+    runs = RunModel.__table__
+    row = dict(session.execute(select(runs).where(runs.c.id == run_id)).mappings().one())
+    session.execute(insert(runs).values({**row, "id": protected_id}))
+    sessions = CallSession.__table__
+    session.execute(
+        update(sessions).where(sessions.c.test_run_id == run_id).values(test_run_id=protected_id)
+    )
+    session.execute(delete(runs).where(runs.c.id == run_id))
+    session.flush()
+    session.expunge_all()
+
+
+def _full_snapshot(session: Session, run_id: uuid.UUID) -> dict[str, Any]:
+    """Everything recovery could change: the row, its metadata, its conversation."""
+    session.expire_all()
+    run = repo.get_run(session, run_id)
+    assert run is not None
+    conversation = repo.conversation_of(session, run_id)
+    assert conversation is not None
+    return {
+        **_snapshot(session, run_id),
+        "created_at": run.created_at,
+        "updated_at": run.updated_at,
+        "error_message": run.error_message,
+        "run_metadata": json.loads(json.dumps(run.run_metadata)),
+        "conversation_status": conversation.status,
+        "conversation_ended_at": conversation.ended_at,
+        "conversation_updated_at": conversation.updated_at,
+        "conversation_metadata": json.loads(json.dumps(conversation.call_metadata)),
+    }
+
+
+@pytest.fixture
+def stale_trio(
+    cli_db: Session, settings: Settings, tmp_path: Path
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    """Both protected ids and one ordinary run, all equally stuck for 3 days."""
+    for protected_id in (PROTECTED_E5, PROTECTED_28):
+        made = _offline_run(cli_db, settings, tmp_path)
+        _make_stuck(cli_db, made, idle=timedelta(days=3))
+        _as_protected(cli_db, made, protected_id)
+    ordinary = _offline_run(cli_db, settings, tmp_path)
+    _make_stuck(cli_db, ordinary, idle=timedelta(days=3))
+    return PROTECTED_E5, PROTECTED_28, ordinary
+
+
+class TestProtectedHistoricalRuns:
+    def test_exactly_the_two_historical_runs_are_protected(self) -> None:
+        assert frozenset({PROTECTED_E5, PROTECTED_28}) == recovery.PROTECTED_RUN_IDS
+
+    def test_the_fixture_runs_would_be_eligible_under_any_other_id(
+        self,
+        cli_db: Session,
+        stale_trio: tuple[uuid.UUID, uuid.UUID, uuid.UUID],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Without the exclusion all three are listed, so the tests below prove
+        the exclusion and not an accident of how the fixture rows were made."""
+        monkeypatch.setattr(recovery, "PROTECTED_RUN_IDS", frozenset())
+
+        code, output = _invoke("--older-than", "1h", "--json")
+
+        assert code == ExitCode.OK, output
+        listed = {row["run_id"] for row in json.loads(output)["runs"]}
+        assert {str(run_id) for run_id in stale_trio} <= listed
+
+    def test_a_dry_run_lists_neither_and_changes_nothing(
+        self, cli_db: Session, stale_trio: tuple[uuid.UUID, uuid.UUID, uuid.UUID]
+    ) -> None:
+        *protected, ordinary = stale_trio
+        before = {run_id: _full_snapshot(cli_db, run_id) for run_id in stale_trio}
+
+        json_code, json_output = _invoke("--older-than", "1h", "--json")
+        text_code, text_output = _invoke("--older-than", "1h")
+
+        assert json_code == ExitCode.OK, json_output
+        assert text_code == ExitCode.OK, text_output
+        listed = [row["run_id"] for row in json.loads(json_output)["runs"]]
+        assert str(ordinary) in listed
+        for run_id in protected:
+            assert str(run_id) not in listed
+            assert str(run_id) not in text_output
+        assert {run_id: _full_snapshot(cli_db, run_id) for run_id in stale_trio} == before
+
+    def test_apply_leaves_both_exactly_as_they_were(
+        self, cli_db: Session, stale_trio: tuple[uuid.UUID, uuid.UUID, uuid.UUID]
+    ) -> None:
+        *protected, _ = stale_trio
+        before = {run_id: _full_snapshot(cli_db, run_id) for run_id in protected}
+
+        code, output = _invoke("--older-than", "1h", "--apply", "--json")
+
+        assert code == ExitCode.OK, output
+        listed = [row["run_id"] for row in json.loads(output)["runs"]]
+        for run_id in protected:
+            assert str(run_id) not in listed
+            after = _full_snapshot(cli_db, run_id)
+            assert after == before[run_id]
+            assert after["status"] is RunStatus.RUNNING
+            assert after["outcome"] is None
+            assert after["finished_at"] is None
+            assert "recovered" not in after["run_metadata"]["pipeline"]
+            assert "recovery" not in [event["stage"] for event in after["events"]]
+
+    def test_apply_still_recovers_the_other_stale_run(
+        self, cli_db: Session, stale_trio: tuple[uuid.UUID, uuid.UUID, uuid.UUID]
+    ) -> None:
+        *_, ordinary = stale_trio
+
+        code, output = _invoke("--older-than", "1h", "--apply", "--json")
+
+        assert code == ExitCode.OK, output
+        assert [row["run_id"] for row in json.loads(output)["runs"]] == [str(ordinary)]
+        after = _full_snapshot(cli_db, ordinary)
+        assert after["status"] is RunStatus.FAILED
+        assert after["outcome"] == RunOutcome.ABANDONED.value
+
+    @pytest.mark.parametrize("protected_id", [PROTECTED_E5, PROTECTED_28])
+    def test_abandon_refuses_a_protected_run_handed_to_it_directly(
+        self,
+        cli_db: Session,
+        stale_trio: tuple[uuid.UUID, uuid.UUID, uuid.UUID],
+        protected_id: uuid.UUID,
+    ) -> None:
+        """The second lock: a caller that skips `find_stale_runs` is refused."""
+        before = _full_snapshot(cli_db, protected_id)
+        run = repo.get_run(cli_db, protected_id)
+        assert run is not None
+        now = utc_now()
+        forged = recovery.StaleRun(
+            run=run,
+            scenario_name="",
+            mode="offline_simulation",
+            pipeline_status="running",
+            last_activity_at=run.updated_at,
+            idle=now - run.updated_at,
+        )
+
+        with pytest.raises(recovery.ProtectedRunError, match=str(protected_id)):
+            recovery.abandon(cli_db, forged, now=now)
+
+        assert _full_snapshot(cli_db, protected_id) == before
 
 
 def test_abandoned_is_never_a_statement_about_the_bot() -> None:

@@ -90,10 +90,11 @@ CLAUDE.md agree.
 
 **Delivered.** All four defects fixed with fail-before tests; the declared-
 but-not-enforced settings reported per run; an explicit, dry-run-first
-`bhashabench runs recover-stale` (not applied to the two historical runs);
+`bhashabench runs recover-stale` (never applied to the two historical runs,
+which it permanently excludes by id);
 `.github/workflows/ci.yml` verified locally against a tree with no `.env`
-but **not yet run on GitHub**, which needs a push. 2066 tests collected,
-2025 pass, 41 opt-in live tests skipped; API 36 paths / 44 operations.
+but **not yet run on GitHub**, which needs a push. 2073 tests collected,
+2032 pass, 41 opt-in live tests skipped; API 36 paths / 44 operations.
 
 ---
 

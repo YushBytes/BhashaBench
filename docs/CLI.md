@@ -310,6 +310,13 @@ earlier events, artefacts and `started_at` are kept. `finished_at` is the
 recovery time, and the `recovered` record says so. `abandoned` is never a
 statement about the bot.
 
+**Two runs are permanently excluded.** `e5160aa5-d690-4eca-aaf7-e75612af03ea`
+and `285e4fe9-f464-4e1c-bb7f-8eb2f7b4cd88` are the historical
+`offline_simulation` runs kept as the record of the defect Phase 0 fixed.
+They meet every criterion above, so they are excluded by exact id
+(`PROTECTED_RUN_IDS` in `app/pipeline/recovery.py`): never listed by a dry
+run, never closed by `--apply`. There is no flag to override this.
+
 There is deliberately no automatic sweeper: deciding a run is dead rather
 than slow is a judgement, made explicitly and dry-run first. `--json` reports
 `applied`, the threshold and the runs.

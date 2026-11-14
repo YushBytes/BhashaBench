@@ -318,8 +318,9 @@ change to degradation and was not approved.
 > `bhashabench runs recover-stale` (dry run by default; `--apply` marks
 > eligible runs `abandoned` without deleting anything) — and the offline
 > defect that produced these runs is fixed. **It has not been run against
-> `e5160aa5` or `285e4fe9`**, which remain exactly as stored; applying it to
-> them is a separate owner decision.
+> `e5160aa5` or `285e4fe9`**, which remain exactly as stored. The owner has
+> since decided they are kept permanently: the command excludes both by
+> exact id, with or without `--apply`.
 
 `e5160aa5-d690-4eca-aaf7-e75612af03ea` and
 `285e4fe9-f464-4e1c-bb7f-8eb2f7b4cd88` — `english_insurance_claim`,

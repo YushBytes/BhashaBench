@@ -419,7 +419,7 @@ BhashaBench/
 │   │   │                      default sends audio nowhere
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 2066 tests across 37 modules
+│   ├── tests/                 2073 tests across 37 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -719,10 +719,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2066 tests** across thirty-seven modules.
-**2025 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2073 tests** across thirty-seven modules.
+**2032 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2066) exceeds the number that run (2025):
+why the collected total (2073) exceeds the number that run (2032):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -736,7 +736,7 @@ why the collected total (2066) exceeds the number that run (2025):
 | `test_bundle.py` | 39 | Bundle parsing and building: per-entry error collection, duplicate rejection, the 500-entry cap, byte-identical round-trips, no ids or timestamps in output |
 | `test_api_library.py` | 74 | Search, filters, pagination and ordering; suite `PATCH` and guarded `DELETE`; copy and move; import dry-run and atomicity; export round-trip |
 | `test_database_gate.py` | 16 | `BHASHABENCH_REQUIRE_DATABASE`: an unreachable test database skips by default and fails when required - including a real pytest subprocess against a closed port |
-| `test_pipeline_recovery.py` | 13 | `bhashabench runs recover-stale` through the real Typer app: eligibility, the dry-run default, the timeout floor, and `--apply` closing a stuck run as `abandoned` without deleting turns, events or artefacts |
+| `test_pipeline_recovery.py` | 20 | `bhashabench runs recover-stale` through the real Typer app: eligibility, the dry-run default, the timeout floor, `--apply` closing a stuck run as `abandoned` without deleting turns, events or artefacts, and the two protected historical runs staying excluded and unchanged with or without `--apply` |
 | `test_cli.py` | 65 | Argument parsing, exit codes and output for every command through Typer's `CliRunner`, plus that no connection string reaches the terminal on a database outage |
 | `test_reference_scenarios.py` | 40 | Every committed scenario in `scenarios/` validates and round-trips, the set covers six languages and the documented audio and code-mixing cases, and the generated bundle is not stale |
 | `test_demo_scenario.py` | 7 | The recorded demo's scenario file: it validates, its facts and marking criteria are unchanged, and its spoken Tamil opening passes caller validation, is deterministic and contains no English beyond the declared code-mixed terms |
@@ -790,7 +790,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2025 passed, 41 skipped in 104.17s ================
+================ 2032 passed, 41 skipped in 99.33s ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

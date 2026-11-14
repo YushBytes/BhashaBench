@@ -22,10 +22,22 @@ still open is closed as operator-terminated. Turns, events and artefacts are
 never deleted or rewritten, and `started_at` is kept, so the evidence of what
 the run did before it stopped survives intact. `finished_at` is the moment of
 recovery, and the metadata says so.
+
+**No new database status.** The run's database status becomes `failed` - one
+of the five values the `test_runs` check constraint already allows.
+`abandoned` is the pipeline *outcome* recorded in the run's metadata, not a
+status, so recovery needs no migration.
+
+**Two runs are never touched.** `PROTECTED_RUN_IDS` names the two historical
+runs kept as evidence of the pre-Phase-0 offline defect. They meet every
+abandonment criterion, which is exactly why they are excluded by identity:
+`find_stale_runs` never returns them and `abandon` refuses them, with or
+without `--apply`.
 """
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -43,6 +55,25 @@ from app.repositories import pipeline_runs as repo
 
 _IN_FLIGHT = frozenset({PipelineStatus.RUNNING.value, PipelineStatus.INITIALIZING.value})
 
+PROTECTED_RUN_IDS: frozenset[uuid.UUID] = frozenset(
+    {
+        uuid.UUID("e5160aa5-d690-4eca-aaf7-e75612af03ea"),
+        uuid.UUID("285e4fe9-f464-4e1c-bb7f-8eb2f7b4cd88"),
+    }
+)
+"""Historical runs recovery must never select or update.
+
+Both are `offline_simulation` runs left `running` by the defect Phase 0 fixed
+(docs/COMPETITION_READINESS_REPORT.md, section 6.5), and they are preserved
+exactly as stored as the record of it. Full ids, matched exactly: a prefix
+match could one day catch an unrelated run. There is deliberately no flag to
+override this - closing either is a code change, reviewed as one.
+"""
+
+
+class ProtectedRunError(RuntimeError):
+    """Recovery was asked to close a run in `PROTECTED_RUN_IDS`."""
+
 
 @dataclass(frozen=True, slots=True)
 class StaleRun:
@@ -59,10 +90,13 @@ class StaleRun:
 def find_stale_runs(session: Session, *, older_than: timedelta, now: datetime) -> list[StaleRun]:
     """Every run that meets the abandonment criteria, oldest activity first.
 
-    Reads only. Never mutates a row.
+    Reads only. Never mutates a row. A run in `PROTECTED_RUN_IDS` is never
+    returned, whatever its state.
     """
     found: list[StaleRun] = []
     for run in repo.runs_in_status(session, RunStatus.RUNNING):
+        if run.id in PROTECTED_RUN_IDS:
+            continue
         meta = repo.pipeline_metadata_of(run)
         if not meta:
             continue  # a caller-only conversation, not a pipeline run
@@ -90,8 +124,17 @@ def find_stale_runs(session: Session, *, older_than: timedelta, now: datetime) -
 
 
 def abandon(session: Session, stale: StaleRun, *, now: datetime) -> None:
-    """Finish one stale run as `abandoned`. The caller owns the transaction."""
+    """Finish one stale run: database status `failed`, outcome `abandoned`.
+
+    The caller owns the transaction. Refuses a protected run before touching
+    anything, so a caller that built its own `StaleRun` cannot bypass the
+    exclusion in `find_stale_runs`.
+    """
     run = stale.run
+    if run.id in PROTECTED_RUN_IDS:
+        raise ProtectedRunError(
+            f"run {run.id} is a protected historical run and is never modified by recovery"
+        )
     meta: dict[str, Any] = dict(repo.pipeline_metadata_of(run))
     events: list[dict[str, Any]] = list(meta.get("events", []))
     last_turn = max((int(event.get("turn_index", 0)) for event in events), default=0)
@@ -145,4 +188,4 @@ def abandon(session: Session, stale: StaleRun, *, now: datetime) -> None:
     )
 
 
-__all__ = ["StaleRun", "abandon", "find_stale_runs"]
+__all__ = ["PROTECTED_RUN_IDS", "ProtectedRunError", "StaleRun", "abandon", "find_stale_runs"]
