@@ -12,7 +12,9 @@ database is never touched.
 
 If PostgreSQL is unreachable, the database-backed tests are skipped with an
 explicit reason naming the host and port tried, and a session-end banner
-reports how many were skipped. They are never silently passed.
+reports how many were skipped. They are never silently passed. With
+`BHASHABENCH_REQUIRE_DATABASE=1` - which CI sets - an unreachable database is
+a failure instead of a skip; see `tests/db_gate.py`.
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ from app.db.session import get_db
 from app.main import create_app
 from app.services.transcription_service import TranscriptionService
 from app.transcription.providers.fake import FakeTranscriptionProvider
+from tests.db_gate import database_required, database_unreachable
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -274,7 +277,7 @@ def database_url() -> str:
             "Start it with: docker compose up -d db"
         )
         admin.dispose()
-        pytest.skip(_SKIP_REASON, allow_module_level=True)
+        database_unreachable(_SKIP_REASON, required=database_required())
 
     target = _test_url(base)
 
