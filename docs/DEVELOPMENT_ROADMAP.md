@@ -1,46 +1,99 @@
 # BhashaBench — Development Roadmap
 
-BhashaBench is being built in 15 controlled phases. Each phase is a reviewable
-increment: it ends with working code, passing tests and updated documentation.
-A phase is not started until the previous one is approved.
+BhashaBench is built in **15 phases** — the original plan, restored. Each phase
+is a reviewable increment that ends with working code, passing tests and
+updated documentation.
 
-**Current status: Phases 1–5 complete. Phases 6–15 not started.**
+**Current status: Phases 1–5 complete; Phase 6 blocked on Evon access (a
+deterministic substitute is delivered); Phases 7, 9, 10, 12, 13 and 15
+partially complete; Phases 8, 11 and 14 not started. Phase 0 — a baseline and
+defect-remediation pass before new functionality — is in progress.**
 
-Nothing in phases 6–15 is implemented. Where this document describes a
-component in the present tense, read it as the *intended* design for that
-phase, not as existing behaviour.
+Where this document describes an unfinished phase in the present tense, read
+it as the intended design, not as existing behaviour.
 
 ---
 
-> **Phase 8 renumbered the tail.** The React dashboard was Phase 13 and the
-> operator workspace was not a phase at all. Building the workspace early
-> made the pipeline's own gaps visible — `audio_fixture_test` cannot succeed
-> through the API, and an offline run never terminates — which is worth more
-> before telephony than after it. Telephony moved from 8 to 9 and everything
-> below it shifted by one; the old Phase 13 is absorbed into Phase 8.
+## Why the numbering changed back
+
+During the competition the work was accelerated and rearranged: telephony was
+deferred, the operator workspace was built early, and the phases were
+renumbered in flight ("competition numbering"). That made it impossible to
+tell from a phase number what had actually been delivered. The original
+numbering is restored below. The competition history is preserved, not
+rewritten: the delivered-work sections in Part A keep their original text, and
+the reports in `docs/` (`PHASE_08_*`, `COMPETITION_*`, `docs/competition/`)
+keep the numbering they were written in. Use this table to translate.
+
+| Original phase | Where the work happened (competition numbering) |
+|---|---|
+| 1 Project Foundation | Phase 1 |
+| 2 Database & Scenario Engine | Phase 2 |
+| 3 Scenario Library & Tooling | Phase 3 |
+| 4 Gnani Prisma STT | Phase 4 |
+| 5 Gnani Timbre TTS | Phase 5 |
+| 6 AI Caller Simulation — Evon | Phase 6 (deterministic substitute) |
+| 7 Audio Degradation Engine | Phase 7 |
+| 8 Telephony Integration | planned as "Phase 9 — Twilio" |
+| 9 Real-Time Conversation Engine | Phases 7 and 7.1 (sequential loop, concurrency); planned as "Phase 10" |
+| 10 Recording & Transcription | Phases 6–7 (per-turn artefacts and transcripts) |
+| 11 Evaluation & Judge Engine | planned as "Phase 11" (unchanged) and part of "Phase 12 — Multilingual Benchmarking" |
+| 12 Reporting & Analytics Backend | Phase 8 run list/report endpoints; planned as "Phase 13 — Results API" |
+| 13 Frontend Dashboard | Phase 8 (operator workspace and public site) |
+| 14 CI/CD & Safety | planned as "Phase 14" (unchanged) |
+| 15 Production Readiness & Competition Demo | competition submission; planned as "Phase 15" |
 
 ## Phase status
 
 | # | Phase | Status |
 |---|-------|--------|
+| 0 | Baseline & defect remediation | 🔧 In progress |
 | 1 | Project Foundation | ✅ Complete |
 | 2 | Database & Scenario Engine | ✅ Complete |
 | 3 | Scenario Library & Tooling | ✅ Complete |
-| 4 | Gnani Prisma — Speech to Text | ✅ Complete |
-| 5 | Gnani Timbre — Text to Speech | ✅ Complete |
-| 6 | Caller Simulation — deterministic engine | ✅ Complete (Evon **not** integrated) |
-| 7 | End-to-End Voice Pipeline & Audio Degradation | ✅ Complete (no live call, no real bot) |
-| 7.1 | Concurrency Enforcement | ✅ Complete |
-| 8 | Operator Workspace & Public Site | ✅ Complete (no live bot, no telephony) |
-| 9 | Twilio Telephony & Media Streaming | ⬜ Not started |
-| 10 | Conversation Orchestration Engine | ⬜ Not started |
-| 11 | Automated Evaluation & Scoring | ⬜ Not started |
-| 12 | Multilingual Benchmarking | ⬜ Not started |
-| 13 | Results API & Reporting | ⬜ Not started |
-| 14 | CI Regression Testing (GitHub Actions) | ⬜ Not started |
-| 15 | Hardening, Observability & Release | ⬜ Not started |
+| 4 | Gnani Prisma — Speech to Text | ✅ Complete (batch live-verified; streaming not live-verified) |
+| 5 | Gnani Timbre — Text to Speech | ✅ Complete (batch; streaming not implemented) |
+| 6 | AI Caller Simulation — Evon | ⛔ Blocked — no published Evon API; deterministic caller delivered |
+| 7 | Audio Degradation Engine | 🟡 Partial |
+| 8 | Telephony Integration | ⬜ Not started |
+| 9 | Real-Time Conversation Engine | 🟡 Partial — sequential turn loop only |
+| 10 | Recording & Transcription | 🟡 Partial — per-turn artefacts only |
+| 11 | Evaluation & Judge Engine | ⬜ Not started |
+| 12 | Reporting & Analytics Backend | 🟡 Partial — run list and per-run report only |
+| 13 | Frontend Dashboard | 🟡 Partial — operator workspace, no analytics |
+| 14 | CI/CD & Safety | ⬜ Not started |
+| 15 | Production Readiness & Competition Demo | 🟡 Partial — competition demo only |
 
 ---
+
+## Phase 0 — Baseline & defect remediation 🔧
+
+A pass before any new functionality, so later phases build on a repository
+that is honest about itself.
+
+- Commit the approved demo polish in concern-sized commits.
+- Restore the original phase numbering (this document) and a main-only Git
+  workflow.
+- A CI foundation: Ruff, pytest against a real PostgreSQL that may not be
+  skipped, Alembic drift checks, frontend typecheck, lint and production
+  build, and Compose validation.
+- Fix four defects: the per-run bot adapter was ignored after creation;
+  `offline_simulation` had no reply source and never terminated; nothing
+  recovered abandoned runs; a scenario's declared SNR and packet loss were
+  ignored. Report the scenario settings that are still declared but not
+  enforced.
+
+**Exit criteria.** Each defect has a test that fails before its fix and
+passes after; CI is green locally; the status tables in this file, README and
+CLAUDE.md agree.
+
+---
+
+# Part A — Delivered work (historical record)
+
+The sections below are the records written as each piece of work closed, kept
+as written. **Phase numbers inside them use the competition numbering**; the
+heading of each states the original phase it belongs to.
 
 ## Phase 1 — Project Foundation ✅
 
@@ -269,7 +322,9 @@ values the vendor does not publish; any persistence of generated audio.
 
 ---
 
-## Phase 6 — Caller Simulation (deterministic engine) ✅
+## Phase 6 — AI Caller Simulation: deterministic substitute delivered, Evon ⛔ blocked
+
+*Competition Phase 6. The LLM caller remains open — see Part B.*
 
 **Phase 6 uses deterministic, rule-based caller orchestration. Official Gnani
 Evon integration is deferred until documented access and credentials are
@@ -365,7 +420,11 @@ exist.
 
 ---
 
-## Phase 7 — End-to-End Voice Pipeline & Audio Degradation ✅
+## Phases 7, 9 and 10 (partial) — End-to-End Voice Pipeline & Audio Degradation
+
+*Competition Phase 7. The degradation engine is original Phase 7; the
+sequential turn loop and per-turn artefacts are the delivered part of
+original Phases 9 and 10.*
 
 The phase that connects the previous three. A scenario becomes a multi-turn
 conversation with real audio: the Phase 6 caller decides, Timbre synthesises,
@@ -449,7 +508,7 @@ severity is what they control.
 offline - **met**. A genuine external voice-bot conversation - **not met**, and
 not claimed.
 
-### Phase 7.1 — concurrency enforcement
+### Competition Phase 7.1 — concurrency enforcement (original Phase 9)
 
 `PIPELINE_MAX_CONCURRENT_RUNS` shipped in Phase 7 as a documented number that
 nothing read: the setting existed, the run metadata recorded it, and no code
@@ -479,7 +538,11 @@ claiming no authorisation. Real access control is still Phase 15.)
 
 ---
 
-## Phase 8 — Operator Workspace & Public Site ✅
+## Phases 13 and 12 (partial) — Operator Workspace & Public Site
+
+*Competition Phase 8. The workspace is the delivered part of original
+Phase 13; its run list and report endpoints are the delivered part of
+original Phase 12.*
 
 The phase that gave the instrument a face. Building it early was deliberate:
 driving the pipeline through a UI is what made two of its own gaps visible,
@@ -535,6 +598,9 @@ against the real pipeline. A run is inspectable without reading the database -
 
 ### Reported, not fixed
 
+*Historical. `audio_fixture_test` was fixed in commit `527bc3a`;
+`offline_simulation` is addressed in Phase 0.*
+
 Running the workspace surfaced two pipeline defects. Both are **still
 unresolved** and are not frontend bugs:
 
@@ -555,98 +621,148 @@ remains Phase 15 for the whole application.
 
 ---
 
-## Phase 9 — Twilio Telephony & Media Streaming
+# Part B — Remaining work, by original phase
+
+## Phase 6 — AI Caller Simulation ⛔ (LLM caller)
+
+Blocked for **Evon specifically**: no Gnani text-generation endpoint is
+published and the released model has no hosted provider (see Part A). The
+approved route is a provider-independent caller architecture with a
+documented alternative LLM provider as the first real integration, labelled
+as what it is — never as Evon — with the deterministic caller retained and
+Evon addable when a legitimate API or self-hosting route exists.
+
+**Exit criteria.** A caller adapter against a published, documented endpoint,
+live-verified with a cost-bounded call; every turn passes the existing
+validation gate; `uses_language_model` is true and accurate; the
+deterministic caller remains selectable; no invented provider constant.
+
+---
+
+## Phase 7 — Audio Degradation Engine 🟡
+
+The DSP exists (Part A). Phase 0 makes runs apply a scenario's declared SNR
+and packet loss. Remaining: codec simulation, jitter, level and clipping
+reachable from a scenario, and per-language noise beds.
+
+**Exit criteria.** Every declared audio condition is applied or rejected,
+never silently ignored, and the achieved values are recorded per artefact and
+asserted in tests.
+
+---
+
+## Phase 8 — Telephony Integration ⬜
 
 The first phase that can place a real call, and therefore spend real money.
+It follows the documented HTTP/WebSocket bot protocol and the reference
+sample bot, which come first.
 
-- Outbound calls via the Twilio REST API.
-- Bidirectional media over Twilio Media Streams (WebSocket).
-- Barge-in and interruption handling.
+- Outbound calls via the Twilio REST API; bidirectional media over Twilio
+  Media Streams (WebSocket).
 - Guardrails enforced *before* dialling: `ALLOWED_BOT_NUMBERS`,
   `MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS`.
 - Webhook signature verification.
 
 **Exit criteria.** A call to an allow-listed number streams audio both ways,
-and a call to any other number is refused before dialling.
+a call to any other number is refused before dialling, and `DIALING`,
+`NO_ANSWER` and `BUSY` are only ever set by a real call.
 
 ---
 
-## Phase 10 — Conversation Orchestration Engine
+## Phase 9 — Real-Time Conversation Engine 🟡
 
-Binds phases 4–9 into one run loop.
+Delivered: a sequential, request-driven turn loop with a process-wide
+concurrency limit (Part A, competition Phases 7 and 7.1).
 
-- Run lifecycle: queued → running → completed/failed, with cancellation.
-- Barge-in, silence timeouts and per-turn deadlines.
-- Full transcript, timing and audio artefacts persisted per turn.
-- Bounded concurrency across calls.
+Remaining: a documented HTTP/WebSocket protocol for external voice bots and a
+genuine reference sample bot; a background worker model so a run does not
+live inside a request; streaming STT and TTS in the loop; voice-activity
+detection, end-pointing, barge-in, silence timeouts and per-turn deadlines;
+measured bot response latency.
 
-**Exit criteria.** `POST /api/v1/runs` executes a scenario end to end and
-stores a complete, inspectable transcript.
+**Exit criteria.** A streaming conversation with the reference bot handles
+barge-in, silence timeouts and deadlines, records per-turn bot latency, and a
+crashed or cancelled run reaches a terminal state on its own.
 
 ---
 
-## Phase 11 — Automated Evaluation & Scoring
+## Phase 10 — Recording & Transcription 🟡
 
-- LLM-as-judge evaluation via Evon against the scenario's success criteria.
-- Deterministic metrics alongside the judge: latency percentiles, word error
-  rate, interruption count, task completion.
-- `JUDGE_RETRIES` and `PASS_THRESHOLD` are applied here.
-- Rubric versioning, so a score is interpretable months later.
+Delivered: per-turn original and degraded audio with provenance, per-turn
+transcripts, and the three failure modes kept distinct (Part A).
+
+Remaining: full-conversation recording, retention periods and deletion,
+transcript export.
+
+**Exit criteria.** Full-conversation and per-turn audio stored and linked;
+a retention period enforced and deletion tested.
+
+---
+
+## Phase 11 — Evaluation & Judge Engine ⬜
+
+- Deterministic metrics: word and character error rate against reviewed
+  references with per-language normalisation, latency percentiles,
+  interruption counts, task completion.
+- An LLM judge behind the same provider-independent interface as the caller,
+  with rubric versioning; `JUDGE_RETRIES` and `PASS_THRESHOLD` are applied
+  here.
 - Agreement checks against a human-labelled set.
 
 **Exit criteria.** A completed run yields a reproducible pass/fail with
-per-criterion reasoning.
+per-criterion reasoning, and WER is computed against reviewed references.
 
 ---
 
-## Phase 12 — Multilingual Benchmarking
+## Phase 12 — Reporting & Analytics Backend 🟡
 
-- Curated suites across Hindi, Tamil, Telugu, Kannada, Malayalam, Marathi,
-  Bengali, Gujarati, Punjabi and Indian English.
-- Code-mixing (Hinglish and friends) as a first-class test axis.
-- Per-language normalisation for fair word error rate.
-- Suite definitions versioned in `benchmarks/`.
+Delivered: the run list and per-run report endpoints.
 
-**Exit criteria.** One command runs a language suite and emits comparable
-per-language scores.
-
----
-
-## Phase 13 — Results API & Reporting
-
-- Aggregate query endpoints: per-run, per-scenario, per-language, over time.
-- Run comparison and regression detection against a baseline.
-- Export to JSON, CSV and a static HTML report.
-- Audio and transcript artefacts served with signed, expiring URLs.
+Remaining: aggregates per run, scenario and language over time; run
+comparison and regression detection against a baseline; JSON and CSV export;
+artefacts served with signed, expiring URLs.
 
 **Exit criteria.** Two runs can be diffed and a regression identified.
 
 ---
 
-## Phase 14 — CI Regression Testing
+## Phase 13 — Frontend Dashboard 🟡
 
-- GitHub Actions: Ruff, pytest, ESLint, `next build` and a Compose smoke test
-  on every pull request.
-- Nightly benchmark run against the sample bot.
-- Scores published as build artefacts; pull requests fail on regression beyond
-  a threshold.
-- Secrets supplied via GitHub Environments, never committed.
+Delivered: the operator workspace and public site (Part A, competition
+Phase 8).
+
+Remaining: metric views built only from real data, comparison views, run
+auto-refresh, scenario and suite management, a frontend test suite.
+
+**Exit criteria.** Every metric shown is measured, never sampled or
+estimated, and comparison views read the Phase 12 API.
+
+---
+
+## Phase 14 — CI/CD & Safety ⬜
+
+Phase 0 adds the foundation (lint, tests against a required PostgreSQL,
+migration drift, frontend build, Compose validation). Remaining: a nightly
+benchmark against the reference bot, scores published as build artefacts,
+pull requests failing on regression beyond a threshold, secrets supplied via
+GitHub Environments, and cost guardrails.
 
 **Exit criteria.** A deliberately introduced regression fails CI.
 
 ---
 
-## Phase 15 — Hardening, Observability & Release
+## Phase 15 — Production Readiness & Competition Demo 🟡
 
-- Structured JSON logging with request correlation IDs.
-- Metrics and tracing; dashboards for latency and provider error rates.
-- Authentication and authorisation on the API.
-- Rate limiting, cost accounting and budget alerts.
-- Production Compose/Kubernetes manifests, backup and restore procedure.
-- Security review, load test, and a versioned `1.0.0` release.
+Delivered: the competition demonstration and its materials.
+
+Remaining: authentication, authorisation and tenant isolation; rate limiting,
+cost accounting and budget alerts; structured logging with correlation IDs,
+metrics, tracing and alerting; production deployment manifests with TLS;
+backup and restore; a privacy and data-retention policy; a security review, a
+load test and a versioned `1.0.0` release.
 
 **Exit criteria.** The platform runs unattended for a week with alerting and
-no manual intervention.
+no manual intervention, and a restore from backup has been rehearsed.
 
 ---
 

@@ -6,7 +6,11 @@ An automated testing and benchmarking platform for Indian-language voice
 bots — simulated callers, realistic audio degradation and automated
 conversation scoring.
 
-> ### Project status: Phases 1–8 of 15 complete
+> ### Project status: Phases 1–5 of 15 complete; 6 blocked; 7, 9, 10, 12, 13 and 15 partial
+>
+> The original 15-phase plan is in force again. The summaries below were
+> written as each piece of work closed, in the competition numbering; the
+> [roadmap](docs/DEVELOPMENT_ROADMAP.md) maps them to the original phases.
 >
 > **Phase 1 — Foundation.** FastAPI backend, health endpoints, Next.js status
 > shell, Docker Compose stack, test and lint toolchain.
@@ -61,7 +65,7 @@ conversation scoring.
 > has had a conversation with one. Design and limits in
 > [docs/CALLER.md](docs/CALLER.md).
 >
-> **Phase 7 — End-to-end voice pipeline.** A scenario becomes a multi-turn
+> **Phase 7, with parts of 9 and 10 — End-to-end voice pipeline.** A scenario becomes a multi-turn
 > conversation with real audio: the Phase 6 caller decides what to say, Timbre
 > synthesises it, a reproducible degradation engine makes it sound like a phone
 > call, a bot adapter carries it, and Prisma transcribes the reply. Eleven
@@ -85,12 +89,12 @@ conversation scoring.
 > ratio, **not** a field recording. Design and limits in
 > [docs/PIPELINE.md](docs/PIPELINE.md).
 >
-> **Phase 7.1 — Concurrency enforcement.** The process-wide
+> **Phase 9 (partial) — Concurrency enforcement.** The process-wide
 > `PIPELINE_MAX_CONCURRENT_RUNS` limit is actually read and enforced; it
 > refuses with 503 rather than queueing, and releases its slot in a `finally`
 > so a cancellation or timeout cannot leak one.
 >
-> **Phase 8 — Operator workspace & public site.** A public site at `/` that
+> **Phase 13 (partial) — Operator workspace & public site.** A public site at `/` that
 > explains what the instrument measures, and an operator workspace at `/app`
 > that drives it: run history with filters, a conversation inspector, audio
 > playback with waveforms drawn from the decoded bytes, the scenario library
@@ -285,8 +289,8 @@ explicit criteria.
 
 ## What BhashaBench will do
 
-Phases 1 to 8 are delivered. Nothing else below is implemented yet; each item
-names the phase that delivers it.
+Struck-through rows are delivered; every other row is not implemented yet and
+names the original phase that delivers it.
 
 | Capability | What it does | Phase |
 |------------|--------------|-------|
@@ -294,13 +298,13 @@ names the phase that delivers it.
 | ~~Speech to text~~ | **Done (Phase 4).** Transcribe bot audio via Gnani Prisma — batch and streaming, behind a provider-independent interface | 4 |
 | ~~Text to speech~~ | **Done (Phase 5).** Synthesise caller speech via Gnani Timbre - 13 voices, 10 languages, telephony-rate audio | 5 |
 | ~~Simulated callers~~ | **Done (Phase 6).** A caller that pursues a goal rather than replaying a script - deterministic and rule-based. Gnani Evon is **not** integrated: no documented API access exists | 6 |
-| ~~Audio degradation~~ | **Done (Phase 7).** Band-limiting, background noise at a measured SNR, clipping, level and packet loss, reproducible from a fixed seed. Simulated conditions, not field recordings | 7 |
-| ~~Operator workspace~~ | **Done (Phase 8).** A public site at `/` and a workspace at `/app`: run history, a conversation inspector with audio playback and waveforms drawn from the stored bytes, scenario library and provider status | 8 |
-| Live telephony | Outbound calls with Twilio bidirectional media streaming and barge-in handling | 9 |
-| Orchestration | Run a full conversation end to end and persist every turn | 10 |
-| Automated scoring | Per-criterion pass/fail with reasoning, plus latency, word error rate and task completion | 11 |
-| Multilingual benchmarks | Comparable suites across ten Indian languages plus code-mixed speech | 12 |
-| Reporting | Aggregate queries, run comparison and regression detection | 13 |
+| ~~Audio degradation~~ | **Delivered (Phase 7, partial).** Band-limiting, background noise at a measured SNR, clipping, level and packet loss, reproducible from a fixed seed. Simulated conditions, not field recordings | 7 |
+| ~~Operator workspace~~ | **Delivered (Phase 13, partial).** A public site at `/` and a workspace at `/app`: run history, a conversation inspector with audio playback and waveforms drawn from the stored bytes, scenario library and provider status | 13 |
+| Live telephony | Outbound calls with Twilio bidirectional media streaming | 8 |
+| Real-time conversation | External voice bots over a documented protocol, streaming audio, barge-in and silence handling | 9 |
+| Recording | Full-conversation recording, retention and deletion | 10 |
+| Automated scoring | Word error rate, latency, task completion and an LLM judge with per-criterion reasoning, comparable across languages | 11 |
+| Reporting | Aggregate queries, run comparison and regression detection | 12 |
 | CI regression testing | Every pull request runs the suite and fails on quality regression | 14 |
 
 ---
@@ -324,14 +328,14 @@ names the phase that delivers it.
    │                        │                      │
 ┌──▼──────────────┐  ┌──────▼────────┐   ┌─────────▼─────────┐
 │ Orchestrator    │  │ Scenario      │   │ PostgreSQL 16     │
-│ (Phase 10)      │  │ engine        │   │ 5 tables, owned   │
+│ (Phase 9)       │  │ engine        │   │ 5 tables, owned   │
 └──┬──────────────┘  │ implemented   │   │ by Alembic        │
    │                 └───────────────┘   └───────────────────┘
    ├── Caller engine — rule-based     (Phase 6; Evon not integrated)
    ├── Speech to text — Gnani Prisma  (Phase 4)
    ├── Text to speech — Gnani Timbre  (Phase 5)
    ├── Audio degradation             (Phase 7)
-   └── Telephony — Twilio            (Phase 9) ──▶ bot under test
+   └── Telephony — Twilio            (Phase 8) ──▶ bot under test
 ```
 
 The backend is layered so that logic stays testable without HTTP and each
@@ -433,7 +437,7 @@ BhashaBench/
 │   ├── lib/content.ts         public-site copy and phase status
 │   ├── public/
 │   └── Dockerfile             multi-stage: development / builder / production
-├── benchmarks/                benchmark suite definitions      (Phase 12)
+├── benchmarks/                benchmark suite definitions      (Phase 11)
 ├── sample_bot/                reference bot to test against    (empty)
 ├── scripts/                   operational scripts
 │   └── api_surface.py         counts API paths/operations from the OpenAPI schema
@@ -609,9 +613,9 @@ their phase lands.
 | `GNANI_API_KEY`, `GNANI_API_BASE_URL` | 4–5 |
 | `GNANI_STT_MODEL` | 4 |
 | `SPEECH_PROVIDER`, `SPEECH_TIMEOUT_SECONDS`, `SPEECH_MAX_ATTEMPTS`, `SPEECH_MAX_TEXT_CHARS`, `SPEECH_LIVE_TESTS`, `GNANI_TTS_MODEL`, `GNANI_TTS_VOICE` | 5 |
-| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | 9 |
-| `PUBLIC_BASE_URL` | 9 |
-| `ALLOWED_BOT_NUMBERS`, `MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS` | 9 |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` | 8 |
+| `PUBLIC_BASE_URL` | 8 |
+| `ALLOWED_BOT_NUMBERS`, `MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS` | 8 |
 | `AUDIO_STORAGE_PATH`, `NOISE_MASTER_SEED` | superseded by `CALLER_AUDIO_STORAGE_DIR` and `PIPELINE_NOISE_SEED` in Phase 7 |
 | `JUDGE_RETRIES`, `PASS_THRESHOLD` | 11 |
 
@@ -962,26 +966,26 @@ documentation. Full detail in
 
 | # | Phase | Status |
 |---|-------|--------|
+| 0 | Baseline & defect remediation | 🔧 In progress |
 | 1 | Project foundation | ✅ Complete |
 | 2 | Database & scenario engine | ✅ Complete |
 | 3 | Scenario library & tooling | ✅ Complete |
-| 4 | Speech to text (Gnani Prisma) | ✅ Complete |
-| 5 | Text to speech (Gnani Timbre) | ✅ Complete |
-| 6 | Caller simulation — deterministic engine | ✅ Complete (Evon **not** integrated) |
-| 7 | End-to-end voice pipeline & audio degradation | ✅ Complete (no live call, no real bot) |
-| 7.1 | Concurrency enforcement | ✅ Complete |
-| 8 | Operator workspace & public site | ✅ Complete (no live bot, no telephony) |
-| 9 | Twilio telephony & media streaming | ⬜ Not started |
-| 10 | Conversation orchestration engine | ⬜ Not started |
-| 11 | Automated evaluation & scoring | ⬜ Not started |
-| 12 | Multilingual benchmarking | ⬜ Not started |
-| 13 | Results API & reporting | ⬜ Not started |
-| 14 | CI regression testing | ⬜ Not started |
-| 15 | Hardening, observability & release | ⬜ Not started |
+| 4 | Speech to text (Gnani Prisma) | ✅ Complete (batch live-verified; streaming not live-verified) |
+| 5 | Text to speech (Gnani Timbre) | ✅ Complete (batch; streaming not implemented) |
+| 6 | AI caller simulation — Evon | ⛔ Blocked — no published Evon API; deterministic caller delivered |
+| 7 | Audio degradation engine | 🟡 Partial |
+| 8 | Telephony integration | ⬜ Not started |
+| 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop only |
+| 10 | Recording & transcription | 🟡 Partial — per-turn artefacts only |
+| 11 | Evaluation & judge engine | ⬜ Not started |
+| 12 | Reporting & analytics backend | 🟡 Partial — run list and per-run report only |
+| 13 | Frontend dashboard | 🟡 Partial — operator workspace, no analytics |
+| 14 | CI/CD & safety | ⬜ Not started |
+| 15 | Production readiness & competition demo | 🟡 Partial — competition demo only |
 
-> The old Phase 13 "React dashboard" is **absorbed into Phase 8**, which
-> delivered the operator workspace early; telephony moved from 8 to 9 and
-> everything below it shifted by one. This table is the same one in
+> This is the **original** 15-phase numbering, restored after the competition.
+> The competition renumbered phases in flight; the roadmap's mapping table
+> translates between the two. This table is the same one in
 > [`docs/DEVELOPMENT_ROADMAP.md`](docs/DEVELOPMENT_ROADMAP.md) and
 > [`CLAUDE.md`](CLAUDE.md) — all three must agree.
 

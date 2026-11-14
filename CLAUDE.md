@@ -9,24 +9,32 @@ BhashaBench is an automated testing and benchmarking platform for
 Indian-language voice bots. It is being built in **15 controlled phases**; see
 `docs/DEVELOPMENT_ROADMAP.md`.
 
-**Phases 1 to 8 are complete.** Phase 9 has not started.
+**The original 15-phase plan is in force.** Phase 0 (baseline and defect
+remediation) is in progress; no new phase starts until it is approved.
 
-| Phase | Status |
-|-------|--------|
-| 1 — Project foundation | ✅ Complete |
-| 2 — Database & scenario engine | ✅ Complete |
-| 3 — Scenario library & tooling | ✅ Complete |
-| 4 — Speech to text (Gnani Prisma) | ✅ Complete |
-| 5 — Text to speech (Gnani Timbre) | ✅ Complete |
-| 6 — Caller simulation (deterministic) | ✅ Complete — Evon **not** integrated |
-| 7 — End-to-end voice pipeline | ✅ Complete — no live call, no real bot |
-| 7.1 — Concurrency enforcement | ✅ Complete |
-| 8 — Operator workspace & public site | ✅ Complete — no live bot, no telephony |
-| 9–15 | ⬜ Not started |
+| # | Phase | Status |
+|---|-------|--------|
+| 0 | Baseline & defect remediation | 🔧 In progress |
+| 1 | Project foundation | ✅ Complete |
+| 2 | Database & scenario engine | ✅ Complete |
+| 3 | Scenario library & tooling | ✅ Complete |
+| 4 | Speech to text (Gnani Prisma) | ✅ Complete (batch live-verified; streaming not live-verified) |
+| 5 | Text to speech (Gnani Timbre) | ✅ Complete (batch; streaming not implemented) |
+| 6 | AI caller simulation — Evon | ⛔ Blocked — no published Evon API; deterministic caller delivered |
+| 7 | Audio degradation engine | 🟡 Partial |
+| 8 | Telephony integration | ⬜ Not started |
+| 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop only |
+| 10 | Recording & transcription | 🟡 Partial — per-turn artefacts only |
+| 11 | Evaluation & judge engine | ⬜ Not started |
+| 12 | Reporting & analytics backend | 🟡 Partial — run list and per-run report only |
+| 13 | Frontend dashboard | 🟡 Partial — operator workspace, no analytics |
+| 14 | CI/CD & safety | ⬜ Not started |
+| 15 | Production readiness & competition demo | 🟡 Partial — competition demo only |
 
-Phase 8 renumbered the tail: telephony moved from 8 to 9 and everything
-below shifted by one. The old Phase 13 "React dashboard" is absorbed into
-Phase 8.
+The competition renumbered phases in flight. The roadmap's mapping table
+translates; historical reports keep the numbering they were written in.
+**Phase numbers in this file are the original ones** — for example,
+telephony is Phase 8, the real-time engine Phase 9, evaluation Phase 11.
 
 ## The two rules that matter most
 
@@ -41,9 +49,9 @@ Phase 8.
 ## Phase discipline
 
 Do not implement functionality belonging to a future phase, even if it seems
-convenient. A pull request that does will be asked to split. Phase 9+ work —
-telephony, multi-scenario orchestration, evaluation — is explicitly out of
-scope until its phase. In particular, do not add a Twilio client or any
+convenient. A pull request that does will be asked to split. Telephony
+(Phase 8), real-time orchestration (Phase 9) and evaluation (Phase 11) are
+explicitly out of scope until their phase. In particular, do not add a Twilio client or any
 telephony bridge, and do not set `CallSession`'s `DIALING`, `NO_ANSWER` or
 `BUSY` statuses: an offline simulation must not claim a telephony state.
 
@@ -70,7 +78,7 @@ Phase 6 is the first thing to write to `TestRun`, `CallSession` and
 `ConversationTurn`, and it reuses them exactly as Phase 2 shaped them: one
 conversation is a `CallSession`, one utterance a `ConversationTurn`, and the
 caller's own state lives in the existing JSONB columns under a `caller`
-namespace so Phase 9's telephony metadata can share the column. **Phase 6
+namespace so Phase 8's telephony metadata can share the column. **Phase 6
 adds no table and no migration** — keep it that way unless a real column is
 needed, and run `alembic check`.
 
@@ -79,7 +87,7 @@ No call is placed, so a conversation opens as `IN_PROGRESS`, never `PENDING`;
 must not claim.
 
 Phase 4 still persists no transcript of its own: deciding which turn a loose
-transcript belongs to is orchestration (Phase 10). The transcription and speech
+transcript belongs to is orchestration (Phase 9). The transcription and speech
 endpoints therefore work with PostgreSQL down; the caller endpoints do not.
 
 ## Architecture rules
@@ -147,7 +155,7 @@ substitute a neighbouring language.
 
 Nothing above `app/transcription/providers/` may import a vendor module or
 mention a vendor field name. The service layer has never heard of
-`audio_file` or `detected_language_code`. That boundary is what lets Phase 12
+`audio_file` or `detected_language_code`. That boundary is what lets Phase 11
 benchmark a second engine without touching the evaluation code.
 
 Adding a provider means writing an adapter, declaring a
@@ -302,7 +310,7 @@ malformed *upload* is refused with a 4xx and leaves the run waiting, so the
 operator can retry — a mistyped filename is not a reason to discard a
 conversation.
 
-### The frontend (Phase 8)
+### The frontend (Phase 13, delivered as competition Phase 8)
 
 Two surfaces, one visual system, separate chrome. The root layout carries
 the document and the fonts only; `/` supplies a marketing header and `/app`
