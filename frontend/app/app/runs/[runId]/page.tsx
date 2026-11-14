@@ -144,6 +144,26 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
           </Panel>
         ) : null}
 
+        {typeof run.awaiting_bot_text_for_turn === "number" ? (
+          <Panel className="border-busy/40">
+            <div className="px-4 py-3">
+              <p className="text-[13px] font-medium text-busy">
+                Waiting for the bot&rsquo;s text reply for turn{" "}
+                {run.awaiting_bot_text_for_turn}
+              </p>
+              <p className="mt-1 text-[12px] leading-relaxed text-text-dim">
+                An offline simulation moves no audio. The caller has spoken and
+                the run is paused &mdash; healthy, not failed. Post what the bot
+                said to{" "}
+                <code className="font-mono text-[11px] text-text-dim">
+                  POST /api/v1/test-runs/{run.run_id}/bot-text
+                </code>{" "}
+                to continue.
+              </p>
+            </div>
+          </Panel>
+        ) : null}
+
         <RunEvidence run={run} />
 
         {/* Configuration. The reproducibility record: a run nobody can

@@ -354,6 +354,8 @@ export interface Run {
   termination_reason: TerminationReason | null;
   goal_achieved: boolean;
   total_audio_seconds: number;
+  /** Offline run with the manual adapter, waiting for `POST /bot-text`. */
+  awaiting_bot_text_for_turn: number | null;
   awaiting_bot_audio_for_turn: number | null;
   started_at: string | null;
   finished_at: string | null;

@@ -600,6 +600,8 @@ their phase lands.
 | `CALLER_AUDIO_STORAGE_DIR` | Conversation audio directory; `storage/` is git-ignored | `storage/caller-audio` |
 | `CALLER_SYNTHESISE_AUDIO` | Synthesise caller audio per turn. Off deliberately — with `SPEECH_PROVIDER=timbre` every turn is a billable call. The pipeline forces it on for runs that move audio | `false` |
 | `PIPELINE_BOT_ADAPTER` | Default bot adapter. Both options send audio nowhere, which is why one is the default | `scripted` |
+| `PIPELINE_FIXTURE_AUDIO_PATH` | WAV the `scripted` adapter replays as every bot reply. Unset, a scripted audio run fails on turn 0 | _unset_ |
+| `PIPELINE_FIXTURE_BOT_TEXT_PATH` | Bot replies as text, one per line, for `offline_simulation` with the `scripted` adapter. Unset, such a run fails on its first bot turn | _unset_ |
 | `PIPELINE_RUN_TIMEOUT_SECONDS` | Wall-clock ceiling on one run | `600.0` |
 | `PIPELINE_MAX_CONCURRENT_RUNS` | Bounds provider spend and memory. Enforced per process: `POST /start` answers 503 beyond it rather than queueing | `2` |
 | `PIPELINE_NOISE_SEED` | Default degradation seed, fixed so a run is reproducible | `42` |
@@ -848,8 +850,8 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 
 ## API endpoints
 
-The API exposes **35 paths and 43 HTTP operations**, plus one WebSocket route
-that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 36
+The API exposes **36 paths and 44 HTTP operations**, plus one WebSocket route
+that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 37
 documented paths in total.
 
 Those figures come from the generated OpenAPI document, never from a hand
@@ -910,6 +912,7 @@ python scripts/api_surface.py --json   # same, machine-readable
 | `GET` | `/api/v1/test-runs` | Paginated run history, newest first. Filters on `suite_id`, `status`, `mode`, `language`, `outcome` and `scenario`. Only runs the pipeline created are listed; a caller-only conversation records no pipeline metadata and stays addressable through `/api/v1/caller` |
 | `POST` | `/api/v1/test-runs/{id}/start` | Runs turns until terminal, or until the run needs audio from outside. A run left `running` with `awaiting_bot_audio_for_turn` is waiting, not failed |
 | `POST` | `/api/v1/test-runs/{id}/bot-audio` | Supplies the bot's reply as audio; it is validated, transcribed and the run continues |
+| `POST` | `/api/v1/test-runs/{id}/bot-text` | Supplies the bot's reply as text for an offline run with the manual adapter; the run continues |
 | `POST` | `/api/v1/test-runs/{id}/cancel` | Stops a run. Outcome `cancelled`, never `failed` - an operator's decision is not a finding about the bot |
 | `GET` | `/api/v1/test-runs/{id}` | State, counters and outcome |
 | `GET` | `/api/v1/test-runs/{id}/turns` | Every utterance of the run's conversation |

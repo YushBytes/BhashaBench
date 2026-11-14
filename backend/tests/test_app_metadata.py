@@ -89,6 +89,7 @@ class TestOpenApiDocument:
             "/api/v1/test-runs/{run_id}",
             "/api/v1/test-runs/{run_id}/start",
             "/api/v1/test-runs/{run_id}/bot-audio",
+            "/api/v1/test-runs/{run_id}/bot-text",
             "/api/v1/test-runs/{run_id}/cancel",
             "/api/v1/test-runs/{run_id}/turns",
             "/api/v1/test-runs/{run_id}/artifacts",

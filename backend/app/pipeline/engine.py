@@ -35,7 +35,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -271,6 +271,10 @@ class RunReport:
     would imply a market was synthesised.
     """
     degradation_seed: int | None
+    awaiting_bot_text_for_turn: int | None
+    """Set while an `offline_simulation` run with the manual adapter waits for
+    the bot's reply as text (`POST /test-runs/{id}/bot-text`). Healthy, not
+    failed - the offline counterpart of `awaiting_bot_audio_for_turn`."""
     awaiting_bot_audio_for_turn: int | None
     """Set while the run is waiting for an operator to supply the bot's reply.
 
@@ -326,8 +330,14 @@ class RunEngine:
         stt_provider: str | None = None,
         tts_provider: str | None = None,
         slots: RunSlots | None = None,
+        bot_text_replies: Sequence[str] | None = None,
     ) -> None:
         self._session = session
+        # The scripted bot's side of an `offline_simulation`, as text. Offline
+        # moves no audio, so the adapter's `send_turn` is never called there;
+        # the engine reads these instead. `None` means none were configured,
+        # which fails an offline scripted run clearly rather than stalling it.
+        self._bot_text_replies = tuple(bot_text_replies) if bot_text_replies else ()
         self._orchestrator = orchestrator
         self._settings = settings
         self._bot = bot_adapter
@@ -748,7 +758,8 @@ class RunEngine:
             if caller_state_is_terminal(caller_state):
                 run, meta = self._load(run_id)
                 self._close_from_caller(run, meta, conversation, events, artefacts, transitions)
-            return False
+                return False
+            return self._offline_bot_reply(run_id, conversation, turn_index + 1)
 
         if caller_state_is_terminal(caller_state):
             meta["events"] = events
@@ -1227,6 +1238,133 @@ class RunEngine:
             await self.run_to_completion(run_id)
         return self.report(run_id)
 
+    # -- Offline replies ----------------------------------------------------
+
+    def _offline_bot_reply(
+        self, run_id: uuid.UUID, conversation: CallSession, bot_turn_index: int
+    ) -> bool:
+        """Supply the bot's side of one offline turn, as text.
+
+        The scripted adapter reads the configured text fixture; the manual
+        adapter pauses the run until an operator posts the reply. Before Phase
+        0 this always returned False with no reply recorded, so every `/start`
+        added one caller turn and the run sat in `running` forever.
+
+        Returns True when a reply was recorded and the loop may continue.
+        """
+        run, meta = self._load_active(run_id)
+        events: list[dict[str, Any]] = list(meta.get("events", []))
+        adapter = self._bot.capabilities.name
+
+        if adapter == "manual":
+            events.append(
+                StageEvent(
+                    turn_index=bot_turn_index,
+                    stage="bot_exchange",
+                    status="pending",
+                    detail=(
+                        "waiting for the bot's reply as text: "
+                        f"POST /api/v1/test-runs/{run_id}/bot-text"
+                    ),
+                ).as_dict()
+            )
+            meta["events"] = events
+            meta["awaiting_bot_text_for_turn"] = bot_turn_index
+            repo.update_pipeline_metadata(self._session, run, meta)
+            return False
+
+        bot_turns_so_far = sum(
+            1
+            for turn in caller_repo.list_turns(self._session, conversation.id)
+            if turn.speaker.value == Speaker.BOT.value
+        )
+        if bot_turns_so_far >= len(self._bot_text_replies):
+            reason = (
+                "offline_simulation with the 'scripted' adapter needs bot replies as "
+                "text, and none are configured. Set PIPELINE_FIXTURE_BOT_TEXT_PATH to a "
+                "UTF-8 file with one reply per line, or create the run with "
+                "bot_adapter 'manual' and post each reply to /bot-text."
+                if not self._bot_text_replies
+                else f"the scripted bot has no text reply for turn {bot_turn_index}"
+            )
+            events.append(
+                StageEvent(
+                    turn_index=bot_turn_index,
+                    stage="bot_exchange",
+                    status="failed",
+                    detail=reason,
+                ).as_dict()
+            )
+            meta["events"] = events
+            self._finish(
+                run,
+                meta,
+                status=PipelineStatus.FAILED,
+                outcome=RunOutcome.EXTERNAL_BOT_UNAVAILABLE,
+                error=f"the bot adapter failed: {reason}",
+            )
+            return False
+
+        self._orchestrator.submit_bot_text(
+            conversation.id, self._bot_text_replies[bot_turns_so_far]
+        )
+        events.append(
+            StageEvent(
+                turn_index=bot_turn_index,
+                stage="bot_exchange",
+                status="ok",
+                detail="scripted text reply (fixture, not a bot)",
+            ).as_dict()
+        )
+        meta["events"] = events
+        repo.update_pipeline_metadata(self._session, run, meta)
+        self._session.expire_all()
+        return True
+
+    async def supply_bot_text(self, run_id: uuid.UUID, *, text: str) -> RunReport:
+        """Accept the bot's reply as text and carry an offline run on.
+
+        The offline counterpart of `supply_bot_audio`, for a run created with
+        the manual adapter. An empty string is accepted and recorded as the bot
+        saying nothing - that is a finding about the bot, not a malformed
+        request.
+
+        Raises:
+            NotFoundError: no such run.
+            RunNotActiveError: the run has already finished.
+            PipelineConfigurationError: the run is not waiting for bot text.
+            RunCapacityExhaustedError: no concurrency slot was free.
+        """
+        async with self._admitted(run_id):
+            run, meta = self._load_active(run_id)
+            awaiting = meta.get("awaiting_bot_text_for_turn")
+            if awaiting is None:
+                raise PipelineConfigurationError(
+                    f"run {run_id} is not waiting for bot text. Only an "
+                    "offline_simulation run with bot_adapter 'manual' takes text "
+                    "replies, and only after /start has paused it.",
+                    run_id=str(run_id),
+                    stage="bot_exchange",
+                )
+            conversation = self._conversation(run_id)
+            self._orchestrator.submit_bot_text(conversation.id, text)
+            events: list[dict[str, Any]] = list(meta.get("events", []))
+            events.append(
+                StageEvent(
+                    turn_index=int(awaiting),
+                    stage="bot_exchange",
+                    status="ok",
+                    detail=f"text supplied through the API for turn {awaiting}",
+                ).as_dict()
+            )
+            meta["events"] = events
+            meta.pop("awaiting_bot_text_for_turn", None)
+            repo.update_pipeline_metadata(self._session, run, meta)
+            self._session.expire_all()
+            # Carry on to the next pause or the end; `_admitted` is re-entrant.
+            await self.run_to_completion(run_id)
+            return self.report(run_id)
+
     # -- Closing ------------------------------------------------------------
 
     def _close_from_caller(
@@ -1339,6 +1477,7 @@ class RunEngine:
             noise_profile=NoiseProfile(meta.get("noise_profile", NoiseProfile.CLEAN.value)),
             scenario_noise_profile=meta.get("scenario_noise_profile"),
             degradation_seed=meta.get("degradation_seed"),
+            awaiting_bot_text_for_turn=meta.get("awaiting_bot_text_for_turn"),
             awaiting_bot_audio_for_turn=meta.get("awaiting_bot_audio_for_turn"),
             caller_turns=caller_turns,
             bot_turns=bot_turns,

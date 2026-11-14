@@ -180,6 +180,12 @@ class RunResponse(BaseModel):
         "measured. Containers this project cannot inspect contribute nothing "
         "rather than a guess.",
     )
+    awaiting_bot_text_for_turn: int | None = Field(
+        default=None,
+        description="Set when an `offline_simulation` run with the manual adapter "
+        "is waiting for the bot's reply as text (`POST /bot-text`). The run is "
+        "healthy, not failed.",
+    )
     awaiting_bot_audio_for_turn: int | None = Field(
         default=None,
         description="Set when the run is waiting for an operator to supply the "
@@ -245,6 +251,25 @@ class RunReportResponse(BaseModel):
         description="Stated on the API surface so a consumer cannot mistake "
         "these counts for a quality score.",
     )
+
+
+class BotTextRequest(BaseModel):
+    """The bot's reply as text, for an offline run with the manual adapter."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(
+        max_length=2000,
+        description="What the bot said. An empty string records that the bot "
+        "said nothing, which is a finding about the bot, not a malformed request.",
+    )
+
+
+class BotTextResponse(BaseModel):
+    """What happened after an operator supplied the bot's reply as text."""
+
+    run: RunResponse
+    turn_index: int = Field(ge=0, description="The turn this reply answered.")
 
 
 class BotAudioResponse(BaseModel):

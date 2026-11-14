@@ -1,0 +1,8 @@
+# Scripted bot replies for offline_simulation (PIPELINE_FIXTURE_BOT_TEXT_PATH).
+# A fixture, not a bot: these lines establish nothing about any bot's behaviour.
+# One reply per line, used in order and repeated from the top.
+
+Hello, thank you for calling. How can I help you today?
+Could you please tell me your policy number?
+Thank you. Your claim has been assessed and the amount will be paid within seven days.
+Yes, that is correct. Is there anything else I can help you with?

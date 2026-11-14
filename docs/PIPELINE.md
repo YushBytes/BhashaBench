@@ -12,7 +12,7 @@ every report repeats it, and nothing infers it.
 
 | Mode | Audio | The bot's side comes from | What a result establishes |
 |------|-------|---------------------------|---------------------------|
-| `offline_simulation` | none | text replies | The caller's logic. **Nothing about audio.** |
+| `offline_simulation` | none | text replies: the scripted adapter reads `PIPELINE_FIXTURE_BOT_TEXT_PATH`; the manual adapter waits for `POST /bot-text` | The caller's logic. **Nothing about audio.** |
 | `audio_fixture_test` | real, end to end | pre-recorded or generated audio files | Synthesis, degradation, storage and transcription work together. **Nothing about any particular voice bot.** |
 | `external_bot_test` | real, end to end | audio an operator obtained from the bot under test | The only mode that may be described as testing a bot |
 | `telephony_test` | — | — | **Not implemented.** Creating a run in this mode is refused |
@@ -405,6 +405,24 @@ written against a real bot's published interface and added to `_FACTORIES` in
 reason the speech subsystems have none: "which bot produced this
 conversation?" must be answerable by reading the source.
 
+### Offline replies — how `offline_simulation` terminates
+
+Offline mode moves no audio, so the adapter's `send_turn` is never called.
+The engine supplies the bot's side as text instead:
+
+- **scripted** — replies come from `PIPELINE_FIXTURE_BOT_TEXT_PATH`, one per
+  line, used in order and repeated, so a single `/start` drives the run to
+  its terminal state. Unset, the run **fails** on its first bot turn with an
+  error naming the setting. The replies are a fixture, not a bot.
+- **manual** — after each caller turn the run pauses with
+  `awaiting_bot_text_for_turn` set (healthy, not failed) until an operator
+  posts what the bot said to `POST /bot-text`; the run then continues to its
+  next pause or its end.
+
+Until Phase 0 the offline bot leg recorded nothing and reported "waiting"
+with no way to answer, so each `/start` added one caller turn and the run
+stayed `running` indefinitely.
+
 ### The manual flow — how a real bot gets tested
 
 This is the honest maximum available until a bot publishes an API or telephony
@@ -513,6 +531,7 @@ provider configured, spend money.
 | `POST /test-runs` | Creates a run (201). Executes nothing |
 | `POST /test-runs/{id}/start` | Runs turns until terminal, or until it needs external audio |
 | `POST /test-runs/{id}/bot-audio` | Supplies the bot's reply and continues the run |
+| `POST /test-runs/{id}/bot-text` | Supplies the bot's reply as text for an offline run with the manual adapter, and continues it. An empty string records the bot saying nothing |
 | `POST /test-runs/{id}/cancel` | Stops it; outcome `cancelled`, never `failed` |
 | `GET /test-runs/{id}` | State, counters and outcome |
 | `GET /test-runs/{id}/turns` | Every utterance, in order |
@@ -581,6 +600,7 @@ curl -s     $B/$RUN/report      | python -m json.tool
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `PIPELINE_BOT_ADAPTER` | `scripted` | Default adapter. Both options send audio nowhere |
+| `PIPELINE_FIXTURE_BOT_TEXT_PATH` | _unset_ | UTF-8 file of bot replies, one per line, that the `scripted` adapter uses in `offline_simulation`, in order and repeated. Unset, an offline scripted run fails on its first bot turn with an error naming the setting |
 | `PIPELINE_FIXTURE_AUDIO_PATH` | _unset_ | WAV the `scripted` adapter replays per turn. Unset keeps the turn-0 failure; set, it is what lets `audio_fixture_test` complete. The reply is still not claimed as bot audio |
 | `PIPELINE_SERVE_ARTEFACTS` | `false` | Lets a *deployed* environment stream stored audio. Development always does |
 | `PIPELINE_RUN_TIMEOUT_SECONDS` | `600.0` | Wall-clock ceiling on one run |

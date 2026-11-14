@@ -72,6 +72,46 @@ def fixture_replies_from_path(path: str | Path, *, count: int) -> tuple[bytes, .
     return (payload,) * count
 
 
+def fixture_text_replies_from_path(path: str | Path, *, count: int) -> tuple[str, ...]:
+    """Read bot replies as text, one per line, for `offline_simulation`.
+
+    The text counterpart of `fixture_replies_from_path`, named by
+    `PIPELINE_FIXTURE_BOT_TEXT_PATH` - again an environment setting that no
+    client value reaches. Blank lines and lines starting with `#` are skipped
+    so a fixture can carry a comment. The remaining lines are used in order and
+    repeated from the top to `count`, which the caller sizes from the turn
+    ceiling, so a run ends on its budget rather than on an exhausted script.
+
+    Raises:
+        PipelineConfigurationError: the path is missing, unreadable as UTF-8,
+            or holds no reply.
+    """
+    resolved = Path(path).expanduser()
+    if not resolved.is_file():
+        raise PipelineConfigurationError(
+            f"PIPELINE_FIXTURE_BOT_TEXT_PATH is set to '{path}', which is not a "
+            "readable file. Point it at a UTF-8 text file with one bot reply per "
+            "line, or unset it."
+        )
+    try:
+        text = resolved.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise PipelineConfigurationError(
+            f"PIPELINE_FIXTURE_BOT_TEXT_PATH '{path}' is not valid UTF-8."
+        ) from exc
+    lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    if not lines:
+        raise PipelineConfigurationError(
+            f"PIPELINE_FIXTURE_BOT_TEXT_PATH '{path}' holds no replies. An empty "
+            "script is not a bot saying nothing - it is a broken fixture."
+        )
+    return tuple(lines[i % len(lines)] for i in range(count))
+
+
 def _build_manual(replies: Sequence[bytes] | None) -> BotAdapter:
     # Scripted replies are meaningless here: the whole point of this adapter
     # is that the audio arrives later. Ignoring them silently would hide a

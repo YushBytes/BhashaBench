@@ -391,7 +391,7 @@ The generated OpenAPI document is the authority, and `scripts/api_surface.py`
 is the single place the documented figures come from:
 
 ```bash
-python scripts/api_surface.py          # 35 paths, 43 operations
+python scripts/api_surface.py          # 36 paths, 44 operations
 python scripts/api_surface.py --json   # machine-readable
 ```
 

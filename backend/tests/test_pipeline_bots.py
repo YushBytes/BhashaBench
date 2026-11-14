@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -21,6 +22,7 @@ from app.pipeline.bots.registry import (
     available_adapters,
     build_adapter,
     describe_adapters,
+    fixture_text_replies_from_path,
 )
 from app.pipeline.bots.scripted import PROVIDER_NAME as SCRIPTED
 from app.pipeline.bots.scripted import ScriptedBotAdapter
@@ -256,3 +258,48 @@ class TestBotReply:
 
     def test_metadata_defaults_to_empty(self) -> None:
         assert BotReply(audio=b"x").metadata == {}
+
+
+# ---------------------------------------------------------------------------
+# Text replies for offline_simulation
+# ---------------------------------------------------------------------------
+
+
+class TestFixtureTextReplies:
+    """`PIPELINE_FIXTURE_BOT_TEXT_PATH`: the scripted bot's side offline."""
+
+    def test_lines_are_used_in_order_and_repeated(self, tmp_path: Path) -> None:
+        path = tmp_path / "replies.txt"
+        path.write_text("first\nsecond\n", encoding="utf-8")
+
+        assert fixture_text_replies_from_path(path, count=5) == (
+            "first",
+            "second",
+            "first",
+            "second",
+            "first",
+        )
+
+    def test_blank_and_comment_lines_are_skipped(self, tmp_path: Path) -> None:
+        path = tmp_path / "replies.txt"
+        path.write_text("# a comment\n\n  only reply  \n", encoding="utf-8")
+
+        assert fixture_text_replies_from_path(path, count=2) == ("only reply", "only reply")
+
+    def test_a_missing_file_is_refused_by_name(self, tmp_path: Path) -> None:
+        with pytest.raises(PipelineConfigurationError, match="PIPELINE_FIXTURE_BOT_TEXT_PATH"):
+            fixture_text_replies_from_path(tmp_path / "absent.txt", count=3)
+
+    def test_a_file_with_no_replies_is_refused(self, tmp_path: Path) -> None:
+        path = tmp_path / "replies.txt"
+        path.write_text("# only comments\n\n", encoding="utf-8")
+
+        with pytest.raises(PipelineConfigurationError, match="holds no replies"):
+            fixture_text_replies_from_path(path, count=3)
+
+    def test_the_shipped_fixture_loads(self) -> None:
+        shipped = Path(__file__).parent / "fixtures" / "bot_text" / "cooperative_en.txt"
+        replies = fixture_text_replies_from_path(shipped, count=4)
+
+        assert len(set(replies)) == 4
+        assert not any(reply.startswith("#") for reply in replies)

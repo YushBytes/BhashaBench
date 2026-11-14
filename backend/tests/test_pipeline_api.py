@@ -1491,3 +1491,176 @@ class TestRecordedAdapterThroughTheRealFactory:
         # and cancellable, because those paths never call the adapter.
         assert real_factory_client.get(f"{BASE}/{run['run_id']}").status_code == 200
         assert real_factory_client.post(f"{BASE}/{run['run_id']}/cancel").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# offline_simulation: a reply source, and a terminal state
+# ---------------------------------------------------------------------------
+
+BOT_TEXT_FIXTURE = Path(__file__).parent / "fixtures" / "bot_text" / "cooperative_en.txt"
+
+_TERMINAL = {"completed", "failed", "cancelled", "timed_out"}
+
+
+@pytest.fixture
+def offline_client(
+    api_client: TestClient, test_app: FastAPI, tmp_path: Path
+) -> Iterator[TestClient]:
+    """The production engine factory with the text fixture configured."""
+    original = test_app.dependency_overrides[get_settings]
+    settings = original().model_copy(
+        update={
+            "caller_audio_storage_dir": str(tmp_path / "audio"),
+            "pipeline_fixture_bot_text_path": str(BOT_TEXT_FIXTURE),
+        }
+    )
+    test_app.dependency_overrides[get_settings] = lambda: settings
+    yield api_client
+    test_app.dependency_overrides[get_settings] = original
+
+
+class TestOfflineSimulationTerminates:
+    def test_one_start_with_the_text_fixture_reaches_a_terminal_state(
+        self, offline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        """Before Phase 0 a single /start left this `running` after one turn."""
+        run = _create(offline_client, scenario_ids, mode="offline_simulation")
+
+        body = offline_client.post(f"{BASE}/{run['run_id']}/start").json()
+
+        assert body["status"] in _TERMINAL
+        assert body["status"] != "failed", body["error"]
+        assert body["caller_turns"] >= 2
+        assert body["bot_turns"] >= 1
+        assert body["awaiting_bot_text_for_turn"] is None
+        assert body["awaiting_bot_audio_for_turn"] is None
+
+    def test_the_replies_come_from_the_fixture_in_order(
+        self, offline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        run = _create(offline_client, scenario_ids, mode="offline_simulation")
+        offline_client.post(f"{BASE}/{run['run_id']}/start")
+
+        turns = offline_client.get(f"{BASE}/{run['run_id']}/turns").json()["turns"]
+        bot_texts = [turn["text"] for turn in turns if turn["speaker"] == "bot"]
+        expected = [
+            line
+            for line in BOT_TEXT_FIXTURE.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+
+        assert bot_texts
+        assert bot_texts == [expected[i % len(expected)] for i in range(len(bot_texts))]
+
+    def test_scripted_without_a_fixture_fails_clearly_instead_of_stalling(
+        self, real_factory_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        run = _create(real_factory_client, scenario_ids, mode="offline_simulation")
+
+        body = real_factory_client.post(f"{BASE}/{run['run_id']}/start").json()
+
+        assert body["status"] == "failed"
+        assert "PIPELINE_FIXTURE_BOT_TEXT_PATH" in (body["error"] or "")
+        assert body["caller_turns"] == 1
+
+
+class TestOfflineManualTextReplies:
+    def test_a_manual_offline_run_waits_for_text(
+        self, real_factory_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        run = _create(
+            real_factory_client, scenario_ids, mode="offline_simulation", bot_adapter="manual"
+        )
+
+        body = real_factory_client.post(f"{BASE}/{run['run_id']}/start").json()
+
+        assert body["status"] == "running"
+        assert body["awaiting_bot_text_for_turn"] == 1
+        assert body["caller_turns"] == 1
+        assert body["error"] is None
+
+    def test_posted_text_advances_the_run_to_its_next_pause(
+        self, real_factory_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        run = _create(
+            real_factory_client, scenario_ids, mode="offline_simulation", bot_adapter="manual"
+        )
+        real_factory_client.post(f"{BASE}/{run['run_id']}/start")
+
+        answered = real_factory_client.post(
+            f"{BASE}/{run['run_id']}/bot-text",
+            json={"text": "Hello, how can I help you today?"},
+        )
+
+        assert answered.status_code == 200, answered.text
+        body = answered.json()
+        assert body["turn_index"] == 1
+        assert body["run"]["bot_turns"] == 1
+        assert body["run"]["caller_turns"] == 2
+        assert body["run"]["awaiting_bot_text_for_turn"] == 3
+
+    def test_repeated_replies_reach_a_terminal_state(
+        self, real_factory_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        run = _create(
+            real_factory_client, scenario_ids, mode="offline_simulation", bot_adapter="manual"
+        )
+        body = real_factory_client.post(f"{BASE}/{run['run_id']}/start").json()
+
+        for _ in range(40):
+            if body["status"] in _TERMINAL:
+                break
+            body = real_factory_client.post(
+                f"{BASE}/{run['run_id']}/bot-text", json={"text": "Sorry, I did not get that."}
+            ).json()["run"]
+
+        assert body["status"] in _TERMINAL
+
+    def test_an_empty_reply_is_recorded_as_the_bot_saying_nothing(
+        self,
+        real_factory_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+    ) -> None:
+        run = _create(
+            real_factory_client, scenario_ids, mode="offline_simulation", bot_adapter="manual"
+        )
+        real_factory_client.post(f"{BASE}/{run['run_id']}/start")
+
+        answered = real_factory_client.post(f"{BASE}/{run['run_id']}/bot-text", json={"text": ""})
+
+        assert answered.status_code == 200
+        turns = real_factory_client.get(f"{BASE}/{run['run_id']}/turns").json()["turns"]
+        assert [t["text"] for t in turns if t["speaker"] == "bot"] == [""]
+
+    def test_text_for_a_run_that_is_not_waiting_is_refused(
+        self, real_factory_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        run = _create(
+            real_factory_client, scenario_ids, mode="offline_simulation", bot_adapter="manual"
+        )
+
+        refused = real_factory_client.post(
+            f"{BASE}/{run['run_id']}/bot-text", json={"text": "too early"}
+        )
+
+        assert refused.status_code == 422
+        assert "not waiting for bot text" in refused.text
+
+    def test_an_overlong_reply_is_rejected_by_validation(
+        self, real_factory_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        run = _create(
+            real_factory_client, scenario_ids, mode="offline_simulation", bot_adapter="manual"
+        )
+        real_factory_client.post(f"{BASE}/{run['run_id']}/start")
+
+        refused = real_factory_client.post(
+            f"{BASE}/{run['run_id']}/bot-text", json={"text": "x" * 2001}
+        )
+
+        assert refused.status_code == 422
+        # The run is untouched and still waiting.
+        assert (
+            real_factory_client.get(f"{BASE}/{run['run_id']}").json()["awaiting_bot_text_for_turn"]
+            == 1
+        )

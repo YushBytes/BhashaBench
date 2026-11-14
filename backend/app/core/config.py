@@ -323,6 +323,20 @@ class Settings(BaseSettings):
             "read from the environment; no client value reaches it."
         ),
     )
+    pipeline_fixture_bot_text_path: str | None = Field(
+        default=None,
+        description=(
+            "Path to a UTF-8 text file of bot replies, one per line, that the "
+            "'scripted' adapter uses in `offline_simulation`. Lines are used in "
+            "order and repeated from the top when exhausted, so a run always "
+            "ends on its turn budget; blank lines and lines starting with '#' "
+            "are ignored. **Unset, an offline scripted run fails on its first "
+            "bot turn with an error naming this setting** rather than stalling "
+            "in `running`. The replies are a fixture, not a bot. This is an "
+            "operator setting read from the environment; no client value "
+            "reaches it."
+        ),
+    )
     pipeline_run_timeout_seconds: float = Field(
         default=600.0,
         gt=0,

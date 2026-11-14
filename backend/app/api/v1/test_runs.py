@@ -56,6 +56,7 @@ from app.pipeline.bots.registry import (
     build_adapter,
     describe_adapters,
     fixture_replies_from_path,
+    fixture_text_replies_from_path,
 )
 from app.pipeline.concurrency import get_run_slots
 from app.pipeline.degradation import NoiseProfile
@@ -81,6 +82,8 @@ from app.schemas.pipeline import (
     BotAdapterListResponse,
     BotAdapterResponse,
     BotAudioResponse,
+    BotTextRequest,
+    BotTextResponse,
     CreateRunRequest,
     RunArtefactsResponse,
     RunReportResponse,
@@ -143,6 +146,14 @@ def get_engine_factory(
                 count=settings.caller_max_turns,
             )
         adapter = build_adapter(resolved_adapter or settings.pipeline_bot_adapter, replies=replies)
+        # The scripted bot's side of an offline_simulation, as text. Only the
+        # scripted adapter reads it; the manual adapter waits for /bot-text.
+        text_replies: tuple[str, ...] | None = None
+        if resolved_adapter == SCRIPTED_ADAPTER and settings.pipeline_fixture_bot_text_path:
+            text_replies = fixture_text_replies_from_path(
+                settings.pipeline_fixture_bot_text_path,
+                count=settings.caller_max_turns,
+            )
         orchestrator = ConversationOrchestrator(
             session=session,
             caller=caller,
@@ -164,6 +175,7 @@ def get_engine_factory(
                 # which is exactly how PIPELINE_MAX_CONCURRENT_RUNS came to be
                 # a documented number with no consumer.
                 slots=get_run_slots(settings),
+                bot_text_replies=text_replies,
             )
         finally:
             # Synchronous teardown cannot await an async close, and these
@@ -406,6 +418,7 @@ def _run(report: RunReport) -> RunResponse:
         termination_reason=report.termination_reason,
         goal_achieved=report.goal_achieved,
         total_audio_seconds=report.total_audio_seconds,
+        awaiting_bot_text_for_turn=report.awaiting_bot_text_for_turn,
         awaiting_bot_audio_for_turn=report.awaiting_bot_audio_for_turn,
         started_at=report.started_at,
         finished_at=report.finished_at,
@@ -592,6 +605,38 @@ async def submit_bot_audio(
     return BotAudioResponse(
         run=_run(report),
         accepted_bytes=len(payload),
+        turn_index=awaiting if awaiting is not None else 0,
+    )
+
+
+@router.post(
+    "/{run_id}/bot-text",
+    response_model=BotTextResponse,
+    summary="Supply the bot's reply as text (offline simulation)",
+    description=(
+        "The manual path for `offline_simulation`, which moves no audio. A run "
+        "created with `bot_adapter: manual` pauses after each caller turn with "
+        "`awaiting_bot_text_for_turn` set; post what the bot said here and the "
+        "run continues to its next pause or its end. An empty string records "
+        "that the bot said nothing.\n\n"
+        "A run using the scripted adapter takes its text replies from "
+        "`PIPELINE_FIXTURE_BOT_TEXT_PATH` instead and never pauses here."
+    ),
+    responses=_COMMON_ERRORS,
+)
+async def submit_bot_text(
+    run_id: uuid.UUID,
+    payload: BotTextRequest,
+    engine: EngineDep,
+    session: DbSession,
+) -> BotTextResponse:
+    """Accept the bot's reply as text and carry the offline run on."""
+    before = engine.report(run_id)
+    awaiting = before.awaiting_bot_text_for_turn
+    report = await engine.supply_bot_text(run_id, text=payload.text)
+    session.commit()
+    return BotTextResponse(
+        run=_run(report),
         turn_index=awaiting if awaiting is not None else 0,
     )
 

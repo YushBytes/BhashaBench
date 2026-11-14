@@ -270,6 +270,9 @@ one approved, and the demo does not need it.
 
 ### 6.2 `offline_simulation` — **narrower** than documented — **Verified**
 
+> **Resolved in Phase 0** (`fix(pipeline): give offline simulation a reply
+> source and make it terminate`). The text below is the record as found.
+
 Previous reports said it "never reaches a terminal status". Measured: one
 `/start` leaves it `running`, but repeated calls drove it to `completed` with
 outcome `bot_unintelligible` after 4 caller turns. The caller gives up because
