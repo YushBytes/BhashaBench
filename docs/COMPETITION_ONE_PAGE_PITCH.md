@@ -48,8 +48,8 @@ established.
 | Pipeline orchestration — execution modes, artefact store, process-wide concurrency limit | Implemented |
 | Operator workspace and public site | Implemented |
 
-**1,999 automated tests; 1,958 pass, 41 are opt-in billable live-provider tests
-and are skipped.** 35 API paths, 43 operations. Zero lint, type or migration
+**2,073 automated tests; 2,032 pass, 41 are opt-in billable live-provider tests
+and are skipped.** 36 API paths, 44 operations. Zero lint, type or migration
 drift.
 
 ## Demo use case: Tamil crop-insurance claim

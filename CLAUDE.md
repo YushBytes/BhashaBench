@@ -404,7 +404,7 @@ non-operation fields (`$ref`, `summary`, `description`, `servers`,
 it cannot classify instead of silently miscounting. One WebSocket route
 (`/api/v1/transcription/stream`) is deliberately absent from the schema —
 OpenAPI 3.1 cannot describe a WebSocket — so it is counted separately in prose,
-never folded into the 35.
+never folded into the 36.
 
 If the numbers change, run the script and update `README.md` and this file
 together. Do not hardcode a figure the script does not produce.
