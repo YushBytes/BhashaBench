@@ -198,8 +198,8 @@ wire:
 
 The three noise profiles sit on the telephony channel, because noise on a
 wideband studio recording is not the condition being simulated. **No named
-profile applies packet loss** — it is configurable, but a profile name never
-implies a lossy network.
+profile applies packet loss** on its own — a profile name never implies a
+lossy network. Packet loss comes from a scenario's declaration (below).
 
 The ratios are accurate to better than 0.5 dB, asserted across seven targets by
 isolating the noise (noisy signal minus clean signal) and measuring the real
@@ -223,6 +223,32 @@ A scenario names an acoustic *environment*; the engine applies a *severity*.
 Several environments share a severity, which loses information — so a run
 records **both** the declared environment and the profile applied, and the
 report shows both rather than implying the environment was recreated.
+
+### A scenario's declared SNR and packet loss are applied
+
+The environment name chooses the **channel** (the profile's rate and band).
+The scenario's own `snr_db` and `packet_loss_percent` set the **noise and
+loss** on it. Precedence:
+
+1. **An operator's explicit profile** for the run wins, applied as its
+   reviewed preset (no packet loss). `degradation_requested.source` is
+   `operator`.
+2. Otherwise **the scenario's declaration**: its `snr_db` on the mapped
+   channel and its `packet_loss_percent`. `source` is `scenario`.
+3. A scenario whose environment is `clean` asks for no noise, so its
+   `snr_db` does not apply; a declared packet loss still does.
+
+Requested and achieved are both recorded. The run's
+`degradation_requested` holds `source`, `snr_db` and `packet_loss_percent`;
+every degraded artefact holds `requested_from`, the requested `snr_db` and
+`packet_loss_percent`, the **measured** `snr_db_achieved` (from the noise
+actually added) and `packet_loss_realised_percent` with the packet counts.
+Tests re-derive both from the stored bytes rather than trusting the fields.
+
+Until Phase 0 the declared values were read by nothing: a scenario declaring
+10 dB and 8% loss ran at its preset (25 dB, no loss). Runs created before the
+change carry no `degradation_requested` and keep their preset exactly, so
+their recorded evidence is unchanged.
 
 A scenario's declared environment wins unless the request names a profile
 explicitly: the scenario's audio section is part of the test's definition, and

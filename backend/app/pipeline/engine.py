@@ -37,7 +37,7 @@ import logging
 import uuid
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -170,6 +170,14 @@ class RunConfig:
         return self.mode is not ExecutionMode.OFFLINE_SIMULATION
 
 
+def _with_source(parameters: dict[str, Any], requested: dict[str, Any] | None) -> dict[str, Any]:
+    """Degradation parameters plus who asked for them."""
+    out = dict(parameters)
+    if requested:
+        out["requested_from"] = requested.get("source")
+    return out
+
+
 @dataclass(slots=True)
 class StageEvent:
     """One step of one turn, and what became of it."""
@@ -271,6 +279,11 @@ class RunReport:
     would imply a market was synthesised.
     """
     degradation_seed: int | None
+    degradation_requested: dict[str, Any] | None
+    """`source` (`scenario` or `operator`), `snr_db` and
+    `packet_loss_percent` each degraded turn was asked for. The achieved
+    values are measured per artefact. `None` for runs that move no audio
+    and for runs created before this was recorded."""
     awaiting_bot_text_for_turn: int | None
     """Set while an `offline_simulation` run with the manual adapter waits for
     the bot's reply as text (`POST /test-runs/{id}/bot-text`). Healthy, not
@@ -428,6 +441,7 @@ class RunEngine:
         spec = ScenarioSpec.model_validate(scenario_row.spec)
         caller_meta = caller_repo.caller_metadata_of(conversation)
         profile = self._resolve_profile(config, spec)
+        requested = self._requested_degradation(config, spec, profile)
         declared = getattr(spec.audio, "noise_profile", None)
         declared_name = str(getattr(declared, "value", declared) or "clean")
         budget = self._resolve_budget(config, caller_meta)
@@ -465,6 +479,10 @@ class RunEngine:
             "bot_contacts_external_system": self._bot.capabilities.contacts_external_system,
             "noise_profile": profile.value,
             "scenario_noise_profile": declared_name,
+            # What each degraded turn is asked for, and on whose authority.
+            # Read back per turn; a run created before this existed has no
+            # entry and keeps its preset exactly.
+            "degradation_requested": requested,
             "degrade_caller_audio": config.degrade_caller_audio and config.uses_audio,
             "degradation_seed": self._resolve_seed(config),
             "turn_budget": budget,
@@ -507,6 +525,37 @@ class RunEngine:
         declared = getattr(spec.audio, "noise_profile", None)
         key = str(getattr(declared, "value", declared) or "clean")
         return _SCENARIO_PROFILES.get(key, NoiseProfile.CLEAN)
+
+    def _requested_degradation(
+        self, config: RunConfig, spec: ScenarioSpec, profile: NoiseProfile
+    ) -> dict[str, Any] | None:
+        """The SNR and packet loss each degraded turn is asked for.
+
+        An operator's explicit profile wins and applies that preset as
+        reviewed. Otherwise the scenario's own declared `snr_db` and
+        `packet_loss_percent` are applied on the profile's channel - they
+        used to be read by nothing, so a scenario declaring 10 dB and 8%
+        packet loss ran at its preset's 25 dB with none. A scenario whose
+        profile is `clean` asks for no noise, so its `snr_db` does not
+        apply; a declared packet loss still does.
+
+        `None` for a run that moves no audio.
+        """
+        if not config.uses_audio:
+            return None
+        if config.noise_profile is not NoiseProfile.CLEAN:
+            return {
+                "source": "operator",
+                "snr_db": profile_config(profile).snr_db,
+                "packet_loss_percent": 0.0,
+            }
+        declared = getattr(spec.audio, "noise_profile", None)
+        key = str(getattr(declared, "value", declared) or "clean")
+        return {
+            "source": "scenario",
+            "snr_db": None if key == "clean" else float(spec.audio.snr_db),
+            "packet_loss_percent": float(spec.audio.packet_loss_percent),
+        }
 
     def _resolve_seed(self, config: RunConfig) -> int | None:
         """The seed for anything stochastic in this run."""
@@ -835,6 +884,13 @@ class RunEngine:
                 config = profile_config(
                     NoiseProfile(meta["noise_profile"]), seed=meta.get("degradation_seed")
                 )
+                requested = meta.get("degradation_requested")
+                if requested:
+                    config = replace(
+                        config,
+                        snr_db=requested.get("snr_db"),
+                        packet_loss_percent=float(requested.get("packet_loss_percent") or 0.0),
+                    )
                 result = degrade(original, config)
             except DegradationError as exc:
                 events.append(
@@ -884,7 +940,9 @@ class RunEngine:
                         # what makes the pair verifiable after the fact.
                         derived_from=str(reference),
                         transformations=tuple(t.value for t in result.transformations),
-                        degradation_parameters=dict(result.parameters),
+                        degradation_parameters=_with_source(
+                            result.parameters, meta.get("degradation_requested")
+                        ),
                         seed=result.seed,
                     ).as_dict()
                 )
@@ -1477,6 +1535,7 @@ class RunEngine:
             noise_profile=NoiseProfile(meta.get("noise_profile", NoiseProfile.CLEAN.value)),
             scenario_noise_profile=meta.get("scenario_noise_profile"),
             degradation_seed=meta.get("degradation_seed"),
+            degradation_requested=meta.get("degradation_requested"),
             awaiting_bot_text_for_turn=meta.get("awaiting_bot_text_for_turn"),
             awaiting_bot_audio_for_turn=meta.get("awaiting_bot_audio_for_turn"),
             caller_turns=caller_turns,

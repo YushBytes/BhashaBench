@@ -328,6 +328,14 @@ export interface RunSummary {
   error: string | null;
 }
 
+/** What each degraded caller turn was asked for (requested, not achieved). */
+export interface DegradationRequested {
+  source: "scenario" | "operator";
+  /** `null` when no noise is requested. */
+  snr_db: number | null;
+  packet_loss_percent: number;
+}
+
 export interface Run {
   run_id: string;
   conversation_id: string | null;
@@ -354,6 +362,8 @@ export interface Run {
   termination_reason: TerminationReason | null;
   goal_achieved: boolean;
   total_audio_seconds: number;
+  /** `null` for runs that move no audio and for runs created before it was recorded. */
+  degradation_requested: DegradationRequested | null;
   /** Offline run with the manual adapter, waiting for `POST /bot-text`. */
   awaiting_bot_text_for_turn: number | null;
   awaiting_bot_audio_for_turn: number | null;

@@ -57,11 +57,12 @@ drift.
 `scenarios/demo/tamil_crop_insurance.yaml` — a smallholder paddy farmer near
 Thanjavur calls a crop-insurance helpline about a claim filed after unseasonal
 rain. Tamil with English for the policy number, the scheme name and the amount.
-The run applies **light background noise at 25 dB SNR on the 300–3400 Hz phone
-band, with no packet loss**. The scenario file declares rural conditions at
-10 dB SNR with 8% packet loss, but **the current engine does not apply those
-declared values** — it maps the profile name `rural` to a fixed preset, and
-each degraded artefact records the parameters actually used.
+The recorded run applied **light background noise at 25 dB SNR on the
+300–3400 Hz phone band, with no packet loss**: the scenario declares rural
+conditions at 10 dB SNR with 8% packet loss, and at the time the engine
+applied only the profile's fixed preset. Since Phase 0 a new run applies the
+declared 10 dB and 8% loss. Each degraded artefact records the parameters
+actually used.
 
 The recorded run completed five caller turns and four bot turns, transcribed
 four replies, stored **12 audio artefacts** (original and degraded for each

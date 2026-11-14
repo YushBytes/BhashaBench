@@ -12,8 +12,13 @@ These need PostgreSQL (`docker compose up -d db`) and never skip silently.
 
 from __future__ import annotations
 
+import array
 import asyncio
+import io
+import math
 import uuid
+import wave
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +36,7 @@ from app.models import TestSuite as SuiteModel
 from app.models.test_run import RunStatus
 from app.pipeline.bots.manual import ManualBotAdapter
 from app.pipeline.bots.scripted import ScriptedBotAdapter
-from app.pipeline.degradation import NoiseProfile
+from app.pipeline.degradation import NoiseProfile, degrade, profile_config
 from app.pipeline.engine import RunConfig, RunEngine, RunReport
 from app.pipeline.errors import (
     BotTimeoutError,
@@ -1098,3 +1103,231 @@ class TestNoNewTables:
         conversation = db_session.get(CallSession, repo.conversation_of(db_session, run.id).id)
         assert conversation is not None
         assert conversation.test_run_id == run.id
+
+
+# ---------------------------------------------------------------------------
+# A scenario's declared SNR and packet loss are applied - measured, not trusted
+# ---------------------------------------------------------------------------
+
+
+def _pcm(audio: bytes) -> tuple[array.array, int]:
+    """Decode a 16-bit mono WAV into samples and its rate."""
+    with wave.open(io.BytesIO(audio)) as reader:
+        rate = reader.getframerate()
+        samples = array.array("h", reader.readframes(reader.getnframes()))
+    return samples, rate
+
+
+def _rms_of(values: list[int]) -> float:
+    return math.sqrt(sum(v * v for v in values) / len(values)) if values else 0.0
+
+
+def _declared_run(
+    db_session: Session,
+    settings: Settings,
+    store: AudioArtefactStore,
+    bot_wavs: list[bytes],
+    *,
+    audio: dict[str, Any],
+    noise_profile: NoiseProfile = NoiseProfile.CLEAN,
+    drop_request: bool = False,
+) -> tuple[RunReport, dict[str, Any]]:
+    spec = {**SPEC, "audio": audio}
+    suite, scenario = _make_scenario(db_session, spec=spec)
+    engine = _engine(
+        db_session,
+        settings,
+        store,
+        bot=ScriptedBotAdapter(bot_wavs * 4),
+        transcription=_SequencedTranscription(COOPERATIVE),
+    )
+    run = engine.create(
+        suite_id=suite.id,
+        scenario_id=scenario.id,
+        config=RunConfig(mode=ExecutionMode.AUDIO_FIXTURE_TEST, noise_profile=noise_profile),
+    )
+    if drop_request:
+        # A run created before requests were recorded has no entry at all.
+        meta = dict(repo.pipeline_metadata_of(run))
+        meta.pop("degradation_requested")
+        repo.update_pipeline_metadata(db_session, run, meta)
+    report = asyncio.run(engine.run_to_completion(run.id))
+    return report, dict(repo.pipeline_metadata_of(run))
+
+
+def _degraded(report: RunReport) -> list[Any]:
+    found = [a for a in report.artefacts if a.variant == "degraded"]
+    assert found, "the run produced no degraded artefact to measure"
+    return found
+
+
+RURAL_DECLARED = {"noise_profile": "rural", "snr_db": 10.0, "packet_loss_percent": 8.0}
+
+
+class TestDeclaredScenarioAudioIsApplied:
+    def test_the_request_is_recorded_with_its_source(
+        self,
+        db_session: Session,
+        pipeline_settings: Settings,
+        store: AudioArtefactStore,
+        bot_wavs: list[bytes],
+    ) -> None:
+        report, meta = _declared_run(
+            db_session, pipeline_settings, store, bot_wavs, audio=RURAL_DECLARED
+        )
+
+        assert meta["degradation_requested"] == {
+            "source": "scenario",
+            "snr_db": 10.0,
+            "packet_loss_percent": 8.0,
+        }
+        assert report.degradation_requested == meta["degradation_requested"]
+        for artefact in _degraded(report):
+            assert artefact.degradation_parameters["requested_from"] == "scenario"
+            assert artefact.degradation_parameters["snr_db"] == 10.0
+            assert artefact.degradation_parameters["packet_loss_percent"] == 8.0
+            assert "packet_loss" in artefact.transformations
+
+    def test_the_achieved_snr_measured_from_the_bytes_matches_the_declaration(
+        self,
+        db_session: Session,
+        pipeline_settings: Settings,
+        store: AudioArtefactStore,
+        bot_wavs: list[bytes],
+    ) -> None:
+        """Re-derive the noise from the stored files rather than trusting a field.
+
+        The channel steps (mono, resample, band-pass) are deterministic, so
+        degrading the original with noise and loss switched off reproduces the
+        clean channel exactly; the difference to the stored degraded file is
+        the noise that was added. Dropped packets are silent and excluded.
+        """
+        report, meta = _declared_run(
+            db_session, pipeline_settings, store, bot_wavs, audio=RURAL_DECLARED
+        )
+        channel_only = replace(
+            profile_config(NoiseProfile(meta["noise_profile"]), seed=meta["degradation_seed"]),
+            snr_db=None,
+            packet_loss_percent=0.0,
+        )
+
+        for artefact in _degraded(report):
+            original = store.read(str(artefact.derived_from))
+            clean, _ = _pcm(degrade(original, channel_only).audio)
+            noisy, rate = _pcm(store.read(artefact.reference))
+            window = max(int(rate * 0.020), 1)
+            kept_clean: list[int] = []
+            kept_noise: list[int] = []
+            for start in range(0, len(noisy), window):
+                block = noisy[start : start + window]
+                if not any(block):
+                    continue  # a dropped packet
+                kept_clean.extend(clean[start : start + window])
+                kept_noise.extend(
+                    n - c for n, c in zip(block, clean[start : start + window], strict=True)
+                )
+            measured = 20.0 * math.log10(_rms_of(kept_clean) / _rms_of(kept_noise))
+
+            assert abs(measured - 10.0) < 0.5, measured
+            assert abs(artefact.degradation_parameters["snr_db_achieved"] - 10.0) < 0.5
+
+    def test_the_realised_packet_loss_is_visible_in_the_bytes(
+        self,
+        db_session: Session,
+        pipeline_settings: Settings,
+        store: AudioArtefactStore,
+        bot_wavs: list[bytes],
+    ) -> None:
+        """Count silent 20 ms packets in each stored file; it must equal the
+        recorded drop count, and the run as a whole must actually drop some."""
+        report, _ = _declared_run(
+            db_session, pipeline_settings, store, bot_wavs, audio=RURAL_DECLARED
+        )
+
+        total_dropped = 0
+        for artefact in _degraded(report):
+            samples, rate = _pcm(store.read(artefact.reference))
+            window = max(
+                int(rate * artefact.degradation_parameters["packet_duration_ms"] / 1000), 1
+            )
+            silent = sum(
+                1
+                for start in range(0, len(samples), window)
+                if not any(samples[start : start + window])
+            )
+            params = artefact.degradation_parameters
+            assert silent == params["packets_dropped"]
+            assert params["packet_loss_realised_percent"] == round(
+                100.0 * params["packets_dropped"] / params["packets_total"], 2
+            )
+            total_dropped += silent
+
+        assert total_dropped > 0
+
+    def test_an_explicit_operator_profile_wins(
+        self,
+        db_session: Session,
+        pipeline_settings: Settings,
+        store: AudioArtefactStore,
+        bot_wavs: list[bytes],
+    ) -> None:
+        report, meta = _declared_run(
+            db_session,
+            pipeline_settings,
+            store,
+            bot_wavs,
+            audio=RURAL_DECLARED,
+            noise_profile=NoiseProfile.LIGHT_BACKGROUND_NOISE,
+        )
+
+        assert meta["degradation_requested"] == {
+            "source": "operator",
+            "snr_db": 25.0,
+            "packet_loss_percent": 0.0,
+        }
+        for artefact in _degraded(report):
+            assert artefact.degradation_parameters["snr_db"] == 25.0
+            assert abs(artefact.degradation_parameters["snr_db_achieved"] - 25.0) < 0.5
+            assert "packet_loss" not in artefact.transformations
+
+    def test_a_clean_scenario_adds_no_noise_but_keeps_its_packet_loss(
+        self,
+        db_session: Session,
+        pipeline_settings: Settings,
+        store: AudioArtefactStore,
+        bot_wavs: list[bytes],
+    ) -> None:
+        report, meta = _declared_run(
+            db_session,
+            pipeline_settings,
+            store,
+            bot_wavs,
+            audio={"noise_profile": "clean", "snr_db": 34.0, "packet_loss_percent": 10.0},
+        )
+
+        assert meta["degradation_requested"]["snr_db"] is None
+        for artefact in _degraded(report):
+            assert "add_noise" not in artefact.transformations
+            assert "packet_loss" in artefact.transformations
+
+    def test_a_run_created_before_requests_were_recorded_keeps_its_preset(
+        self,
+        db_session: Session,
+        pipeline_settings: Settings,
+        store: AudioArtefactStore,
+        bot_wavs: list[bytes],
+    ) -> None:
+        report, _ = _declared_run(
+            db_session,
+            pipeline_settings,
+            store,
+            bot_wavs,
+            audio=RURAL_DECLARED,
+            drop_request=True,
+        )
+
+        assert report.degradation_requested is None
+        for artefact in _degraded(report):
+            assert artefact.degradation_parameters["snr_db"] == 25.0
+            assert "packet_loss" not in artefact.transformations
+            assert "requested_from" not in artefact.degradation_parameters

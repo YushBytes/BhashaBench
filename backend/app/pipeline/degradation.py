@@ -481,6 +481,21 @@ def _add_noise(
     return out, noise_rms, notes
 
 
+def _achieved_snr_db(clean: array.array, noisy: array.array) -> float | None:
+    """The signal-to-noise ratio actually present, in dB, rounded to 0.01.
+
+    `None` when either side is silent, because a ratio with a zero term is not
+    a measurement.
+    """
+    if len(clean) != len(noisy) or not clean:
+        return None
+    signal_rms = _rms(clean)
+    noise_power = sum((n - c) ** 2 for c, n in zip(clean, noisy, strict=True)) / len(clean)
+    if signal_rms <= 0 or noise_power <= 0:
+        return None
+    return round(20.0 * math.log10(signal_rms / math.sqrt(noise_power)), 2)
+
+
 def _reduce_amplitude(samples: array.array, scale: float) -> array.array:
     """Scale every sample."""
     out = array.array("h", bytes(len(samples) * 2))
@@ -635,10 +650,17 @@ def degrade(audio: bytes, config: DegradationConfig) -> DegradationResult:
         applied.append(Transformation.BANDPASS)
 
     if config.snr_db is not None:
+        clean = samples
         samples, noise_rms, noise_notes = _add_noise(samples, snr_db=config.snr_db, rng=rng)
         notes.extend(noise_notes)
         parameters["snr_db"] = config.snr_db
         parameters["noise_rms"] = round(noise_rms, 4)
+        # Measured from the bytes, not restated from the request: the noise
+        # actually added is the difference between the output and its input,
+        # clamping included, so a ratio the int16 range could not honour shows.
+        achieved = _achieved_snr_db(clean, samples)
+        if achieved is not None:
+            parameters["snr_db_achieved"] = achieved
         applied.append(Transformation.ADD_NOISE)
 
     if config.amplitude_scale is not None:

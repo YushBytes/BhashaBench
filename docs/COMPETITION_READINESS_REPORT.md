@@ -107,7 +107,8 @@ unseasonal rain. Tamil, with English for the policy number, the scheme name
 and the amount. Validated through `POST /api/v1/scenarios/validate` →
 `valid: true, errors: []`.
 
-**Audio — declared versus applied.** The file *declares* rural mobile
+**Audio — declared versus applied** *(as found; resolved in Phase 0, §6.4)*.
+The file *declares* rural mobile
 conditions: `noise_profile: rural`, `snr_db: 10`, `packet_loss_percent: 8`.
 **The current engine does not apply the declared 10 dB SNR or 8% packet
 loss.** It reads only the profile name and maps `rural` to the fixed
@@ -286,6 +287,11 @@ Was: fails on turn 0 through the API. Now: completes when a fixture is
 configured; unchanged when it is not.
 
 ### 6.4 A scenario's declared `snr_db` and `packet_loss_percent` are not applied — **Verified**
+
+> **Resolved in Phase 0** (`feat(pipeline): apply a scenario's declared audio
+> conditions`): new runs apply the declared SNR and packet loss on the
+> profile's channel, an operator's explicit profile still wins, and runs
+> created earlier keep their preset. The text below is the record as found.
 
 The pipeline maps a scenario's `audio.noise_profile` name to a fixed preset
 (`_SCENARIO_PROFILES` in `backend/app/pipeline/engine.py`) and ignores the

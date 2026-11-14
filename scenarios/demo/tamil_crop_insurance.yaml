@@ -67,14 +67,13 @@ expected_outcomes:
 # Rural mobile: a weak signal and a low signal-to-noise ratio, with enough
 # packet loss to break a word rather than a whole turn.
 #
-# WARNING - declared, not applied. The current pipeline engine reads only
-# `noise_profile` and maps it to a fixed preset (`rural` ->
-# `light_background_noise`): 8 kHz mono, 300-3400 Hz phone band, noise at
-# 25 dB SNR, no packet loss. The `snr_db: 10` and `packet_loss_percent: 8`
-# below are the scenario's declared intent and are NOT applied by the engine.
-# Every run's degraded artefact records the parameters actually used; quote
-# those, never these. See docs/PIPELINE.md and
-# docs/COMPETITION_READINESS_REPORT.md.
+# Applied since Phase 0: `rural` chooses the phone-band channel (8 kHz mono,
+# 300-3400 Hz) and the run applies the `snr_db` and `packet_loss_percent`
+# declared here, unless an operator picks an explicit profile. Runs created
+# before Phase 0 (479ecd51, c6fa33c3) applied the `light_background_noise`
+# preset instead - 25 dB, no packet loss - and their artefacts record that.
+# Every degraded artefact records the requested and the measured values;
+# quote those. See docs/PIPELINE.md.
 audio:
   noise_profile: rural
   snr_db: 10

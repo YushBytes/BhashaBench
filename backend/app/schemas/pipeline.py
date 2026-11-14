@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -180,6 +180,11 @@ class RunResponse(BaseModel):
         "measured. Containers this project cannot inspect contribute nothing "
         "rather than a guess.",
     )
+    degradation_requested: DegradationRequestedResponse | None = Field(
+        default=None,
+        description="The SNR and packet loss requested for each degraded turn. "
+        "`null` for runs that move no audio and for runs created before this was recorded.",
+    )
     awaiting_bot_text_for_turn: int | None = Field(
         default=None,
         description="Set when an `offline_simulation` run with the manual adapter "
@@ -251,6 +256,24 @@ class RunReportResponse(BaseModel):
         description="Stated on the API surface so a consumer cannot mistake "
         "these counts for a quality score.",
     )
+
+
+class DegradationRequestedResponse(BaseModel):
+    """What each degraded caller turn was asked for, and on whose authority.
+
+    Requested, not achieved: every degraded artefact carries the measured
+    `snr_db_achieved` and `packet_loss_realised_percent` beside these.
+    """
+
+    source: Literal["scenario", "operator"] = Field(
+        description="`scenario`: the scenario's declared SNR and packet loss. "
+        "`operator`: an explicit noise profile chosen for the run, applied as "
+        "its reviewed preset."
+    )
+    snr_db: float | None = Field(
+        description="Target signal-to-noise ratio. `null` when no noise is requested."
+    )
+    packet_loss_percent: float = Field(ge=0.0, le=100.0)
 
 
 class BotTextRequest(BaseModel):

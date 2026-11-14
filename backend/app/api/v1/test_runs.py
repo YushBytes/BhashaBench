@@ -418,6 +418,7 @@ def _run(report: RunReport) -> RunResponse:
         termination_reason=report.termination_reason,
         goal_achieved=report.goal_achieved,
         total_audio_seconds=report.total_audio_seconds,
+        degradation_requested=report.degradation_requested,
         awaiting_bot_text_for_turn=report.awaiting_bot_text_for_turn,
         awaiting_bot_audio_for_turn=report.awaiting_bot_audio_for_turn,
         started_at=report.started_at,

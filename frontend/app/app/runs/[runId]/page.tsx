@@ -26,7 +26,7 @@ import {
   humanise,
   langAttr,
 } from "@/lib/format";
-import type { RunReport, RunTurns } from "@/lib/api/types";
+import type { DegradationRequested, RunReport, RunTurns } from "@/lib/api/types";
 
 
 export async function generateMetadata({
@@ -36,6 +36,23 @@ export async function generateMetadata({
 }) {
   const { runId } = await params;
   return { title: `Run ${runId.slice(0, 8)}` };
+}
+
+/**
+ * The requested channel conditions in words, or null when not recorded (a run
+ * that moves no audio, or one created before requests were recorded).
+ * Requested, not achieved: the artefacts carry the measured values.
+ */
+function describeRequested(requested: DegradationRequested | null | undefined): string | null {
+  if (!requested) return null;
+  const parts: string[] = [];
+  parts.push(requested.snr_db === null ? "No added noise" : `${requested.snr_db} dB SNR`);
+  parts.push(
+    requested.packet_loss_percent > 0
+      ? `${requested.packet_loss_percent}% packet loss`
+      : "no packet loss",
+  );
+  return parts.join(" · ");
 }
 
 export default function RunDetailPage({
@@ -190,7 +207,18 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
             <Fact label="Seed" mono hint="Fixed so the degradation reproduces exactly.">
               {run.degradation_seed ?? "—"}
             </Fact>
-            <Fact label="Noise applied">{humanise(run.noise_profile)}</Fact>
+            <Fact
+              label="Noise applied"
+              hint={
+                run.degradation_requested
+                  ? run.degradation_requested.source === "scenario"
+                    ? "Requested from the scenario's declared SNR and packet loss. Each degraded artefact records the measured values."
+                    : "An explicit profile chosen for this run, applied as its reviewed preset."
+                  : undefined
+              }
+            >
+              {describeRequested(run.degradation_requested) ?? humanise(run.noise_profile)}
+            </Fact>
             <Fact
               label="Scenario declared"
               hint="The acoustic environment the scenario asked for, kept beside what was applied."

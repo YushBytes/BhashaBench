@@ -42,8 +42,8 @@ helpline about a claim after unseasonal rain. He speaks Tamil, but the policy
 number and the amount come out in English — which is exactly where recognition
 breaks. The caller's audio was cut to the phone band with background noise at
 25 dB signal-to-noise and no packet loss. (The scenario declares a harsher 10 dB
-with 8% packet loss; today's engine applies a fixed preset instead, and the run
-records what it actually applied.) The run completed five caller turns,
+with 8% packet loss; the engine then applied a fixed preset, and the run
+records what it actually applied. New runs now apply the declaration.) The run completed five caller turns,
 transcribed four bot replies and
 stored twelve audio artefacts, keeping both the original and the degraded
 version of every turn so the evidence can be reproduced.

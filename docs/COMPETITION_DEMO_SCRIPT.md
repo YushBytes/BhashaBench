@@ -65,15 +65,20 @@ bars per artefact, measured, with no synthetic fallback. It looks flat because
 the configured text-to-speech is the offline fake, which emits a
 constant-amplitude tone. Say so. The line is in the 1:20 segment below.
 
-**The noise on screen is lighter than the scenario file declares.** The
-scenario declares `rural` with 10 dB SNR and 8% packet loss. **The current
-engine does not apply those two numbers.** It maps the profile name `rural` to
-the fixed `light_background_noise` preset and applies exactly that: 8 kHz mono,
-300–3400 Hz phone-band filtering, background noise at **25 dB SNR**, and **no
-packet loss**. The run inspector shows it honestly — *Scenario declared: Rural*
-beside *Noise applied: Light background noise* — and every degraded artefact
-records `snr_db: 25.0` with no `packet_loss` step. Narrate the applied
-condition, never the declared one.
+**Narrate the noise the inspector shows for the run on screen.** The scenario
+declares `rural` with 10 dB SNR and 8% packet loss, and which of two
+conditions a run applied depends on when it was created:
+
+- **Runs created since Phase 0** apply the declaration: the 300–3400 Hz
+  phone band, background noise at **10 dB SNR** and **8% packet loss**. The
+  inspector's *Noise applied* reads `10 dB SNR · 8% packet loss`.
+- **Runs created before Phase 0** — including the recorded runs `479ecd51`
+  and `c6fa33c3` — applied the `light_background_noise` preset: **25 dB SNR,
+  no packet loss**. Their inspector reads *Light background noise*.
+
+Every degraded artefact records the requested and the measured values, so
+the figure you say must be the one that run's inspector shows. A fresh
+`python scripts/demo.py run` creates a post-Phase-0 run.
 
 Likewise the bot transcript on screen reads `namaste, main aapki kya madad kar
 sakta hoon` — scripted stub output from the fake transcription provider, not
@@ -139,7 +144,9 @@ then **New test**.
 > number and the amount come out in English — which is exactly where
 > recognition breaks. Each caller turn is degraded the way a phone line
 > degrades it: cut to the 300 to 3400 hertz phone band, with background noise
-> mixed in at twenty-five decibels signal-to-noise. On the New test page those
+> at ten decibels signal-to-noise and eight per cent of packets dropped.
+> *(Recording against a pre-Phase-0 run instead? Say "twenty-five decibels"
+> and drop the packet-loss clause — see §2.)* On the New test page those
 > conditions are selectable, and so is the execution mode. Note what is *not* offered —
 > telephony, because no telephony exists yet."
 
@@ -185,7 +192,8 @@ conversation turns → press play on one artefact → scroll to the stage timeli
 - the caveat panels: **"No external bot was contacted"**, **"The caller is a
   rule engine, not a language model"**, **"Measurements, not scores"**
 - Configuration showing `fake` / `fake` / `scripted`, seed 42, and
-  *Noise applied: Light background noise* beside *Scenario declared: Rural*
+  *Noise applied* (`10 dB SNR · 8% packet loss` on a post-Phase-0 run) beside
+  *Scenario declared: Rural*
 - Counted: caller turns 5, bot turns 4, transcribed 4, audio 8.00 s
 - Tamil-script caller utterances
 
@@ -248,8 +256,7 @@ Do not claim, in any take:
 - that Evon is integrated or that the caller uses a language model
 - any accuracy, word error rate, or quality score
 - that the noise is a field recording
-- that the run used 10 dB SNR or 8% packet loss — those are the scenario's
-  declared values and the current engine does not apply them (§2); the applied
-  condition is light background noise at 25 dB SNR, phone band, no packet loss
+- any noise figure the inspector does not show for that run: a post-Phase-0
+  run applies 10 dB / 8% packet loss, a pre-Phase-0 run 25 dB / none (§2)
 - that the transcript demonstrates recognition quality — with the fake
   provider it is scripted stub output
