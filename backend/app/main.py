@@ -90,7 +90,8 @@ DESCRIPTION = """
 **BhashaBench** is an automated testing and benchmarking platform for
 Indian-language voice AI.
 
-Implemented so far:
+Implemented so far (original phase numbering; see
+`docs/DEVELOPMENT_ROADMAP.md`):
 
 * **Phase 1** - application skeleton, configuration and health endpoints.
 * **Phase 2** - PostgreSQL persistence via Alembic migrations, and the
@@ -112,10 +113,10 @@ Implemented so far:
   fixed seed. Simulated acoustic conditions, **not** field recordings. No live
   call is placed and no real voice bot is contacted; `telephony_test` is
   refused.
-* **Phase 7.1** - the process-wide concurrent-run limit is enforced, refusing
-  with 503 rather than queueing.
-* **Phase 8** - run listing and stored artefact audio, which the operator
-  workspace and public site are built on.
+* **Phase 9 (partial)** - the process-wide concurrent-run limit is enforced,
+  refusing with 503 rather than queueing.
+* **Phases 12 and 13 (partial)** - run listing and stored artefact audio,
+  which the operator workspace and public site are built on.
 
 Telephony and automated evaluation are **not** implemented - see
 `docs/DEVELOPMENT_ROADMAP.md`.

@@ -50,7 +50,7 @@ def get_run(session: Session, run_id: uuid.UUID) -> TestRun | None:
 def conversation_of(session: Session, run_id: uuid.UUID) -> CallSession | None:
     """The conversation belonging to a run.
 
-    One per run in this phase: a pipeline run drives a single scenario. Phase 10
+    One per run in this phase: a pipeline run drives a single scenario. Phase 9
     may fan a run out over many, at which point this becomes a list and the
     engine gains a loop - the single-conversation assumption is here, named,
     rather than scattered.

@@ -82,7 +82,7 @@ Three rules:
 2. **A status hue never means two things.**
 3. **No status is colour alone.** Every badge carries a word.
 
-`--text-muted` is `#808C9B`, not the `#778392` the Phase 8 brief proposed:
+`--text-muted` is `#808C9B`, not the `#778392` the competition Phase 8 brief proposed:
 that value measured 4.39:1 on `--surface-raised` and failed AA for body text.
 Any change to it must be re-measured on all three surfaces.
 

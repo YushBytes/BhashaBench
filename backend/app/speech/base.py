@@ -71,7 +71,7 @@ class SynthesisCapabilities:
     supports_audio_tags: bool = False
     supports_streaming: bool = False
     """False for this phase. Timbre documents SSE and WebSocket streaming;
-    neither is implemented, because nothing consumes a stream until Phase 10."""
+    neither is implemented, because nothing consumes a stream until Phase 9."""
     max_text_chars: int | None = None
     requires_credentials: bool = True
     serialises_requests: bool = False
@@ -96,7 +96,7 @@ class SynthesisProvider(Protocol):
     `synthesise` is `async` because it is network-bound. There is no streaming
     method in this phase: Timbre documents SSE and WebSocket transports, but
     adding an interface nothing consumes would be speculative - the caller
-    agent (Phase 6) and the orchestrator (Phase 10) are what will decide the
+    agent (Phase 6) and the orchestrator (Phase 9) are what will decide the
     shape a stream needs to take.
     """
 

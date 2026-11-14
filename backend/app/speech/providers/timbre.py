@@ -156,7 +156,7 @@ class GnaniTimbreProvider:
             audio_tags=contract.AUDIO_TAGS if is_v3 else (),
             supports_audio_tags=is_v3,
             # Timbre documents SSE and WebSocket streaming. Neither is
-            # implemented: nothing consumes a stream before Phase 10, and an
+            # implemented: nothing consumes a stream before Phase 9, and an
             # unused transport is an untested transport.
             supports_streaming=False,
             max_text_chars=self._max_text_chars,

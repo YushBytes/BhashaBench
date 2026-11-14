@@ -50,7 +50,7 @@ class ExecutionMode(StrEnum):
     TELEPHONY_TEST = "telephony_test"
     """A real phone call.
 
-    **Not implemented.** Declared so that the vocabulary exists and Phase 9 has
+    **Not implemented.** Declared so that the vocabulary exists and Phase 8 has
     a value to fill rather than a value to add, and so that nothing else can be
     mistaken for it. Creating a run in this mode is refused.
     """

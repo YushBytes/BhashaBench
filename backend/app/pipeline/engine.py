@@ -158,7 +158,7 @@ class RunConfig:
             raise PipelineConfigurationError(
                 f"execution mode '{self.mode.value}' is not implemented. "
                 f"Available modes are {sorted(m.value for m in IMPLEMENTED_MODES)}. "
-                "Telephony arrives in Phase 9; a run cannot be created in that "
+                "Telephony arrives in Phase 8; a run cannot be created in that "
                 "mode until it genuinely exists."
             )
         if self.max_turns is not None and self.max_turns < 1:

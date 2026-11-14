@@ -1,7 +1,8 @@
 """The concurrent-run limiter.
 
 `PIPELINE_MAX_CONCURRENT_RUNS` was a documented number with no consumer until
-Phase 7.1. These tests are what make the enforcement real rather than claimed.
+competition Phase 7.1 (original Phase 9). These tests are what make the
+enforcement real rather than claimed.
 
 **Determinism.** Nothing here sleeps for a fixed period and hopes the
 interleaving comes out right. Every test that needs two runs genuinely

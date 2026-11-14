@@ -8,7 +8,7 @@ back to `POST /api/v1/test-runs/{id}/bot-audio`. The run then continues.
 
 So the audio exchange is genuinely with the bot under test, while the transport
 is a human rather than a protocol this project guessed at. That is the honest
-maximum available until a bot publishes an API or Phase 9 builds telephony.
+maximum available until a bot publishes an API or Phase 8 builds telephony.
 
 **`received_from_bot` is the operator's assertion, and it is recorded as
 such.** Submitting audio through this adapter marks it as externally obtained,

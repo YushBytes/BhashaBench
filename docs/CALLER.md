@@ -247,7 +247,7 @@ what it was foundational for:
 | One utterance | `ConversationTurn` |
 
 The caller's own state goes in the existing JSONB columns under a `caller`
-namespace, so Phase 9's telephony metadata can share the column without
+namespace, so Phase 8's telephony metadata can share the column without
 collision. `call_metadata.caller` holds conversation state; `turn_metadata`
 holds the decision — intent, rule ids, states before and after, the
 explanation, the facts used, the audio reference.

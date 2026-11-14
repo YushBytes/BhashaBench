@@ -9,7 +9,7 @@ Only settings that something actually reads are modelled here. A setting that
 nothing consumes is dead code, so a variable stays in `.env.example` - where it
 documents the configuration surface - until the phase that uses it arrives.
 Phase 4 promoted the Gnani speech-to-text settings to real fields and Phase 5
-the text-to-speech ones; Twilio (Phase 9) and the run-safety limits are still
+the text-to-speech ones; Twilio (Phase 8) and the run-safety limits are still
 declared only in `.env.example`.
 """
 
@@ -95,7 +95,7 @@ class Settings(BaseSettings):
 
     # -- Transcription (Phase 4) ---------------------------------------------
     # Only what the Prisma integration reads. Phase 5's Timbre settings and
-    # Phase 9's Twilio settings stay in `.env.example` until their phase, for
+    # Phase 8's Twilio settings stay in `.env.example` until their phase, for
     # the reason given in this module's docstring.
     transcription_provider: str = Field(
         default="fake",

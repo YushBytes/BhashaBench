@@ -43,7 +43,7 @@ WAV, so every stage between the two providers ran for real.
 | A real voice bot conversation | ❌ Not tested — no external bot endpoint was available |
 | Telephony | ⬜ Not implemented |
 | Recognition accuracy under degradation | ❌ Not measured — the fixtures contain no speech and no reviewed ground truth |
-| Concurrency limit enforced | ✅ Verified — Phase 7.1; the limit holds under forced overlap, and exceptions, cancellation and timeouts all release capacity |
+| Concurrency limit enforced | ✅ Verified — competition Phase 7.1 (original Phase 9); the limit holds under forced overlap, and exceptions, cancellation and timeouts all release capacity |
 
 ---
 
@@ -323,7 +323,7 @@ server layout and be useless to a client after a redeploy.
 **Artefacts are served, carefully.** Phase 7 listed artefacts and refused to
 stream them, on the grounds that who may hear a recorded conversation is an
 authorisation decision with no identity to make it against. That reasoning
-still holds. What changed in Phase 8 is that the conversation inspector cannot
+still holds. What changed in competition Phase 8 is that the conversation inspector cannot
 work without playback, and withholding the route never created an
 authorisation model — it only put the recording out of reach of the one
 operator entitled to it.
@@ -659,14 +659,14 @@ providers and the bot are stubs.
 
 ## Future telephony
 
-Phase 9 adds real calls. The seams are already in place: `ExecutionMode`
+Phase 8 adds real calls. The seams are already in place: `ExecutionMode`
 carries a `TELEPHONY_TEST` member that nothing can use yet, `BotAdapter` is the
 interface a telephony bridge implements, `BotReply.session_id` exists for a
 call identifier, and `CallSession` already has `provider_call_id`,
 `DIALING`, `NO_ANSWER` and `BUSY` statuses that this phase deliberately never
 sets — an offline simulation must not claim a telephony state.
 
-What Phase 9 has to add: a media-streaming bridge, the `ALLOWED_BOT_NUMBERS`
+What Phase 8 has to add: a media-streaming bridge, the `ALLOWED_BOT_NUMBERS`
 allow-list enforcement, barge-in handling, and the per-run cost caps
 (`MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS`) that
 `.env.example` already declares.

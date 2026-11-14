@@ -13,7 +13,7 @@ schema owned entirely by Alembic.
 > utterance is a `conversation_turn`. The caller's own evolving state lives in
 > the existing JSONB columns under a `caller` namespace —
 > `call_metadata.caller` for conversation state, `turn_metadata` for the
-> decision and the audio reference — so Phase 9's telephony metadata can share
+> decision and the audio reference — so Phase 8's telephony metadata can share
 > the column without collision, and no migration is needed each time the
 > caller records something new. See [CALLER.md](CALLER.md).
 >
@@ -331,7 +331,7 @@ index.
 **Phase 4 added no tables, columns or migrations**, and that was a decision
 rather than an omission. Speech-to-text is stateless here: a transcript
 belongs to a conversation turn, and deciding *which* turn is conversation
-orchestration — Phase 10. Adding a `transcripts` table now would mean guessing
+orchestration — Phase 9. Adding a `transcripts` table now would mean guessing
 its foreign keys before anything writes to it, and a table written by nothing
 is schema guesswork that a later phase has to undo.
 

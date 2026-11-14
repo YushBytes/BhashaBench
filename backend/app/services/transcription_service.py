@@ -16,7 +16,7 @@ What it owns:
 
 **No persistence.** Phase 4 stores nothing. The foundational `TestRun`,
 `CallSession` and `ConversationTurn` tables exist, but deciding which turn a
-transcript belongs to is conversation orchestration - Phase 10 - and a table
+transcript belongs to is conversation orchestration - Phase 9 - and a table
 written by nothing would be schema guesswork. Transcription is a pure function
 of its input here, which also means these endpoints work with the database
 down.

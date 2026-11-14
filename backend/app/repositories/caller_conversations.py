@@ -33,7 +33,7 @@ from app.models.test_run import RunStatus, TestRun
 from app.utils.timing import utc_now
 
 # The `call_metadata` key under which the caller keeps its own state. Namespaced
-# so Phase 9's telephony metadata can share the column without collision.
+# so Phase 8's telephony metadata can share the column without collision.
 CALLER_NAMESPACE = "caller"
 
 
