@@ -452,7 +452,7 @@ BhashaBench/
 │   ├── PIPELINE.md
 │   ├── PROVIDERS.md
 │   └── SCENARIO_FORMAT.md
-├── .github/workflows/         CI pipelines                     (Phase 14)
+├── .github/workflows/ci.yml   CI foundation (Phase 0); Phase 14 extends it
 ├── docker-compose.yml
 ├── .env.example
 ├── pyproject.toml             Ruff and pytest configuration
@@ -792,6 +792,22 @@ Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
 so a new deprecation warning fails the build rather than accumulating
 silently.
+
+### Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push to
+`main` and every pull request against it, in three independent jobs:
+
+| Job | Checks |
+|---|---|
+| `backend` | Python 3.12, a PostgreSQL 16 service, `ruff check`, `ruff format --check`, `alembic upgrade head`, `alembic check`, then `pytest` with `BHASHABENCH_REQUIRE_DATABASE=1` |
+| `frontend` | Node 22, `npm ci`, `npm run typecheck`, `npm run lint`, `npm run build` |
+| `compose` | `docker compose config --quiet` against the placeholders in `.env.example` |
+
+`BHASHABENCH_REQUIRE_DATABASE=1` turns an unreachable test database into a
+failure instead of a skip, so a broken database service cannot pass CI with
+the database tests quietly skipped. CI reads no secrets, and the live Gnani
+suites stay off.
 
 Frontend validation is lint plus a real production build:
 
