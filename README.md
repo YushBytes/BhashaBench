@@ -419,7 +419,7 @@ BhashaBench/
 │   │   │                      default sends audio nowhere
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 2231 tests across 40 modules
+│   ├── tests/                 2269 tests across 41 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -719,10 +719,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2231 tests** across forty modules.
-**2190 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2269 tests** across forty-one modules.
+**2228 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2231) exceeds the number that run (2190):
+why the collected total (2269) exceeds the number that run (2228):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -766,6 +766,7 @@ why the collected total (2231) exceeds the number that run (2190):
 | `test_caller_llm_contract.py` | 84 | The provider-independent LLM caller contract, offline: the prompt is built from the caller context alone (no expected outcomes, rubric or accounting), the states offered to a model are a subset of the transition table, a reply is parsed strictly and then meets the same validation gate as the rule engine, and cost arithmetic never treats an unknown price or unknown usage as zero |
 | `test_caller_llm_provider.py` | 53 | The model-backed caller strategy driven by a scripted client, with no network: a generated turn and its evidence, bounded retry across every kind of failure, deterministic fallback with the reason recorded and never reported as model-generated, per-turn token and per-run cost limits judged on the worst case, unknown usage charged not zeroed, and the scripted client being unselectable by configuration |
 | `test_caller_llm_conversation.py` | 21 | Whole model-backed conversations against PostgreSQL with a scripted client: per-turn generation evidence is persisted, uses_language_model is derived from the turns that were actually generated (false before any turn and for an all-fallback conversation, sticky after one generated turn), the per-run cost limit holds across turns, the scenario's expected outcomes appear in no request, turn record or log line, and the run list and the caller API carry the derived value |
+| `test_caller_llm_budget.py` | 38 | The live-spending controls, offline: live language-model calls are unauthorised in code and no configuration value opens the gate, the 100-rupee ceiling can be lowered and never raised, a request's worst case is reserved in a durable ledger before it is sent and settled to reported usage afterwards, an unknown cost stays charged, and an unreadable or locked ledger refuses rather than reading as zero |
 
 ```bash
 pytest
@@ -793,7 +794,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2190 passed, 41 skipped ================
+================ 2228 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
