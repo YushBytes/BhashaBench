@@ -147,8 +147,13 @@ class RunResponse(BaseModel):
     )
     caller_provider: str
     uses_language_model: bool = Field(
-        description="Whether a learned model generated the caller's words. "
-        "**False throughout** - the caller is a rule engine, not Gnani Evon."
+        description=(
+            "Whether a language model actually generated at least one of the "
+            "caller's turns. Derived from each turn's execution record, not from "
+            "which provider was configured: a conversation whose every model turn "
+            "fell back to the rule engine reports `false`. Never Gnani Evon - no "
+            "Evon provider exists."
+        )
     )
     stt_provider: str | None
     tts_provider: str | None
@@ -226,6 +231,15 @@ class RunTurnResponse(BaseModel):
     audio_reference: str | None = None
     transcription_error: str | None = None
     synthesis_error: str | None = None
+    uses_language_model: bool | None = Field(
+        default=None,
+        description="Caller turns only: whether a language model produced the words of this turn.",
+    )
+    generation: dict[str, Any] | None = Field(
+        default=None,
+        description="How a model-backed provider produced this turn, including "
+        "any fallback to the rule engine and its reason. `null` otherwise.",
+    )
 
 
 class RunTurnsResponse(BaseModel):
@@ -413,8 +427,9 @@ class RunSummary(BaseModel):
     uses_language_model: bool = Field(
         default=False,
         description=(
-            "Whether a learned model generated the caller's words. **False "
-            "throughout** - the caller is a rule engine."
+            "Whether a language model actually generated at least one of the "
+            "caller's turns, as recorded turn by turn - not which provider was "
+            "configured."
         ),
     )
     caller_turns: int = 0

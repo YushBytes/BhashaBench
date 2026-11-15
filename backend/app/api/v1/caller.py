@@ -148,6 +148,7 @@ def _to_response(report: ConversationReport) -> ConversationResponse:
         goal_achieved=report.goal_achieved,
         outcomes_expected=list(report.outcomes_expected),
         outcomes_observed=list(report.outcomes_observed),
+        llm=report.llm,
         rule_ids_fired=list(report.rule_ids_fired),
         error=report.error,
     )
@@ -344,6 +345,8 @@ def list_conversation_turns(
                 audio_duration_seconds=audio.get("duration_seconds"),
                 transcription_error=meta.get("transcription_error"),
                 synthesis_error=meta.get("synthesis_error"),
+                uses_language_model=meta.get("uses_language_model"),
+                generation=meta.get("generation"),
             )
         )
     return ConversationTurnsResponse(conversation_id=conversation_id, turns=turns)

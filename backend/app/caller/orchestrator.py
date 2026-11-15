@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
@@ -41,7 +42,9 @@ from app.caller.schemas import (
     CallerContext,
     CallerIntent,
     CallerPersona,
+    CallerResourceUse,
     ConversationTurnView,
+    GenerationEvidence,
     Speaker,
     TerminationReason,
 )
@@ -92,8 +95,12 @@ class ConversationReport:
     provider: str
     uses_language_model: bool
     """Carried into the report on purpose. Any claim built on this run has to
-    be able to say whether a model generated the caller's words. In Phase 6 it
-    is always False."""
+    be able to say whether a model generated the caller's words.
+
+    Derived from what happened, not from what was configured: true only once
+    a turn's evidence says a model produced the words that were spoken. A
+    conversation run with a model provider whose every turn fell back to the
+    rule engine reports False."""
     state: CallerState
     outcome: str
     """`success`, `failure` or `aborted` - see `state.outcome_of`."""
@@ -111,6 +118,69 @@ class ConversationReport:
     """
     rule_ids_fired: tuple[str, ...]
     error: str | None = None
+    llm: dict[str, Any] | None = None
+    """Totals across the conversation's model-backed turns - turns generated,
+    turns that fell back, requests sent, tokens and estimated cost - or `None`
+    when no model-backed provider was asked for a turn."""
+
+
+def _turn_used_language_model(evidence: GenerationEvidence | None, declared: bool) -> bool:
+    """Whether a model produced this turn's words.
+
+    From the turn's own evidence when there is any. A provider that returns
+    none is taken at its declaration - which for the rule engine is False.
+    """
+    return evidence.generated_by_language_model if evidence is not None else declared
+
+
+def _resources_of(meta: dict[str, Any]) -> CallerResourceUse:
+    """What the conversation's model-backed turns have consumed so far."""
+    llm = meta.get("llm") or {}
+    return CallerResourceUse(
+        llm_requests=int(llm.get("requests_sent", 0)),
+        estimated_cost=str(llm.get("estimated_cost") or "0"),
+        currency=llm.get("currency"),
+    )
+
+
+def _add_optional(total: int | None, value: int | None) -> int | None:
+    """Sum two counts, keeping `None` when neither was reported."""
+    if value is None:
+        return total
+    return (total or 0) + value
+
+
+def _accumulate(previous: dict[str, Any] | None, evidence: GenerationEvidence) -> dict[str, Any]:
+    """Fold one turn's evidence into the conversation's running totals.
+
+    Token totals stay `None` until some turn reports them, so "no usage was
+    reported" never turns into a count of zero. Cost is a decimal string and
+    is only ever added to: a request whose cost was unknown was already
+    charged at its worst case by the provider strategy.
+    """
+    llm = dict(previous or {})
+    models = list(llm.get("models", []))
+    if evidence.model and evidence.model not in models:
+        models.append(evidence.model)
+
+    cost = Decimal(str(llm.get("estimated_cost") or "0"))
+    if evidence.estimated_cost is not None:
+        cost += Decimal(evidence.estimated_cost)
+
+    return {
+        "provider": evidence.provider,
+        "models": models,
+        "contacts_external_service": evidence.contacts_external_service,
+        "turns_generated": int(llm.get("turns_generated", 0))
+        + (1 if evidence.generated_by_language_model else 0),
+        "turns_fallback": int(llm.get("turns_fallback", 0)) + (1 if evidence.fallback_used else 0),
+        "requests_sent": int(llm.get("requests_sent", 0))
+        + sum(1 for attempt in evidence.attempts if attempt.request_sent),
+        "input_tokens": _add_optional(llm.get("input_tokens"), evidence.input_tokens),
+        "output_tokens": _add_optional(llm.get("output_tokens"), evidence.output_tokens),
+        "estimated_cost": str(cost),
+        "currency": evidence.currency or llm.get("currency"),
+    }
 
 
 class ConversationOrchestrator:
@@ -195,7 +265,10 @@ class ConversationOrchestrator:
             metadata={
                 "origin": "caller.phase6",
                 "provider": capabilities.name,
-                "uses_language_model": capabilities.uses_language_model,
+                # What the provider is, recorded once. Whether a model
+                # actually produced a turn is recorded per turn and summed on
+                # the conversation; it is not knowable here.
+                "provider_declares_language_model": capabilities.uses_language_model,
             },
         )
         conversation = repo.create_conversation(
@@ -205,7 +278,10 @@ class ConversationOrchestrator:
             caller_metadata={
                 "state": CallerState.INITIAL.value,
                 "provider": capabilities.name,
-                "uses_language_model": capabilities.uses_language_model,
+                "provider_declares_language_model": capabilities.uses_language_model,
+                # False until a turn's evidence says otherwise. Nothing has
+                # been generated yet, whatever provider is configured.
+                "uses_language_model": False,
                 "turn_budget": self._budget(spec),
                 "goal_achieved": False,
                 "termination_reason": None,
@@ -288,6 +364,7 @@ class ConversationOrchestrator:
             state=state,
             turn_index=turn_index,
             turns_remaining=max(budget - caller_turns_used, 0),
+            resources=_resources_of(meta),
         )
 
         turn = await self._caller.produce_turn(context)
@@ -313,9 +390,13 @@ class ConversationOrchestrator:
             "explanation": decision.explanation,
             "facts_used": list(decision.facts_used),
             "provider": self._caller.capabilities.name,
-            "uses_language_model": self._caller.capabilities.uses_language_model,
+            "uses_language_model": _turn_used_language_model(
+                decision.generation, self._caller.capabilities.uses_language_model
+            ),
             "decide_latency_ms": turn.decide_latency_ms,
         }
+        if decision.generation is not None:
+            metadata["generation"] = decision.generation.model_dump(mode="json")
         if audio_reference is not None and turn.audio is not None:
             metadata["audio"] = {
                 "reference": audio_reference,
@@ -358,8 +439,14 @@ class ConversationOrchestrator:
                     decision.termination_reason.value if decision.termination_reason else None
                 ),
                 "rule_ids": [*meta.get("rule_ids", []), *decision.rule_ids],
+                # Sticky: one generated turn makes the conversation one a
+                # model took part in, and no later fallback undoes that.
+                "uses_language_model": bool(meta.get("uses_language_model", False))
+                or bool(metadata["uses_language_model"]),
             }
         )
+        if decision.generation is not None:
+            meta["llm"] = _accumulate(meta.get("llm"), decision.generation)
 
         if decision.should_terminate:
             self._close(conversation, meta, decision.next_state)
@@ -561,6 +648,7 @@ class ConversationOrchestrator:
             outcomes_observed=observed,
             rule_ids_fired=tuple(meta.get("rule_ids", [])),
             error=conversation.error_message,
+            llm=meta.get("llm"),
         )
 
     # -- Offline simulation -------------------------------------------------

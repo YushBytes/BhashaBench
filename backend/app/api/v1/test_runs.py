@@ -698,6 +698,8 @@ def read_turns(run_id: uuid.UUID, engine: ReadingEngineDep, session: DbSession) 
                     audio_reference=audio.get("reference"),
                     transcription_error=metadata.get("transcription_error"),
                     synthesis_error=metadata.get("synthesis_error"),
+                    uses_language_model=metadata.get("uses_language_model"),
+                    generation=metadata.get("generation"),
                 )
             )
     return RunTurnsResponse(run_id=run_id, turns=turns)

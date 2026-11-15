@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -87,6 +88,20 @@ class TurnResponse(BaseModel):
     )
     transcription_error: str | None = None
     synthesis_error: str | None = None
+    uses_language_model: bool | None = Field(
+        default=None,
+        description="Caller turns only: whether a language model produced the "
+        "words of this turn. False for a turn the rule engine supplied, "
+        "including one it supplied after a model failed.",
+    )
+    generation: dict[str, Any] | None = Field(
+        default=None,
+        description="How a model-backed provider produced this turn: provider, "
+        "exact model, parameters, seed, tokens, latency, estimated cost, every "
+        "attempt, and whether and why the rule engine took over. `null` for "
+        "bot turns and for a conversation driven by the rule engine alone. A "
+        "field the provider did not report is `null`, never a default.",
+    )
 
 
 class ConversationResponse(BaseModel):
@@ -114,9 +129,13 @@ class ConversationResponse(BaseModel):
     language: str
     provider: str
     uses_language_model: bool = Field(
-        description="Whether a learned model generated the caller's words. "
-        "**False throughout Phase 6** - the caller is a rule engine, not Gnani "
-        "Evon. Reported on every response so no consumer can assume otherwise."
+        description=(
+            "Whether a language model actually generated at least one of the "
+            "caller's turns. Derived from each turn's execution record, not from "
+            "which provider was configured: a conversation whose every model turn "
+            "fell back to the rule engine reports `false`. Never Gnani Evon - no "
+            "Evon provider exists."
+        )
     )
     state: CallerState
     outcome: str = Field(description="`success`, `failure`, `aborted` or `in_progress`.")
@@ -134,6 +153,16 @@ class ConversationResponse(BaseModel):
     )
     rule_ids_fired: list[str] = Field(default_factory=list)
     error: str | None = None
+    llm: dict[str, Any] | None = Field(
+        default=None,
+        description="Totals across the conversation's model-backed turns: "
+        "`turns_generated`, `turns_fallback`, `requests_sent`, `input_tokens`, "
+        "`output_tokens`, `estimated_cost`, `currency`, `models` and "
+        "`contacts_external_service`. `null` when no model-backed provider was "
+        "asked for a turn. A token total is `null` when no turn reported one; "
+        "an estimated cost is the worst case wherever usage was not reported. "
+        "When `contacts_external_service` is false the figures are simulated.",
+    )
 
 
 class ConversationTurnsResponse(BaseModel):
@@ -155,7 +184,10 @@ class CallerProviderResponse(BaseModel):
         description="True when the same context always yields the same turn, "
         "which is what makes a benchmark reproducible."
     )
-    uses_language_model: bool = Field(description="False for every provider in this phase.")
+    uses_language_model: bool = Field(
+        description="Whether this provider generates turns with a language model. "
+        "What a given conversation actually used is reported on the conversation."
+    )
     languages: list[str] = Field(
         description="Languages with reviewed phrase tables. A scenario in any "
         "other language is refused rather than answered in English."
