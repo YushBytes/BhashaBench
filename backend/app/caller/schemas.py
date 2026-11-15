@@ -11,6 +11,7 @@ caller would plausibly know and nothing else.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -100,6 +101,27 @@ class ConversationTurnView(BaseModel):
     )
 
 
+class CallerResourceUse(BaseModel):
+    """What this conversation's caller has already consumed.
+
+    Carried in the context so a provider can refuse to exceed a per-run limit
+    without reaching into the database. It is accounting, not prompt material:
+    nothing here is ever shown to a model.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    llm_requests: int = Field(default=0, ge=0, description="Model requests sent so far.")
+    estimated_cost: str = Field(
+        default="0",
+        description="Decimal string. The sum of each request's cost estimate, "
+        "which is the worst case wherever the provider reported no usage.",
+    )
+    currency: str | None = Field(
+        default=None, description="ISO 4217 code, when anything was spent."
+    )
+
+
 class CallerContext(BaseModel):
     """Everything a provider is given to decide one turn.
 
@@ -131,6 +153,10 @@ class CallerContext(BaseModel):
     state: CallerState = Field(description="Caller state before this turn.")
     turn_index: int = Field(ge=0, description="Index this turn will occupy.")
     turns_remaining: int = Field(ge=0, description="Turns left in the budget, this one included.")
+    resources: CallerResourceUse = Field(
+        default_factory=CallerResourceUse,
+        description="What the caller has already spent in this conversation.",
+    )
 
     @property
     def is_opening(self) -> bool:
@@ -141,6 +167,95 @@ class CallerContext(BaseModel):
     def last_bot_text(self) -> str:
         """The bot's last utterance, or an empty string if there was none."""
         return self.bot_transcript or ""
+
+
+class GenerationAttempt(BaseModel):
+    """One request made while producing a turn, successful or not."""
+
+    model_config = ConfigDict(frozen=True)
+
+    attempt: int = Field(ge=1)
+    outcome: str = Field(description="`ok`, or the failure's stable code.")
+    error_type: str | None = None
+    detail: str | None = Field(default=None, description="Redacted, one line.")
+    latency_ms: float | None = None
+    request_sent: bool = Field(
+        description="Whether a request actually left the process. False when a "
+        "limit or a disabled gate refused it first."
+    )
+
+
+class GenerationEvidence(BaseModel):
+    """How one caller turn was actually produced.
+
+    The record a claim about a run rests on. Every field is either what
+    happened or `None`; nothing is defaulted to a plausible value. In
+    particular `generated_by_language_model` is true only when the words that
+    were spoken came out of a model and passed validation - a turn the
+    deterministic caller supplied after a model failure records `False` here
+    and says why in `fallback_reason`.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    provider: str = Field(description="The provider asked to generate the turn.")
+    model: str | None = Field(description="Exact model identifier requested.")
+    model_reported: str | None = Field(
+        default=None, description="Model identifier the provider's response named, if any."
+    )
+    contacts_external_service: bool = Field(
+        description="False for an offline double: its token counts and cost are "
+        "simulated and must never be reported as spend."
+    )
+    prompt_version: str | None = None
+    parameters: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Generation parameters as sent. Never a credential.",
+    )
+    seed_requested: int | None = None
+    seed_sent: bool = Field(
+        default=False, description="Whether the seed was included in the request."
+    )
+    seed_honoured: bool | None = Field(
+        default=None,
+        description="`None` when the provider gives no way to tell, which is "
+        "the case for a best-effort seed.",
+    )
+    system_fingerprint: str | None = None
+    provider_request_id: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    latency_ms: float | None = Field(
+        default=None, description="Wall time across every attempt for this turn."
+    )
+    estimated_cost: str | None = Field(
+        default=None, description="Decimal string; `None` when nothing was sent."
+    )
+    currency: str | None = None
+    cost_basis: str | None = Field(
+        default=None,
+        description="`reported_usage` when computed from the provider's token "
+        "counts, `worst_case` when usage was missing and the upper bound was "
+        "charged instead, `mixed` when attempts differed.",
+    )
+    attempts: tuple[GenerationAttempt, ...] = ()
+    retry_count: int = Field(default=0, ge=0)
+    fallback_used: bool = False
+    fallback_reason: str | None = Field(
+        default=None, description="Stable code; set exactly when `fallback_used`."
+    )
+    fallback_detail: str | None = None
+    generated_by_language_model: bool = Field(
+        description="Whether the spoken words were produced by a language model."
+    )
+
+    def model_post_init(self, _context: object) -> None:
+        """A turn cannot be both model-generated and a fallback."""
+        if self.fallback_used and self.generated_by_language_model:
+            raise ValueError("a fallback turn was not generated by the language model")
+        if self.fallback_used != (self.fallback_reason is not None):
+            raise ValueError("fallback_reason must be set exactly when fallback_used is")
 
 
 class CallerDecision(BaseModel):
@@ -181,6 +296,12 @@ class CallerDecision(BaseModel):
         description="Known-fact keys quoted in `message`. Lets the orchestrator "
         "verify that every concrete detail came from the scenario.",
     )
+    generation: GenerationEvidence | None = Field(
+        default=None,
+        description="How this turn was produced, when a model-backed provider "
+        "was asked for it. `None` for the rule engine, which has nothing to add "
+        "beyond `rule_ids`.",
+    )
 
     def model_post_init(self, _context: object) -> None:
         """Reject internally inconsistent decisions at construction.
@@ -209,7 +330,10 @@ __all__ = [
     "CallerDecision",
     "CallerIntent",
     "CallerPersona",
+    "CallerResourceUse",
     "ConversationTurnView",
+    "GenerationAttempt",
+    "GenerationEvidence",
     "Speaker",
     "TerminationReason",
 ]
