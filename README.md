@@ -419,7 +419,7 @@ BhashaBench/
 │   │   │                      default sends audio nowhere
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 2157 tests across 38 modules
+│   ├── tests/                 2210 tests across 39 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -719,10 +719,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2157 tests** across thirty-eight modules.
-**2116 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2210 tests** across thirty-nine modules.
+**2169 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2157) exceeds the number that run (2116):
+why the collected total (2210) exceeds the number that run (2169):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -764,6 +764,7 @@ why the collected total (2157) exceeds the number that run (2116):
 | `test_pipeline_concurrency.py` | 41 | The admission limiter: the configured maximum is never exceeded, capacity frees up for the next run, and exceptions, cancellation and timeouts all release it |
 | `test_speech_live.py` | 26 | **Opt-in, billable.** Real Gnani Timbre calls. Skipped unless `SPEECH_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
 | `test_caller_llm_contract.py` | 84 | The provider-independent LLM caller contract, offline: the prompt is built from the caller context alone (no expected outcomes, rubric or accounting), the states offered to a model are a subset of the transition table, a reply is parsed strictly and then meets the same validation gate as the rule engine, and cost arithmetic never treats an unknown price or unknown usage as zero |
+| `test_caller_llm_provider.py` | 53 | The model-backed caller strategy driven by a scripted client, with no network: a generated turn and its evidence, bounded retry across every kind of failure, deterministic fallback with the reason recorded and never reported as model-generated, per-turn token and per-run cost limits judged on the worst case, unknown usage charged not zeroed, and the scripted client being unselectable by configuration |
 
 ```bash
 pytest
@@ -791,7 +792,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2116 passed, 41 skipped ================
+================ 2169 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
