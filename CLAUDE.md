@@ -10,12 +10,13 @@ Indian-language voice bots. It is being built in **15 controlled phases**; see
 `docs/DEVELOPMENT_ROADMAP.md`.
 
 **The original 15-phase plan is in force.** Phase 0 (baseline and defect
-remediation) is complete locally and awaiting the owner's review; no new
-phase starts until it is approved.
+remediation) is complete: approved by the owner, pushed, and green in CI.
+A closing audit of Phase 1 on 2026-11-15 found its criteria met with no new
+work, so the next unfinished phase is Phase 6.
 
 | # | Phase | Status |
 |---|-------|--------|
-| 0 | Baseline & defect remediation | ✅ Complete locally — awaiting owner review |
+| 0 | Baseline & defect remediation | ✅ Complete |
 | 1 | Project foundation | ✅ Complete |
 | 2 | Database & scenario engine | ✅ Complete |
 | 3 | Scenario library & tooling | ✅ Complete |

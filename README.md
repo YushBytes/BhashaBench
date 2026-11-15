@@ -988,7 +988,7 @@ documentation. Full detail in
 
 | # | Phase | Status |
 |---|-------|--------|
-| 0 | Baseline & defect remediation | ✅ Complete locally — awaiting owner review |
+| 0 | Baseline & defect remediation | ✅ Complete |
 | 1 | Project foundation | ✅ Complete |
 | 2 | Database & scenario engine | ✅ Complete |
 | 3 | Scenario library & tooling | ✅ Complete |
