@@ -419,7 +419,7 @@ BhashaBench/
 │   │   │                      default sends audio nowhere
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
-│   ├── tests/                 2269 tests across 41 modules
+│   ├── tests/                 2411 tests across 42 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -592,7 +592,21 @@ their phase lands.
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Consumed by the Compose `db` service | — |
 | `CORS_ORIGINS` | Comma-separated allowed browser origins | `http://localhost:3000` |
 | `NEXT_PUBLIC_API_BASE_URL` | Backend URL used by the frontend | `http://localhost:8000` |
-| `CALLER_PROVIDER` | Caller strategy. `deterministic` is the only value; `evon` is refused by name | `deterministic` |
+| `CALLER_PROVIDER` | Caller strategy. `deterministic` (a rule engine) or `sarvam` (a Sarvam model with the rule engine as fallback; offline-tested only, and unable to make a live call while live calls are unauthorised). `evon` is refused by name | `deterministic` |
+| `SARVAM_API_KEY` | Sarvam key, sent as `api-subscription-key`. Not needed, and not used, while live calls are off | _empty_ |
+| `SARVAM_API_BASE_URL` | Sarvam REST base URL; must be https | `https://api.sarvam.ai` |
+| `CALLER_LLM_MODEL` | `sarvam-105b` or `sarvam-105b-conversations`. Required for `CALLER_PROVIDER=sarvam`; there is no default model | _empty_ |
+| `CALLER_LLM_LIVE_CALLS_ENABLED` | Operator switch for live language-model calls. Necessary and **not sufficient**: `LIVE_CALLS_AUTHORISED` in `app/caller/llm/budget.py` is a constant, is `False`, and no setting changes it | `false` |
+| `CALLER_LLM_LIVE_BUDGET_INR` | Total rupees live calls may commit across all runs and restarts. Values above 100 are rejected | `0` |
+| `CALLER_LLM_BUDGET_LEDGER_PATH` | The spending ledger; `storage/` is git-ignored | `storage/llm-budget/ledger.json` |
+| `CALLER_LLM_MAX_COST_PER_RUN_INR` | Most one conversation may commit, worst case | `5` |
+| `CALLER_LLM_COST_MARGIN` | Fraction added to the vendor's GST-exclusive prices. A project allowance, not a vendor figure | `0.18` |
+| `CALLER_LLM_MAX_OUTPUT_TOKENS` / `CALLER_LLM_MAX_PROMPT_TOKENS` | Per-turn token limits; the prompt is measured as an upper bound, not a tokenizer count | `300` / `8000` |
+| `CALLER_LLM_MAX_ATTEMPTS` | Total requests for one turn, counting every kind of failure, before the rule engine takes it | `2` |
+| `CALLER_LLM_REQUEST_TIMEOUT_SECONDS` | Ceiling on one language-model request | `30.0` |
+| `CALLER_LLM_TEMPERATURE` | Always sent explicitly; the vendor's documented default is contradictory | `0.5` |
+| `CALLER_LLM_SEED` | Optional seed. Best-effort by the vendor's description; recorded as sent, never as honoured | _unset_ |
+| `CALLER_LLM_REASONING_EFFORT` | `low`/`medium`/`high`/`max` for `sarvam-105b`; empty disables reasoning. Must be empty for the conversations model | _empty_ |
 | `CALLER_MAX_TURNS` | Ceiling on conversation turns, on top of the scenario's own `goal.max_turns`. The lower wins | `20` |
 | `CALLER_MAX_CLARIFICATIONS` | How often the caller presses for a usable answer before closing as no progress | `2` |
 | `CALLER_MAX_MESSAGE_CHARS` | Longest caller utterance accepted from a provider | `600` |
@@ -719,10 +733,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2269 tests** across forty-one modules.
-**2228 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2411 tests** across forty-two modules.
+**2370 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2269) exceeds the number that run (2228):
+why the collected total (2411) exceeds the number that run (2370):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -751,11 +765,11 @@ why the collected total (2269) exceeds the number that run (2228):
 | `test_speech_timbre.py` | 132 | The Gnani Timbre adapter against its published contract: JSON body, every documented status and both error shapes, binary-response handling, the streaming WAV header, serialisation, client ownership |
 | `test_speech_core.py` | 121 | The Timbre contract constants, voice catalogue, domain models, registry and service rules - including that a tag the model ignores is refused rather than spoken aloud |
 | `test_speech_api.py` | 77 | The real FastAPI speech routes: binary response and its media types, `X-Speech-*` headers, error mapping, provider capabilities, cleanup on every exit path, security |
-| `test_caller_core.py` | 71 | The caller state machine, the transcript analyser (Indic digits, code-switched keywords), the decision schema and the provider registry |
+| `test_caller_core.py` | 73 | The caller state machine, the transcript analyser (Indic digits, code-switched keywords), the decision schema and the provider registry |
 | `test_caller_rules.py` | 155 | Every rule of the deterministic caller; that five different bot replies produce five different turns; a legality sweep of every state against every shape of reply |
 | `test_caller_service.py` | 34 | Decision validation, instruction-leak and invented-identifier rejection, synthesis, credential redaction in an error |
 | `test_caller_orchestrator.py` | 39 | Multi-turn conversations against real PostgreSQL: success, every failure reason, determinism, persistence, transcription failure, audio artefacts |
-| `test_caller_api.py` | 43 | The caller routes through `TestClient`: creation, turns, text and audio submission, termination, limits, prompt injection, OpenAPI |
+| `test_caller_api.py` | 44 | The caller routes through `TestClient`: creation, turns, text and audio submission, termination, limits, prompt injection, OpenAPI |
 | `test_pipeline_degradation.py` | 87 | The DSP: resampling, channel conversion, bandpass, noise at a measured SNR, clipping, packet loss, every profile, reproducibility from a seed |
 | `test_pipeline_bots.py` | 40 | The bot adapter protocol, both adapters and the registry - including that neither contacts anything and the default sends audio nowhere - and the offline text-reply fixture loader |
 | `test_pipeline_engine.py` | 72 | Multi-turn audio runs against real PostgreSQL: the full workflow, every failure path, cancellation, the manual flow, reproducibility, declared scenario audio measured from the stored bytes (achieved SNR, realised packet loss, operator precedence), and settings declared but not enforced |
@@ -767,6 +781,7 @@ why the collected total (2269) exceeds the number that run (2228):
 | `test_caller_llm_provider.py` | 53 | The model-backed caller strategy driven by a scripted client, with no network: a generated turn and its evidence, bounded retry across every kind of failure, deterministic fallback with the reason recorded and never reported as model-generated, per-turn token and per-run cost limits judged on the worst case, unknown usage charged not zeroed, and the scripted client being unselectable by configuration |
 | `test_caller_llm_conversation.py` | 21 | Whole model-backed conversations against PostgreSQL with a scripted client: per-turn generation evidence is persisted, uses_language_model is derived from the turns that were actually generated (false before any turn and for an all-fallback conversation, sticky after one generated turn), the per-run cost limit holds across turns, the scenario's expected outcomes appear in no request, turn record or log line, and the run list and the caller API carry the derived value |
 | `test_caller_llm_budget.py` | 38 | The live-spending controls, offline: live language-model calls are unauthorised in code and no configuration value opens the gate, the 100-rupee ceiling can be lowered and never raised, a request's worst case is reserved in a durable ledger before it is sent and settled to reported usage afterwards, an unknown cost stays charged, and an unreadable or locked ledger refuses rather than reading as zero |
+| `test_caller_llm_sarvam.py` | 139 | The Sarvam client for both `sarvam-105b` and `sarvam-105b-conversations`, against a mock transport with **no request to Sarvam**: as shipped nothing is sent whatever the configuration and the caller falls back with `live_calls_disabled`; with the gate opened inside the test only, the documented request shape (key header, explicit model, temperature and output limit, reasoning disabled on one model and never mentioned to the other, seed, structured output), response and usage parsing without invented values, every documented status mapped to one normalised error, quota never retried as throttling, no credential in errors, logs, settings dumps or the ledger, cost from reported usage or the worst case, and the budget refusing before a request is sent; plus the settings and registry rules |
 
 ```bash
 pytest
@@ -794,7 +809,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2228 passed, 41 skipped ================
+================ 2370 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

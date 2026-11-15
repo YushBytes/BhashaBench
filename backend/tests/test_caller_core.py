@@ -381,8 +381,13 @@ class TestSignalExtraction:
 
 
 class TestRegistry:
-    def test_only_the_deterministic_provider_is_registered(self) -> None:
-        assert available_providers() == (PROVIDER_NAME,)
+    def test_exactly_two_providers_are_registered(self) -> None:
+        """The rule engine and the Sarvam-backed caller, and nothing else: no
+        Evon, no test double."""
+        assert available_providers() == (PROVIDER_NAME, "sarvam")
+
+    def test_the_rule_engine_is_still_the_default(self) -> None:
+        assert _settings().caller_provider == PROVIDER_NAME
 
     def test_there_is_no_evon_provider(self) -> None:
         """A stub that raised on every call would advertise Evon as a
@@ -414,9 +419,16 @@ class TestRegistry:
 
     def test_describe_lists_the_registered_provider(self) -> None:
         described = describe_providers(_settings())
-        assert [name for name, _, _ in described] == [PROVIDER_NAME]
+        assert [name for name, _, _ in described] == [PROVIDER_NAME, "sarvam"]
         assert described[0][1] is not None
         assert described[0][2] is None
+
+    def test_describe_reports_the_unconfigured_model_provider_as_unavailable(self) -> None:
+        """With no model chosen it is listed with a reason, not as usable."""
+        _, capabilities, reason = describe_providers(_settings())[1]
+        assert capabilities is None
+        assert reason is not None
+        assert "CALLER_LLM_MODEL" in reason
 
 
 class TestCapabilities:

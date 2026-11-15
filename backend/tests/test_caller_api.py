@@ -463,7 +463,17 @@ class TestProviders:
         assert response.status_code == 200
         body = response.json()
         assert body["selected"] == "deterministic"
-        assert [p["name"] for p in body["providers"]] == ["deterministic"]
+        assert [p["name"] for p in body["providers"]] == ["deterministic", "sarvam"]
+
+    def test_the_unconfigured_model_provider_is_listed_as_unavailable(
+        self, caller_client: TestClient
+    ) -> None:
+        """Registered, not selected, not usable - and it says why."""
+        sarvam = caller_client.get(f"{BASE}/providers").json()["providers"][1]
+        assert sarvam["selected"] is False
+        assert sarvam["available"] is False
+        assert "CALLER_LLM_MODEL" in sarvam["unavailable_reason"]
+        assert sarvam["uses_language_model"] is False
 
     def test_no_provider_claims_a_language_model(self, caller_client: TestClient) -> None:
         body = caller_client.get(f"{BASE}/providers").json()

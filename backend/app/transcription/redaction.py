@@ -27,6 +27,7 @@ SENSITIVE_HEADERS: frozenset[str] = frozenset(
         "x-api-key",
         "x-api-key-id",
         "api-key",
+        "api-subscription-key",
         "cookie",
         "set-cookie",
     }
@@ -39,6 +40,7 @@ _ASSIGNMENT = re.compile(
     r"""(?ix)
     \b(?P<name>
         api[_-]?key(?:[_-]?id)?
+      | api[_-]subscription[_-]key
       | access[_-]?token
       | refresh[_-]?token
       | authorization

@@ -16,12 +16,13 @@ declared only in `.env.example`.
 from __future__ import annotations
 
 import os
+from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # `backend/app/core/config.py` -> repository root is four levels up.
@@ -40,6 +41,9 @@ PRISMA_DEFAULT_MODEL = "prisma-v3.0"
 # asserted equal by the test suite so the duplication cannot drift.
 TIMBRE_DEFAULT_MODEL = "timbre-v3.0"
 TIMBRE_DEFAULT_VOICE = "Kalpana"
+
+# And from `app.caller.llm.clients.sarvam_contract`, asserted equal the same way.
+SARVAM_DEFAULT_BASE_URL = "https://api.sarvam.ai"
 
 
 class AppEnv(StrEnum):
@@ -234,14 +238,16 @@ class Settings(BaseSettings):
     )
 
     # -- Simulated caller (Phase 6) ------------------------------------------
-    # No credential of any kind: the only provider is a rule engine. Gnani Evon
+    # The default provider is a rule engine and needs no credential. Gnani Evon
     # is not integrated - see docs/PROVIDERS.md - so there is deliberately no
     # EVON_API_KEY here to suggest otherwise.
     caller_provider: str = Field(
         default="deterministic",
         description=(
-            "Which caller strategy to use. Only 'deterministic' exists in this "
-            "phase: a rule engine, not a language model."
+            "Which caller strategy to use. 'deterministic' is a rule engine, not "
+            "a language model, and is the default. 'sarvam' asks a Sarvam model "
+            "for each turn and falls back to the rule engine; while live calls "
+            "are unauthorised every turn is a recorded fallback."
         ),
     )
     caller_max_turns: int = Field(
@@ -293,6 +299,127 @@ class Settings(BaseSettings):
             "Whether to synthesise caller audio for each turn. Off by default: "
             "with SPEECH_PROVIDER=timbre every turn becomes a billable call, so "
             "turning this on is a deliberate act."
+        ),
+    )
+
+    # -- Language-model caller (Phase 6) -------------------------------------
+    # Nothing here can cause a billable request on its own. Live calls also
+    # need `LIVE_CALLS_AUTHORISED` in `app/caller/llm/budget.py`, which is a
+    # constant, not a setting, and is False.
+    sarvam_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "Sarvam API key, sent as the `api-subscription-key` header. Empty by "
+            "default. A `SecretStr`, so it does not appear in a repr or a dump."
+        ),
+    )
+    sarvam_api_base_url: str = Field(
+        default=SARVAM_DEFAULT_BASE_URL,
+        description="Sarvam REST base URL. Must be https: the request carries the key.",
+    )
+    caller_llm_model: str = Field(
+        default="",
+        description=(
+            "Exact model identifier for CALLER_PROVIDER=sarvam: 'sarvam-105b' or "
+            "'sarvam-105b-conversations'. No default - the model a benchmark ran "
+            "on is chosen, never assumed."
+        ),
+    )
+    caller_llm_live_calls_enabled: bool = Field(
+        default=False,
+        description=(
+            "Operator switch for live language-model calls. Necessary and not "
+            "sufficient: the code-level authorisation must also be granted."
+        ),
+    )
+    caller_llm_live_budget_inr: Decimal = Field(
+        default=Decimal(0),
+        ge=0,
+        le=100,
+        description=(
+            "Total rupees live language-model calls may commit, across every run "
+            "and restart. Zero by default, so nothing can be spent until a figure "
+            "is chosen. The hard maximum is 100 and cannot be raised here."
+        ),
+    )
+    caller_llm_budget_ledger_path: str = Field(
+        default="storage/llm-budget/ledger.json",
+        description=(
+            "Where the live budget ledger is kept, relative to the repository "
+            "root unless absolute. `storage/` is git-ignored."
+        ),
+    )
+    caller_llm_max_cost_per_run_inr: Decimal = Field(
+        default=Decimal(5),
+        gt=0,
+        le=100,
+        description="Most one conversation may commit, worst case, in rupees.",
+    )
+    caller_llm_cost_margin: Decimal = Field(
+        default=Decimal("0.18"),
+        ge=0,
+        le=1,
+        description=(
+            "Fraction added to the vendor's published token prices, which exclude "
+            "GST. 0.18 is this project's allowance for that tax, not a vendor "
+            "figure. Lowering it makes estimates less safe."
+        ),
+    )
+    caller_llm_max_output_tokens: int = Field(
+        default=300,
+        ge=16,
+        le=4096,
+        description=(
+            "Most tokens one generated turn may produce. 4096 is the lowest "
+            "documented per-plan cap. Reasoning tokens, when enabled, count "
+            "toward this."
+        ),
+    )
+    caller_llm_max_prompt_tokens: int = Field(
+        default=8000,
+        ge=256,
+        le=120_000,
+        description=(
+            "Most tokens one prompt may hold, compared with an upper bound "
+            "(UTF-8 bytes), not a tokenizer's count. Over it, the turn falls back."
+        ),
+    )
+    caller_llm_max_attempts: int = Field(
+        default=2,
+        ge=1,
+        le=3,
+        description="Total requests allowed for one turn, counting every kind of failure.",
+    )
+    caller_llm_request_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        le=120,
+        description="Ceiling on one language-model request.",
+    )
+    caller_llm_temperature: float = Field(
+        default=0.5,
+        ge=0,
+        le=2,
+        description=(
+            "Sampling temperature, always sent explicitly because the vendor's "
+            "documented default is contradictory."
+        ),
+    )
+    caller_llm_seed: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Seed sent with each request, if set. Best-effort by the vendor's own "
+            "description; recorded as sent, never as honoured."
+        ),
+    )
+    caller_llm_reasoning_effort: str = Field(
+        default="",
+        description=(
+            "Reasoning effort for 'sarvam-105b': low, medium, high or max. Empty "
+            "disables reasoning, which is the default: reasoning is billed as "
+            "output and spends the output limit. Must be empty for "
+            "'sarvam-105b-conversations'."
         ),
     )
 
@@ -389,6 +516,35 @@ class Settings(BaseSettings):
     def _normalise_caller_provider(cls, value: object) -> object:
         """Fold case and whitespace, as for the other provider settings."""
         return value.strip().lower() if isinstance(value, str) else value
+
+    @field_validator("caller_llm_model", "caller_llm_reasoning_effort", mode="before")
+    @classmethod
+    def _normalise_llm_names(cls, value: object) -> object:
+        """Fold case and whitespace. Membership is the registry's to check."""
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @field_validator("caller_llm_seed", mode="before")
+    @classmethod
+    def _blank_seed_is_no_seed(cls, value: object) -> object:
+        """`CALLER_LLM_SEED=` in a copied `.env.example` means unset, not an error."""
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("sarvam_api_base_url", mode="before")
+    @classmethod
+    def _require_https_for_sarvam(cls, value: object) -> object:
+        """Reject a Sarvam base URL that would send the key in the clear."""
+        if isinstance(value, str) and value.strip():
+            url = value.strip().rstrip("/")
+            if not url.startswith("https://"):
+                raise ValueError(f"SARVAM_API_BASE_URL must start with https://, got '{url}'")
+            return url
+        return value
+
+    @property
+    def caller_llm_budget_ledger(self) -> Path:
+        """The resolved ledger path; relative values resolve against the repository root."""
+        configured = Path(self.caller_llm_budget_ledger_path).expanduser()
+        return configured if configured.is_absolute() else (REPO_ROOT / configured)
 
     @field_validator("pipeline_bot_adapter", "pipeline_noise_profile", mode="before")
     @classmethod
