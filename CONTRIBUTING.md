@@ -65,7 +65,8 @@ history it carried is preserved in `main`.
 - Start from the latest `main` and keep each commit to one concern.
 - Stage explicit paths. Never `git add .` or `git add -A`: local tooling
   directories sit in the working tree and are excluded only locally.
-- Commit locally and push only with the owner's explicit approval.
+- Commit each independently completed and tested unit and push it to
+  `main`; do not hold finished work until the end of a phase.
 - Never force-push and never rewrite pushed history. Undo a change with
   `git revert`.
 
@@ -214,8 +215,10 @@ phase it belongs to. A behaviour change says so explicitly.
 
 ### Pushing
 
-- Push to `main` only after the owner approves; CI runs on every push and
-  must be green.
+- Push each completed, tested unit to `main`. Never push failing or
+  unverified work, and never create a commit only to add activity.
+- After a push, confirm local `main` equals `origin/main` and check the
+  GitHub Actions run; CI runs on every push and must be green.
 - Never force-push, and never rewrite history that has been pushed. Fix a
   mistake with a new commit or a `git revert`.
 

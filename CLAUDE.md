@@ -50,6 +50,16 @@ telephony is Phase 8, the real-time engine Phase 9, evaluation Phase 11.
 
 ## Phase discipline
 
+**The frontend is frozen.** Do not modify anything under `frontend/` -
+files, components, layouts, styles, routes, configuration or dependencies -
+until Ayush provides the demo frontend and explicitly approves frontend
+work. Phase 13 is deferred until then. Read the frontend to understand how
+it calls the API, and keep backend changes compatible with it, but a
+backend change must not reach into `frontend/`: when the API contract
+moves, document the contract instead of editing `lib/api/types.ts`.
+There is no standing exception: a failure in the frontend CI job is
+reported to the owner, not fixed, without that approval.
+
 Do not implement functionality belonging to a future phase, even if it seems
 convenient. A change that does will be asked to split. Telephony
 (Phase 8), real-time orchestration (Phase 9) and evaluation (Phase 11) are
@@ -503,8 +513,22 @@ ruff check . && ruff format --check .   # from the repository root
 - **`main` only.** Work is committed directly on `main`; do not create
   feature branches. There is no `develop` branch - it was removed once
   Phases 1 and 2 were integrated, and its history is preserved in `main`.
-- **Never push without the owner's explicit approval.** Commit locally,
-  report, and wait; approval for one push does not extend to the next.
+- **Commit each independently completed and tested unit, then push it.**
+  A unit is one coherent piece of engineering whose tests pass. Push it to
+  `origin/main` when it is done; do not hold finished work until the end
+  of a phase. This is a standing approval from the owner and replaces the
+  earlier push-only-on-approval rule.
+- **Never push unverified or failing work.** Before a push the relevant
+  tests pass, Ruff is clean and the diff has been read. Passing locally is
+  not the same as passing in a clean checkout: the first CI run failed on
+  generated files that existed only on the development machine.
+- **After every push, verify.** Confirm `git rev-parse HEAD` equals
+  `git rev-parse origin/main`, then check the GitHub Actions run for that
+  commit. Do not report CI as passing until it has finished and passed; a
+  red run is reported and fixed before more work is stacked on it.
+- **Never create a commit to inflate activity.** No splitting one change
+  into several, no empty or cosmetic commits. The history should show
+  real progress and nothing else.
 - **Stage explicit paths**, never `git add .` or `git add -A`. Local agent
   tooling (`.agents/`, `.claude/`, `skills-lock.json`) is excluded through
   `.git/info/exclude` and must never be committed.
@@ -513,6 +537,9 @@ ruff check . && ruff format --check .   # from the repository root
 - Conventional Commits. Explain **why** in the body, not just what.
 - Never force-push or rewrite pushed history.
 - Never start a phase before the owner has approved the previous one.
+  The standing push approval covers finished units inside an approved
+  phase; it does not approve starting the next phase, a paid provider
+  call, or a migration.
 - Roll back with `git revert`, never with `reset` on pushed history.
 - Review `git diff --cached` before committing: no secrets, no build
   artefacts.
