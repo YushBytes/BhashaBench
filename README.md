@@ -59,8 +59,16 @@ conversation scoring.
 > are available.** **Evon integration is NOT implemented or verified in this
 > phase** — no Gnani text-generation endpoint is published and the released
 > model has no hosted inference provider, so there is nothing to adapt.
-> `evon` is not a registered provider and is refused by name; every caller
-> response carries `uses_language_model: false`. **Not evaluated:**
+> `evon` is not a registered provider and is refused by name.
+>
+> **A Sarvam language-model caller is implemented and tested offline only**
+> (`sarvam-105b` and `sarvam-105b-conversations`), with the rule engine as its
+> fallback. **No request has been sent to Sarvam and none can be:** live
+> testing is not authorised, and live calls are disabled by a constant in the
+> code rather than by a setting. The approved ₹100 is a ceiling for later live
+> tests, not a budget in use. `uses_language_model` is derived from what
+> actually produced each turn, so it is `false` on every run so far.
+> **Not evaluated:**
 > conversation quality, and behaviour against a real voice bot — nothing here
 > has had a conversation with one. Design and limits in
 > [docs/CALLER.md](docs/CALLER.md).
@@ -331,7 +339,7 @@ names the original phase that delivers it.
 │ (Phase 9)       │  │ engine        │   │ 5 tables, owned   │
 └──┬──────────────┘  │ implemented   │   │ by Alembic        │
    │                 └───────────────┘   └───────────────────┘
-   ├── Caller engine — rule-based     (Phase 6; Evon not integrated)
+   ├── Caller engine — rule-based     (Phase 6; Sarvam LLM offline only; no Evon)
    ├── Speech to text — Gnani Prisma  (Phase 4)
    ├── Text to speech — Gnani Timbre  (Phase 5)
    ├── Audio degradation             (Phase 7)
@@ -411,8 +419,10 @@ BhashaBench/
 │   │   │   └── providers/     Gnani Timbre + offline fake
 │   │   ├── caller/            caller engine (Phase 6): state machine, rules,
 │   │   │   │                  transcript analysis, validation, orchestration
-│   │   │   └── providers/     deterministic rule engine. No Evon adapter -
-│   │   │                      see docs/CALLER.md for why
+│   │   │   ├── providers/     deterministic rule engine, and the model-backed
+│   │   │   │                  strategy. No Evon adapter - see docs/CALLER.md
+│   │   │   └── llm/           vendor-neutral LLM contract, live gate, budget;
+│   │   │                      clients/ holds the Sarvam adapter (offline only)
 │   │   ├── pipeline/          end-to-end voice pipeline (Phase 7): run engine,
 │   │   │   │                  audio degradation, execution modes
 │   │   │   └── bots/          bot adapters. Neither opens a socket; the
@@ -1013,7 +1023,7 @@ documentation. Full detail in
 | 3 | Scenario library & tooling | ✅ Complete |
 | 4 | Speech to text (Gnani Prisma) | ✅ Complete (batch live-verified; streaming not live-verified) |
 | 5 | Text to speech (Gnani Timbre) | ✅ Complete (batch; streaming not implemented) |
-| 6 | AI caller simulation — Evon | ⛔ Blocked — no published Evon API; deterministic caller delivered |
+| 6 | AI caller simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
 | 7 | Audio degradation engine | 🟡 Partial |
 | 8 | Telephony integration | ⬜ Not started |
 | 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop only |

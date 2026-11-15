@@ -297,6 +297,27 @@ So Phase 6 is the first phase that writes to those tables, and it writes only
 conversations it ran itself. It is also the first subsystem whose endpoints
 require PostgreSQL.
 
+**The language-model caller is two layers, and the vendor is the lower one.**
+A caller strategy (`caller/providers/llm.py`) owns everything about being a
+caller — the prompt, parsing, the validation gate, retry, limits, fallback and
+evidence — and speaks to an `LlmClient` protocol (`caller/llm/`) that knows
+only messages in and text out. A vendor is one client under
+`caller/llm/clients/`. The alternative, a `SarvamCallerProvider` that did
+both, would have put the information boundary and the budget arithmetic
+inside a vendor module, where the next vendor would have had to copy them.
+
+Three decisions follow from treating spend as a correctness property rather
+than an operational one. The client sends once and never retries, so every
+request is visible to the strategy's attempt limit. Authorisation to make
+live calls is a constant in code and not a setting, because an approval
+should not be something an environment variable can impersonate. And the
+global budget is a file, not a counter, because a provider is built per
+request and a ceiling that resets with each one enforces nothing.
+
+`uses_language_model` moved accordingly: it is still declared as a
+capability, but a conversation's value is derived from the evidence its turns
+carry, so a model-configured run that fell back throughout reports `false`.
+
 The states, rules and limits are in [CALLER.md](CALLER.md).
 
 ### 3.2e The voice pipeline (Phase 7)

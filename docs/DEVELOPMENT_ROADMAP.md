@@ -4,8 +4,10 @@ BhashaBench is built in **15 phases** — the original plan, restored. Each phas
 is a reviewable increment that ends with working code, passing tests and
 updated documentation.
 
-**Current status: Phases 1–5 complete; Phase 6 blocked on Evon access (a
-deterministic substitute is delivered); Phases 7, 9, 10, 12, 13 and 15
+**Current status: Phases 1–5 complete; Phase 6 partially complete (a
+deterministic caller is delivered and a Sarvam language-model caller is
+implemented and tested offline, with live calls neither authorised nor
+verified; Evon itself remains blocked); Phases 7, 9, 10, 12, 13 and 15
 partially complete; Phases 8, 11 and 14 not started. Phase 0 — a baseline and
 defect-remediation pass before new functionality — is complete: approved by
 the owner, pushed, and green in CI. A closing audit of Phase 1 on 2026-11-15
@@ -34,7 +36,7 @@ keep the numbering they were written in. Use this table to translate.
 | 3 Scenario Library & Tooling | Phase 3 |
 | 4 Gnani Prisma STT | Phase 4 |
 | 5 Gnani Timbre TTS | Phase 5 |
-| 6 AI Caller Simulation — Evon | Phase 6 (deterministic substitute) |
+| 6 AI Caller Simulation — Evon | Phase 6 (deterministic substitute); LLM caller under the original numbering |
 | 7 Audio Degradation Engine | Phase 7 |
 | 8 Telephony Integration | planned as "Phase 9 — Twilio" |
 | 9 Real-Time Conversation Engine | Phases 7 and 7.1 (sequential loop, concurrency); planned as "Phase 10" |
@@ -55,7 +57,7 @@ keep the numbering they were written in. Use this table to translate.
 | 3 | Scenario Library & Tooling | ✅ Complete |
 | 4 | Gnani Prisma — Speech to Text | ✅ Complete (batch live-verified; streaming not live-verified) |
 | 5 | Gnani Timbre — Text to Speech | ✅ Complete (batch; streaming not implemented) |
-| 6 | AI Caller Simulation — Evon | ⛔ Blocked — no published Evon API; deterministic caller delivered |
+| 6 | AI Caller Simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
 | 7 | Audio Degradation Engine | 🟡 Partial |
 | 8 | Telephony Integration | ⬜ Not started |
 | 9 | Real-Time Conversation Engine | 🟡 Partial — sequential turn loop only |
@@ -640,7 +642,25 @@ remains Phase 15 for the whole application.
 
 # Part B — Remaining work, by original phase
 
-## Phase 6 — AI Caller Simulation ⛔ (LLM caller)
+## Phase 6 — AI Caller Simulation 🟡 (LLM caller)
+
+**Implemented offline on 2026-11-15; awaiting the owner's acceptance.**
+
+- A provider-independent contract (`LlmClient`) and a model-backed caller
+  strategy with bounded retry and deterministic fallback.
+- Sarvam clients for `sarvam-105b` and `sarvam-105b-conversations`, from the
+  published documentation, tested against a mock transport.
+- Per-turn generation evidence, and `uses_language_model` derived from it.
+- Per-turn token limits, a per-run cost limit, and a durable global budget
+  capped at ₹100.
+- No table, no column, no migration.
+
+**Not done, and not to be claimed:** no live call has been made. Live testing
+is not authorised; the ₹100 figure is a ceiling for later. The Sarvam contract
+is transcribed from documentation and unconfirmed. No model has generated a
+caller turn, so `uses_language_model` has never been `true` on a real run.
+The plan for a first live test is in `docs/PROVIDERS.md`.
+
 
 Blocked for **Evon specifically**: no Gnani text-generation endpoint is
 published and the released model has no hosted provider (see Part A). The

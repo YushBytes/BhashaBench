@@ -22,7 +22,7 @@ work, so the next unfinished phase is Phase 6.
 | 3 | Scenario library & tooling | ✅ Complete |
 | 4 | Speech to text (Gnani Prisma) | ✅ Complete (batch live-verified; streaming not live-verified) |
 | 5 | Text to speech (Gnani Timbre) | ✅ Complete (batch; streaming not implemented) |
-| 6 | AI caller simulation — Evon | ⛔ Blocked — no published Evon API; deterministic caller delivered |
+| 6 | AI caller simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
 | 7 | Audio degradation engine | 🟡 Partial |
 | 8 | Telephony integration | ⬜ Not started |
 | 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop only |
@@ -127,8 +127,14 @@ speech/providers/
 caller/        the caller engine (Phase 6): state machine, transcript
                analysis, decision validation, orchestration, artefacts
 caller/providers/
-               one caller strategy per module. Deterministic only; there is
-               no Evon adapter and adding a non-functional one is forbidden
+               one caller strategy per module: the rule engine, and the
+               model-backed strategy that wraps an LlmClient. There is no
+               Evon adapter and adding a non-functional one is forbidden
+caller/llm/    vendor-neutral LLM types, prompt, parsing, pricing, the live
+               gate and the spending ledger. Names no vendor
+caller/llm/clients/
+               one LLM client per vendor - the ONLY place its wire format
+               may appear. Sarvam today, offline-tested only
 pipeline/      the end-to-end voice pipeline (Phase 7): run engine, audio
                degradation, execution modes, artefact records
 pipeline/bots/ one bot adapter per module. Neither shipping adapter opens a
@@ -270,6 +276,39 @@ was malformed (re-raised, nothing persisted, so a `.txt` upload does not get
 paths put a string into `turn_metadata`, which is also returned on the API
 surface. Pass it through `redact` — these two sites shipped unredacted once,
 the same class of defect Phase 4 fixed twice.
+
+### The language-model caller
+
+Full design in `docs/CALLER.md`. Five rules that are easy to break:
+
+**Live calls are not authorised, and a setting cannot authorise them.**
+`LIVE_CALLS_AUTHORISED` in `app/caller/llm/budget.py` is a constant and is
+`False`. Do not flip it, do not add a setting that bypasses it, and do not
+write a live Sarvam test, without the owner's explicit instruction to begin
+live testing. The ₹100 ceiling is a maximum for that later work, not
+permission. No request has ever been sent to Sarvam; do not write that one has.
+
+**Unknown is never zero.** A missing price refuses the request; missing token
+usage, a timeout and a failed request are charged at the worst case; an
+unreadable ledger refuses. `usage`, `model_reported` and `seed_honoured` stay
+`None` when the provider did not establish them.
+
+**`uses_language_model` is derived from turn evidence**, never from the
+configured provider. A Sarvam-configured run whose turns all fell back is
+`false`. A fallback turn is never recorded as generated.
+
+**The fallback is the rule engine and only the rule engine.** No list of
+alternative models, so a failing provider can never trigger a request to
+another paid one. The client sends once; retrying belongs to the strategy,
+where the attempt limit and the budget can see it.
+
+**The prompt is built from `CallerContext` alone.** Do not pass a scenario,
+a database row or settings into `build_messages`: the signature is the
+information boundary that keeps `expected_outcomes` away from a model.
+
+The two Sarvam models are separate entries in `sarvam_contract.MODELS` and
+are not assumed alike: `reasoning_effort` is sent explicitly to `sarvam-105b`
+and never to `sarvam-105b-conversations`.
 
 ### The pipeline
 
@@ -554,7 +593,7 @@ ruff check . && ruff format --check .   # from the repository root
 | `docs/SCENARIO_FORMAT.md` | the scenario specification or bundle format changes |
 | `docs/CLI.md` | a command, flag, exit code or output format changes |
 | `docs/PROVIDERS.md` | a provider contract, capability, limitation or verification status changes |
-| `docs/CALLER.md` | a caller state, rule, validation check, limit or endpoint changes |
+| `docs/CALLER.md` | a caller state, rule, validation check, limit, endpoint, LLM control or evidence field changes |
 | `docs/PIPELINE.md` | an execution mode, degradation profile, bot adapter, artefact rule or run endpoint changes |
 | `docs/FRONTEND.md` | a route, design token, primitive or API-client rule changes |
 | `backend/tests/fixtures/audio/README.md` | an audio fixture is added or changed |

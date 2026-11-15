@@ -79,6 +79,64 @@ not produce it. Reviewed phrase tables exist for `ta-IN`, `hi-IN` and `en-IN`
 only, and a scenario in any other catalogue language is refused rather than
 answered in English.
 
+### Caller — Sarvam language model (Phase 6)
+
+**No live call has been made, and none is authorised.** Everything below was
+established from Sarvam's published documentation and from tests against a
+mock transport. Design in [CALLER.md](CALLER.md#the-language-model-caller).
+
+| Capability | Status | How it was established |
+|------------|--------|------------------------|
+| Client implementation, `sarvam-105b` | ✅ **Verified offline** | `app/caller/llm/clients/sarvam.py`; `test_caller_llm_sarvam.py` against `httpx2.MockTransport` |
+| Client implementation, `sarvam-105b-conversations` | ✅ **Verified offline** | Same module; a separate model entry with its own context window and reasoning rule |
+| Official API contract | ⚠️ **Transcribed, not confirmed** | [docs.sarvam.ai](https://docs.sarvam.ai), read 2026-11-15, in `sarvam_contract.py`. Fifteen gaps and contradictions recorded in `DOCUMENTATION_GAPS` |
+| Real API authentication | ❌ **Not verified** | No request sent |
+| Real request accepted | ❌ **Not verified** | In particular `reasoning_effort: null` and `strict` structured output are untested against the service |
+| Real response parsing | ❌ **Not verified** | Parsed against the documented example only |
+| Token usage and cost | ❌ **Not verified** | Arithmetic is tested; whether the service reports usage as documented is not |
+| Seed determinism | ❌ **Not verifiable** | Best-effort and "in Beta" by the vendor's description. Recorded as sent, never as honoured |
+| Retry, fallback, limits, evidence | ✅ **Verified offline** | `test_caller_llm_provider.py`, `test_caller_llm_conversation.py` with a scripted client |
+| Live-call gate and ₹100 ceiling | ✅ **Verified offline** | `test_caller_llm_budget.py`; the gate is a constant and is closed |
+| Caller quality in any language | ⚠️ **Not evaluated** | No model has generated a turn |
+
+#### The documented Sarvam contract
+
+| | |
+|---|---|
+| Endpoint | `POST https://api.sarvam.ai/v1/chat/completions` — serves only these two models |
+| Authentication | `api-subscription-key: <key>` |
+| Fields sent | `model`, `messages`, `max_tokens`, `temperature`, and when applicable `reasoning_effort`, `seed`, `response_format` |
+| Never sent | `stream`, `tools`, `tool_choice`, `n`, penalties, `stop`, `top_p` |
+| Structured output | `{"type": "json_schema", "json_schema": {"name", "schema", "strict": true}}`; the reply is a JSON string in `message.content` and is parsed and validated regardless |
+| Usage | `usage.prompt_tokens`, `usage.completion_tokens`; reasoning tokens are a detail of completion tokens and billed as output |
+| Errors | `{"error": {"message", "code", "request_id"}}`. 403 authentication, 402 or `insufficient_quota_error` empty balance, 429 throttling, 400/404/413/422 bad request, 500/502/503 retryable |
+| Pricing | ₹15 per 1M input tokens, ₹60 per 1M output tokens, both models, excluding GST |
+| Rate limit | 60 requests/minute on the pay-as-you-go plan |
+
+Function calling is documented by Sarvam and deliberately unused: a caller
+turn is one structured reply, and tools would add a second billable round
+trip per turn.
+
+#### Live-test plan — not executed, and not to be without the owner's instruction
+
+1. Owner instructs that live testing may begin. Only then: set
+   `LIVE_CALLS_AUTHORISED = True` in a commit that says so, and update the
+   test that asserts it.
+2. In the git-ignored `.env`: `SARVAM_API_KEY`, `CALLER_PROVIDER=sarvam`,
+   `CALLER_LLM_MODEL`, `CALLER_LLM_LIVE_CALLS_ENABLED=true`, and a first
+   `CALLER_LLM_LIVE_BUDGET_INR` far below the ceiling — ₹5 is ample.
+3. One request to `sarvam-105b-conversations`, then one to `sarvam-105b`.
+   With the default limits each is bounded at about ₹0.17 worst case; a
+   typical turn should cost well under ₹0.05.
+4. Record for each: status, whether `reasoning_effort: null` and `strict`
+   were accepted, the reported model, usage, `system_fingerprint`, latency,
+   and the ledger total against Sarvam's dashboard.
+5. One three-turn conversation per model against the scripted bot.
+6. Correct `sarvam_contract.py` and `DOCUMENTATION_GAPS` from what was
+   observed, set `VERIFIED_AGAINST_LIVE_SERVICE`, and update this table.
+
+Expected total: under ₹5 of the ₹100 ceiling.
+
 ### Bot adapters — the pipeline's view of a voice bot (Phase 7)
 
 No live call was made for Phase 7, and no real voice bot was contacted. There
