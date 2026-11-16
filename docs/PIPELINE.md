@@ -199,6 +199,20 @@ wire:
 | 5 | `reduce_amplitude` | Quiet speech |
 | 6 | `clip` | Hard clip at a fraction of full scale; the count clipped is recorded |
 | 7 | `packet_loss` | Whole 20 ms packets, filled with silence — scattered samples would sound like crackle, not like a gap |
+| 8 | `jitter` | Seeded per-packet delay up to `jitter_ms`; where it exceeds the fixed `jitter_buffer_ms` the receiver under-runs and the shortfall is inserted as silence. Gaps and inserted milliseconds are recorded. The harsh end of jitter: real receivers adapt and conceal |
+| 9 | `dropout` | `dropout_count` seeded silent gaps of `dropout_ms` — a fade or dead spot, longer than a packet. The silenced duration is measured over the union, so overlapping gaps are not double-counted, and a shortfall is noted |
+| 10 | `truncate` | Cut at `truncate_after_seconds`, as a dropped call does; the seconds removed are recorded, and audio already shorter is noted |
+| 11 | `pad_silence` | Leading and trailing silence, exactly as requested |
+
+`reduce_amplitude` also records `gain_db_achieved`, measured from the RMS before
+and after. Jitter, dropouts, noise and packet loss all draw from the run's
+seed, and an unseeded request for any of them is refused.
+
+**Not simulated, and declared so:** speech-rate change (needs a
+pitch-preserving time-stretch this project does not implement — plain
+resampling would change the pitch and misrepresent the condition) and
+overlapping speech (needs a second voice source). A scenario cannot declare
+either.
 
 ### Profiles
 

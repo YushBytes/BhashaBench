@@ -60,6 +60,10 @@ class Transformation(StrEnum):
     CLIP = "clip"
     REDUCE_AMPLITUDE = "reduce_amplitude"
     PACKET_LOSS = "packet_loss"
+    JITTER = "jitter"
+    DROPOUT = "dropout"
+    TRUNCATE = "truncate"
+    PAD_SILENCE = "pad_silence"
 
 
 class NoiseProfile(StrEnum):
@@ -101,6 +105,19 @@ class DegradationConfig:
     packet_loss_percent: float = 0.0
     packet_duration_ms: float = 20.0
     """Length of one simulated packet. 20 ms is the common RTP payload size."""
+    jitter_ms: float = 0.0
+    """Largest extra network delay a packet may suffer, drawn uniformly per
+    packet. Where a packet's delay exceeds `jitter_buffer_ms` the receiver
+    under-runs and the shortfall is inserted as silence before it."""
+    jitter_buffer_ms: float = 40.0
+    dropout_count: int = 0
+    """Number of silent gaps of `dropout_ms` placed at seeded positions - a
+    signal fade or a dead spot, longer than one packet."""
+    dropout_ms: float = 200.0
+    truncate_after_seconds: float | None = None
+    """Cut the audio here, as a call that drops mid-sentence does."""
+    leading_silence_ms: float = 0.0
+    trailing_silence_ms: float = 0.0
     seed: int | None = None
 
     def validate(self) -> None:
@@ -142,15 +159,36 @@ class DegradationConfig:
             )
         if self.packet_duration_ms <= 0:
             problems.append(f"packet_duration_ms must be positive, got {self.packet_duration_ms}")
+        if not (0 <= self.jitter_ms <= 500):
+            problems.append(f"jitter_ms must be in [0, 500], got {self.jitter_ms}")
+        if not (0 <= self.jitter_buffer_ms <= 500):
+            problems.append(f"jitter_buffer_ms must be in [0, 500], got {self.jitter_buffer_ms}")
+        if not (0 <= self.dropout_count <= 50):
+            problems.append(f"dropout_count must be in [0, 50], got {self.dropout_count}")
+        if not (0 < self.dropout_ms <= 5000):
+            problems.append(f"dropout_ms must be in (0, 5000], got {self.dropout_ms}")
+        if self.truncate_after_seconds is not None and not (0 < self.truncate_after_seconds <= 600):
+            problems.append(
+                f"truncate_after_seconds must be in (0, 600], got {self.truncate_after_seconds}"
+            )
+        for name in ("leading_silence_ms", "trailing_silence_ms"):
+            value = getattr(self, name)
+            if not (0 <= value <= 10000):
+                problems.append(f"{name} must be in [0, 10000], got {value}")
 
         # The reproducibility rule, enforced rather than documented: noise and
         # packet loss both draw from an RNG, and an unseeded run produces an
         # artefact nobody can reproduce - which is not evidence.
-        stochastic = self.snr_db is not None or self.packet_loss_percent > 0
+        stochastic = (
+            self.snr_db is not None
+            or self.packet_loss_percent > 0
+            or self.jitter_ms > 0
+            or self.dropout_count > 0
+        )
         if stochastic and self.seed is None:
             problems.append(
-                "a seed is required when adding noise or simulating packet loss, "
-                "because an artefact that cannot be reproduced is not evidence"
+                "a seed is required when adding noise or simulating packet loss, jitter "
+                "or dropouts, because an artefact that cannot be reproduced is not evidence"
             )
 
         if problems:
@@ -187,6 +225,14 @@ class DegradationConfig:
             steps.append(Transformation.CLIP)
         if self.packet_loss_percent > 0:
             steps.append(Transformation.PACKET_LOSS)
+        if self.jitter_ms > 0:
+            steps.append(Transformation.JITTER)
+        if self.dropout_count > 0:
+            steps.append(Transformation.DROPOUT)
+        if self.truncate_after_seconds is not None:
+            steps.append(Transformation.TRUNCATE)
+        if self.leading_silence_ms > 0 or self.trailing_silence_ms > 0:
+            steps.append(Transformation.PAD_SILENCE)
         return tuple(steps)
 
 
@@ -553,6 +599,60 @@ def _packet_loss(
     return out, dropped, total_packets
 
 
+def _jitter(
+    samples: array.array,
+    *,
+    rate: int,
+    jitter_ms: float,
+    buffer_ms: float,
+    packet_duration_ms: float,
+    rng: random.Random,
+) -> tuple[array.array, int, float]:
+    """Insert under-run silence where a packet's delay exceeds the buffer.
+
+    Returns (audio, gaps inserted, total silence inserted in ms). An
+    approximation of a receiver with a fixed jitter buffer and no
+    concealment: real receivers adapt their buffer and conceal, so this is
+    the harsh end of what jitter does, and it is reported as such.
+    """
+    packet_samples = max(int(rate * packet_duration_ms / 1000.0), 1)
+    out = array.array("h")
+    gaps = 0
+    inserted = 0
+    for start in range(0, len(samples), packet_samples):
+        late_ms = rng.uniform(0.0, jitter_ms) - buffer_ms
+        if late_ms > 0:
+            count = int(rate * late_ms / 1000.0)
+            if count:
+                out.extend(array.array("h", bytes(count * 2)))
+                gaps += 1
+                inserted += count
+        out.extend(samples[start : start + packet_samples])
+    return out, gaps, round(1000.0 * inserted / rate, 3)
+
+
+def _dropouts(
+    samples: array.array, *, rate: int, count: int, dropout_ms: float, rng: random.Random
+) -> tuple[array.array, float]:
+    """Silence `count` gaps of `dropout_ms` at seeded positions.
+
+    Returns the audio and the silenced duration actually achieved, in ms: gaps
+    can overlap, and a gap cannot be longer than the audio, so the achieved
+    figure is measured over the union rather than multiplied out.
+    """
+    width = min(max(int(rate * dropout_ms / 1000.0), 1), len(samples))
+    out = array.array("h", samples)
+    silenced = bytearray(len(samples))
+    for _ in range(count):
+        if not len(samples):
+            break
+        start = rng.randrange(0, max(len(samples) - width, 0) + 1)
+        for index in range(start, start + width):
+            out[index] = 0
+            silenced[index] = 1
+    return out, round(1000.0 * sum(silenced) / rate, 3)
+
+
 def _clamp(value: int) -> int:
     """Hold a sample inside the 16-bit range."""
     if value > _INT16_MAX:
@@ -664,8 +764,13 @@ def degrade(audio: bytes, config: DegradationConfig) -> DegradationResult:
         applied.append(Transformation.ADD_NOISE)
 
     if config.amplitude_scale is not None:
+        before = _rms(samples)
         samples = _reduce_amplitude(samples, config.amplitude_scale)
         parameters["amplitude_scale"] = config.amplitude_scale
+        after = _rms(samples)
+        # Measured, so rounding at very low levels shows rather than hides.
+        if before > 0 and after > 0:
+            parameters["gain_db_achieved"] = round(20 * math.log10(after / before), 3)
         applied.append(Transformation.REDUCE_AMPLITUDE)
 
     if config.clip_threshold is not None:
@@ -691,6 +796,74 @@ def degrade(audio: bytes, config: DegradationConfig) -> DegradationResult:
         # the audio actually suffered.
         parameters["packet_loss_realised_percent"] = round(100.0 * dropped / total, 2)
         applied.append(Transformation.PACKET_LOSS)
+
+    if config.jitter_ms > 0:
+        if channels != 1:
+            raise DegradationError(
+                "jitter is only supported for mono audio; set force_mono as well",
+                stage="degradation",
+            )
+        samples, gaps, inserted_ms = _jitter(
+            samples,
+            rate=rate,
+            jitter_ms=config.jitter_ms,
+            buffer_ms=config.jitter_buffer_ms,
+            packet_duration_ms=config.packet_duration_ms,
+            rng=rng,
+        )
+        parameters["jitter_ms"] = config.jitter_ms
+        parameters["jitter_buffer_ms"] = config.jitter_buffer_ms
+        parameters["jitter_gaps_inserted"] = gaps
+        parameters["jitter_silence_inserted_ms"] = inserted_ms
+        if config.jitter_ms <= config.jitter_buffer_ms:
+            notes.append(
+                f"jitter of up to {config.jitter_ms:g} ms never exceeds the "
+                f"{config.jitter_buffer_ms:g} ms buffer, so no gap could be inserted"
+            )
+        applied.append(Transformation.JITTER)
+
+    if config.dropout_count > 0:
+        if channels != 1:
+            raise DegradationError(
+                "dropouts are only supported for mono audio; set force_mono as well",
+                stage="degradation",
+            )
+        samples, silenced_ms = _dropouts(
+            samples, rate=rate, count=config.dropout_count, dropout_ms=config.dropout_ms, rng=rng
+        )
+        parameters["dropout_count"] = config.dropout_count
+        parameters["dropout_ms"] = config.dropout_ms
+        parameters["dropout_silenced_ms_achieved"] = silenced_ms
+        requested_ms = config.dropout_count * config.dropout_ms
+        if silenced_ms < requested_ms:
+            notes.append(
+                f"{config.dropout_count} dropouts of {config.dropout_ms:g} ms silenced "
+                f"{silenced_ms:g} ms, not {requested_ms:g} ms: gaps overlapped or the "
+                "audio was shorter than requested"
+            )
+        applied.append(Transformation.DROPOUT)
+
+    if config.truncate_after_seconds is not None:
+        keep = int(config.truncate_after_seconds * rate) * channels
+        removed_frames = max(len(samples) - keep, 0) // channels
+        if removed_frames:
+            samples = samples[:keep]
+        else:
+            notes.append(
+                f"the audio was already shorter than {config.truncate_after_seconds:g} s, "
+                "so nothing was truncated"
+            )
+        parameters["truncate_after_seconds"] = config.truncate_after_seconds
+        parameters["truncated_seconds"] = round(removed_frames / rate, 3)
+        applied.append(Transformation.TRUNCATE)
+
+    if config.leading_silence_ms > 0 or config.trailing_silence_ms > 0:
+        lead = int(rate * config.leading_silence_ms / 1000.0) * channels
+        trail = int(rate * config.trailing_silence_ms / 1000.0) * channels
+        samples = array.array("h", bytes(lead * 2)) + samples + array.array("h", bytes(trail * 2))
+        parameters["leading_silence_ms"] = config.leading_silence_ms
+        parameters["trailing_silence_ms"] = config.trailing_silence_ms
+        applied.append(Transformation.PAD_SILENCE)
 
     output = _encode(samples, rate=rate, channels=channels)
     frames = len(samples) // channels
