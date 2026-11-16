@@ -41,7 +41,7 @@ def _build_timbre(settings: Settings) -> SynthesisProvider:
     The adapter's 403 message says so, because "forbidden" on a key that
     demonstrably works for Prisma is otherwise baffling.
     """
-    if not settings.gnani_api_key:
+    if not settings.gnani_api_key.get_secret_value():
         raise SpeechConfigurationError(
             "SPEECH_PROVIDER=timbre requires GNANI_API_KEY to be set. It is the "
             "same key Prisma speech-to-text uses - obtain one from your Gnani "
@@ -52,7 +52,7 @@ def _build_timbre(settings: Settings) -> SynthesisProvider:
         )
 
     return GnaniTimbreProvider(
-        api_key=settings.gnani_api_key,
+        api_key=settings.gnani_api_key.get_secret_value(),
         base_url=settings.gnani_api_base_url,
         model=settings.gnani_tts_model,
         default_voice=settings.gnani_tts_voice,
@@ -113,7 +113,7 @@ def build_provider(settings: Settings, name: str | None = None) -> SynthesisProv
         extra={
             "provider": selected,
             "environment": str(settings.app_env),
-            "credential": mask_secret(settings.gnani_api_key)
+            "credential": mask_secret(settings.gnani_api_key.get_secret_value())
             if selected == TIMBRE_PROVIDER
             else "<not required>",
         },

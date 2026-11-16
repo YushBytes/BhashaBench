@@ -36,7 +36,7 @@ def _build_prisma(settings: Settings) -> TranscriptionProvider:
     names the environment variable the operator has to set. An adapter that
     raised "api_key is required" would be correct and useless.
     """
-    if not settings.gnani_api_key:
+    if not settings.gnani_api_key.get_secret_value():
         raise ConfigurationError(
             "TRANSCRIPTION_PROVIDER=prisma requires GNANI_API_KEY to be set. "
             "Obtain a key from your Gnani account dashboard at app.gnani.ai, "
@@ -46,7 +46,7 @@ def _build_prisma(settings: Settings) -> TranscriptionProvider:
         )
 
     return GnaniPrismaProvider(
-        api_key=settings.gnani_api_key,
+        api_key=settings.gnani_api_key.get_secret_value(),
         base_url=settings.gnani_api_base_url,
         model=settings.gnani_stt_model,
         timeout_seconds=settings.transcription_timeout_seconds,
@@ -114,7 +114,7 @@ def build_provider(settings: Settings, name: str | None = None) -> Transcription
             "environment": str(settings.app_env),
             # A fingerprint, never the key: enough to tell two environments
             # apart in a log, not enough to authenticate with.
-            "credential": mask_secret(settings.gnani_api_key)
+            "credential": mask_secret(settings.gnani_api_key.get_secret_value())
             if selected == PRISMA_PROVIDER
             else "<not required>",
         },

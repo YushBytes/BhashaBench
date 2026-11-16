@@ -790,7 +790,7 @@ scenario persona), `voices_are_exhaustive`, the audio tags, the speed range,
 | `SPEECH_LIVE_TESTS` | opt in to real, billable synthesis calls (default false) |
 | `GNANI_TTS_MODEL` | `timbre-v3.0` (default) or `timbre-v2.5` |
 | `GNANI_TTS_VOICE` | default voice (default `Kalpana`) |
-| `GNANI_API_KEY` | Gnani API key, sent as `X-API-Key-ID`. **Never commit a value.** |
+| `GNANI_API_KEY` | Gnani API key, sent as `X-API-Key-ID`. **Never commit a value.** Held as a `SecretStr`, so it is masked in a repr, a settings dump and a failing assertion |
 | `GNANI_API_BASE_URL` | REST base URL (default `https://api.vachana.ai`) |
 | `GNANI_STT_MODEL` | `prisma-v3.0` (default) or `prisma-v2.5` |
 

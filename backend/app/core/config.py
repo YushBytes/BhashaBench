@@ -141,12 +141,14 @@ class Settings(BaseSettings):
             "effective limit is the lower of this and the provider's own."
         ),
     )
-    gnani_api_key: str = Field(
-        default="",
+    gnani_api_key: SecretStr = Field(
+        default=SecretStr(""),
         description=(
             "Gnani platform API key, sent as the X-API-Key-ID header. Empty by "
             "default: an unset credential must fail loudly at provider "
-            "construction, not resolve to something that looks like a key."
+            "construction, not resolve to something that looks like a key. A "
+            "`SecretStr`, so it does not appear in a repr, a dump or a failing "
+            "test's assertion diff."
         ),
     )
     gnani_api_base_url: str = Field(

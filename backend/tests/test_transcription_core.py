@@ -794,8 +794,15 @@ class TestTranscriptionConfiguration:
     def test_no_credential_is_configured_by_default(self) -> None:
         # Reduced to a bool first: pytest's assertion diff shows the operands,
         # and comparing the key itself printed a real credential on failure.
-        configured = bool(_settings().gnani_api_key)
+        configured = bool(_settings().gnani_api_key.get_secret_value())
         assert configured is False, "a Gnani credential reached the default settings"
+
+    def test_the_credential_is_masked_in_repr_and_dump(self) -> None:
+        secret = "gnani-secret-value-0123456789abcdef"
+        settings = _settings(gnani_api_key=secret)
+        assert secret not in repr(settings)
+        assert secret not in str(settings.model_dump())
+        assert settings.gnani_api_key.get_secret_value() == secret
 
     def test_live_tests_are_off_by_default(self) -> None:
         """CI must never be able to spend money by accident."""
