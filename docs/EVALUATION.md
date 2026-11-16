@@ -65,3 +65,41 @@ fixtures, and no rate is ever estimated without one.
 
 Full definitions, formulas, evidence and limitations: `registry.py`, or
 `GET /api/v1/evaluation/metrics`.
+
+## The verdict
+
+`backend/app/evaluation/evaluator.py`. A conjunction of the criteria that
+apply to the run:
+
+| Criterion | Applies when | Fails when |
+|-----------|--------------|------------|
+| `task_completion` | always | the run finished with a bot outcome other than `goal_achieved` |
+| `required_phrases` | the scenario declares some | any is missing from every bot turn |
+| `forbidden_phrases` | the scenario declares some | any appears in a bot turn |
+
+- **`pass`** — every applicable criterion passed.
+- **`fail`** — at least one failed. Each criterion carries its reason, naming
+  the missing or offending phrase.
+- **`undetermined`** — the run is unfinished, or ended with `provider_error`,
+  `audio_validation_failed`, `external_bot_unavailable`, `abandoned` or
+  `cancelled`. Never counted as a failure.
+
+Keyword coverage, error rates, latency and transcription failures are
+reported beside the verdict and never move it.
+
+## Reproducibility
+
+The evaluator gathers everything it may read into one canonical evidence
+document — the run's mode, status and outcome, the scenario's expected
+outcomes and phrases, and each bot turn's text, measured latency,
+transcription failure flag and latest reviewed reference — and stores its
+SHA-256 as `evidence_fingerprint`. Every metric is a pure function of that
+document, so two evaluations with the same fingerprint and evaluator version
+are identical (a test asserts it). Adding or correcting a reference changes the
+fingerprint, which is how a report shows that a later score rests on different
+evidence.
+
+Evaluations are append-only: re-evaluating adds a row and never replaces one.
+A failed transcription with a reference is **excluded** from the error rates
+and counted as excluded, not scored as deletions — that failure is ours, and is
+reported under `transcription_failure_rate` instead.
