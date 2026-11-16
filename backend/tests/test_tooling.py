@@ -103,3 +103,21 @@ class TestTheTwoConfigurationsAgree:
         """
         assert _ini_list(container_config["testpaths"]) == ["tests"]
         assert host_config["testpaths"] == ["backend/tests"]
+
+
+class TestAmbientCredentialIsolation:
+    """Offline tests must not see a credential exported in the developer's shell."""
+
+    def test_every_provider_key_setting_is_covered(self) -> None:
+        from tests.conftest import CREDENTIAL_ENV_VARS
+
+        assert {"GNANI_API_KEY", "SARVAM_API_KEY"} <= set(CREDENTIAL_ENV_VARS)
+
+    def test_no_credential_is_visible_to_an_offline_test(self) -> None:
+        import os
+
+        from tests.conftest import CREDENTIAL_ENV_VARS
+
+        # Names only, never values: a failure here must not print a key.
+        leaked = sorted(name for name in CREDENTIAL_ENV_VARS if name in os.environ)
+        assert leaked == []

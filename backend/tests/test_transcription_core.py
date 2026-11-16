@@ -792,7 +792,10 @@ class TestTranscriptionConfiguration:
         assert _settings().transcription_provider == "fake"
 
     def test_no_credential_is_configured_by_default(self) -> None:
-        assert _settings().gnani_api_key == ""
+        # Reduced to a bool first: pytest's assertion diff shows the operands,
+        # and comparing the key itself printed a real credential on failure.
+        configured = bool(_settings().gnani_api_key)
+        assert configured is False, "a Gnani credential reached the default settings"
 
     def test_live_tests_are_off_by_default(self) -> None:
         """CI must never be able to spend money by accident."""

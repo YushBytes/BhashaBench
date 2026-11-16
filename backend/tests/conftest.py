@@ -74,6 +74,31 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
+CREDENTIAL_ENV_VARS: tuple[str, ...] = tuple(
+    sorted(name.upper() for name in Settings.model_fields if name.endswith("_api_key"))
+)
+"""Environment variables that carry a provider credential, derived from the
+settings model so a key added later is covered without editing this list."""
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_credentials(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hide provider credentials exported in the shell from every offline test.
+
+    `_env_file=None` keeps a local `.env` out of a test's settings, but
+    pydantic-settings still reads the process environment. A developer who
+    exported `GNANI_API_KEY` to run the live tests then saw offline tests fail
+    - and pytest's assertion diff printed the key. Only `live` tests, which
+    are opt-in and need the real credential, keep it.
+    """
+    if request.node.get_closest_marker("live") is not None:
+        return
+    for name in CREDENTIAL_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
 # ---------------------------------------------------------------------------
 # Transcription fixtures (Phase 4) - no database, no network, no credentials
 # ---------------------------------------------------------------------------
