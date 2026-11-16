@@ -147,6 +147,8 @@ caller/llm/    vendor-neutral LLM types, prompt, parsing, pricing, the live
 caller/llm/clients/
                one LLM client per vendor - the ONLY place its wire format
                may appear. Sarvam today, offline-tested only
+evaluation/    the evaluation engine (Phase 11): normalisation, error
+               rates, the metric registry. Deterministic; calls nothing
 pipeline/      the end-to-end voice pipeline (Phase 7): run engine, audio
                degradation, execution modes, artefact records
 pipeline/bots/ one bot adapter per module. Only `http` opens a socket, it
@@ -514,7 +516,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2578 collected; 2537 pass, 41 live ones skipped
+pytest                                  # 2603 collected; 2562 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```
@@ -610,6 +612,9 @@ ruff check . && ruff format --check .   # from the repository root
 | `docs/PROVIDERS.md` | a provider contract, capability, limitation or verification status changes |
 | `docs/CALLER.md` | a caller state, rule, validation check, limit, endpoint, LLM control or evidence field changes |
 | `docs/PIPELINE.md` | an execution mode, degradation profile, bot adapter, artefact rule or run endpoint changes |
+| `docs/EVALUATION.md` | a metric, normalisation step, criterion or the evaluator version changes |
+| `docs/SECURITY.md` | a security control, known gap or incident changes |
+| `docs/BOT_PROTOCOL.md` | the bot protocol changes |
 | `docs/FRONTEND.md` | a route, design token, primitive or API-client rule changes |
 | `backend/tests/fixtures/audio/README.md` | an audio fixture is added or changed |
 | `scenarios/README.md` | a reference scenario is added or changed |
