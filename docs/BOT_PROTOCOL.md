@@ -30,7 +30,8 @@ Request: `{"language": "hi-IN", "metadata": {"run_id": "..."}}` — a BCP 47
 tag from BhashaBench's catalogue and up to 20 string pairs.
 
 `201`: `{"session_id": "<opaque, 1-200 chars>", "greeting": "<text>" | null}`.
-A greeting, when present, is recorded as the bot's first turn.
+A greeting, when present, is recorded in the run's evidence as
+`bot_greeting`. It is not a turn: the caller speaks first.
 
 ### `POST /v1/sessions/{session_id}/turns`
 

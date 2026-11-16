@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,4 +117,28 @@ class BotAdapter(Protocol):
         ...
 
 
-__all__ = ["BotAdapter", "BotCapabilities", "BotReply"]
+@runtime_checkable
+class TextBotAdapter(Protocol):
+    """A bot the pipeline exchanges *text* with, session by session.
+
+    Separate from `BotAdapter` rather than an optional method on it, so a
+    text-only adapter cannot be handed to an audio mode by accident: the
+    engine checks which protocol an adapter satisfies when a run is created.
+    Implemented by `app.pipeline.bots.http_text.HttpTextBotAdapter`.
+    """
+
+    @property
+    def capabilities(self) -> BotCapabilities: ...
+
+    async def open_session(self, *, run_id: uuid.UUID, language: str) -> Any: ...
+
+    async def send_text(
+        self, text: str, *, session_id: str, run_id: uuid.UUID, turn_index: int
+    ) -> Any: ...
+
+    async def close_session(self, *, session_id: str, run_id: uuid.UUID) -> None: ...
+
+    async def close(self) -> None: ...
+
+
+__all__ = ["BotAdapter", "BotCapabilities", "BotReply", "TextBotAdapter"]

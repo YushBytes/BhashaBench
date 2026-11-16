@@ -14,7 +14,8 @@ every report repeats it, and nothing infers it.
 |------|-------|---------------------------|---------------------------|
 | `offline_simulation` | none | text replies: the scripted adapter reads `PIPELINE_FIXTURE_BOT_TEXT_PATH`; the manual adapter waits for `POST /bot-text` | The caller's logic. **Nothing about audio.** |
 | `audio_fixture_test` | real, end to end | pre-recorded or generated audio files | Synthesis, degradation, storage and transcription work together. **Nothing about any particular voice bot.** |
-| `external_bot_test` | real, end to end | audio an operator obtained from the bot under test | The only mode that may be described as testing a bot |
+| `external_bot_test` | real, end to end | audio an operator obtained from the bot under test | The only mode that may be described as testing a voice bot |
+| `text_bot_test` | none | text from an external bot over `bhashabench-text-bot/1`, via the `http` adapter | What an external bot **says**. Nothing about recognition, synthesis or audio |
 | `telephony_test` | — | — | **Not implemented.** Creating a run in this mode is refused |
 
 Two mechanisms keep the labels honest rather than aspirational:
@@ -26,6 +27,13 @@ Two mechanisms keep the labels honest rather than aspirational:
   came from outside this process. A fixture reply clears it permanently, so a
   run labelled `external_bot_test` whose replies were fixtures reports `false`
   and can be seen to be mislabelled.
+- **`bot_text_externally_received`** is true only for a `text_bot_test` that
+  recorded at least one reply from the external bot, counted from the
+  replies. `bot_exchange` says `text`, `audio` or null (offline), and an
+  adapter whose exchange the mode cannot describe is refused at creation:
+  an offline simulation with an adapter that contacts anything, a text bot
+  test without a text adapter, or an audio mode with the text-only `http`
+  adapter.
 
 ### What has and has not been verified
 
@@ -41,6 +49,7 @@ WAV, so every stage between the two providers ran for real.
 | Timbre / Prisma through the existing services | ✅ Verified with the offline fakes |
 | Timbre / Prisma live in a pipeline run | ❌ Not tested — no live call was authorised or made |
 | A real voice bot conversation | ❌ Not tested — no external bot endpoint was available |
+| A text conversation with an external bot over HTTP | ✅ Verified against the reference bot on a real localhost socket — not against any third-party bot |
 | Telephony | ⬜ Not implemented |
 | Recognition accuracy under degradation | ❌ Not measured — the fixtures contain no speech and no reviewed ground truth |
 | Concurrency limit enforced | ✅ Verified — competition Phase 7.1 (original Phase 9); the limit holds under forced overlap, and exceptions, cancellation and timeouts all release capacity |
@@ -125,7 +134,9 @@ three.
 | `turn_budget_exhausted` | Ran out of turns | yes |
 | `provider_error` | **Our** synthesis or transcription broke | **no** |
 | `audio_validation_failed` | Audio did not survive inspection | **no** |
-| `external_bot_unavailable` | The bot could not be reached | **no** |
+| `external_bot_unavailable` | The bot could not be reached, or refused our credential | **no** |
+| `bot_protocol_error` | The bot answered outside `bhashabench-text-bot/1`: a malformed body, an unexpected status, a redirect | yes — its integration |
+| `bot_ended_session` | The bot closed the session before the caller reached its objective | yes |
 | `cancelled` | An operator stopped it | **no** |
 | `abandoned` | Left in flight with nothing executing it; closed by `bhashabench runs recover-stale --apply`. An outcome only: the run's database status is `failed` | **no** |
 
@@ -404,13 +415,40 @@ Generated audio is never committed; `storage/` is git-ignored.
 
 ## Bot adapters
 
-How the pipeline obtains the bot's side. Two ship, and **neither opens a
-socket**.
+How the pipeline obtains the bot's side. Three ship; **only `http` opens a
+socket, and it carries text, never audio**.
 
 | Adapter | Does | `contacts_external_system` |
 |---------|------|---------------------------|
 | `scripted` | Replays fixture audio, one payload per turn. Deterministic | `false` |
 | `manual` | Stores the caller's audio and waits for an operator to post the reply | `false` |
+| `http` | Exchanges text with a bot speaking `bhashabench-text-bot/1` (`docs/BOT_PROTOCOL.md`). Usable only in `text_bot_test` | `true` |
+
+### The http adapter
+
+Configured from `BOT_HTTP_*` settings only; no request field selects a URL.
+`GET /test-runs/bot-adapters/available` reports `available: false` with the
+missing setting's name until `BOT_HTTP_BASE_URL`, `BOT_HTTP_TOKEN` and
+`BOT_HTTP_ALLOWED_HOSTS` are all set. Every request is checked by the
+outbound guard (`docs/SECURITY.md`), redirects are not followed, and a turn
+is retried only after a connection that never opened or a `502`/`503`/`504`,
+with the same idempotency key. The session is opened on the first bot turn,
+its greeting is recorded as `bot_greeting` (not as a turn - the caller
+speaks first), and it is closed once the run is over; a failure to close is an
+event and changes no outcome. A run cancelled from outside does not close the
+bot's session; the bot's own expiry reclaims it.
+
+Each bot turn's metadata records `source: external_text_bot`, the measured
+`latency_ms`, `attempts`, `correlation_id` and `end_session`.
+
+For a local run against the reference bot:
+
+```bash
+cd backend
+REFERENCE_BOT_TOKEN=<16+ chars> python -m reference_bot   # serves 127.0.0.1:8090
+# then, for the API: BOT_HTTP_BASE_URL=http://127.0.0.1:8090
+#   BOT_HTTP_TOKEN=<same token> BOT_HTTP_ALLOWED_HOSTS=127.0.0.1 BOT_HTTP_ALLOW_LOOPBACK=true
+```
 
 `scripted` is the default, and that is a safety decision: §7 requires the
 default configuration not to send audio to arbitrary external destinations, so

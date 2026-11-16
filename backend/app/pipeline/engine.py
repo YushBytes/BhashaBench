@@ -55,7 +55,7 @@ from app.caller.state import is_terminal as caller_state_is_terminal
 from app.core.config import Settings
 from app.models.call_session import CallSession
 from app.models.test_run import RunStatus, TestRun
-from app.pipeline.bots.protocol import BotAdapter, BotReply
+from app.pipeline.bots.protocol import BotAdapter, BotReply, TextBotAdapter
 from app.pipeline.concurrency import RunSlots
 from app.pipeline.degradation import (
     NoiseProfile,
@@ -65,12 +65,15 @@ from app.pipeline.degradation import (
 from app.pipeline.errors import (
     BotAdapterError,
     BotAudioPendingError,
+    BotAuthenticationError,
+    BotProtocolError,
     DegradationError,
     PipelineConfigurationError,
     RunNotActiveError,
 )
 from app.pipeline.modes import (
     IMPLEMENTED_MODES,
+    TEXT_MODES,
     ExecutionMode,
     PipelineStatus,
     RunOutcome,
@@ -167,7 +170,7 @@ class RunConfig:
     @property
     def uses_audio(self) -> bool:
         """Whether this run moves audio at all."""
-        return self.mode is not ExecutionMode.OFFLINE_SIMULATION
+        return self.mode not in TEXT_MODES
 
 
 def settings_not_enforced(
@@ -387,6 +390,15 @@ class RunReport:
     started_at: str | None
     finished_at: str | None
     error: str | None = None
+    bot_exchange: str | None = None
+    """`text` or `audio` for a run whose bot leg reached a bot or fixture
+    audio; `None` for an offline simulation. Never inferred from a name."""
+    bot_text_replies_received: int = 0
+    bot_text_externally_received: bool = False
+    """True only for a `text_bot_test` that recorded at least one reply from
+    the external bot. Counted from the replies, not read from the mode."""
+    bot_session_id: str | None = None
+    bot_greeting: str | None = None
 
     @property
     def total_audio_seconds(self) -> float:
@@ -491,6 +503,7 @@ class RunEngine:
                 language.
         """
         config.validate()
+        self._check_adapter_fits_mode(config.mode)
 
         if config.uses_audio and self._stt_provider is None:
             raise PipelineConfigurationError(
@@ -579,6 +592,16 @@ class RunEngine:
             "bot_audio_externally_received": config.uses_audio,
             "bot_transcripts_succeeded": 0,
             "bot_transcripts_failed": 0,
+            # How the bot leg is carried. `None` for an offline simulation,
+            # whose replies are fixtures or an operator, not a bot.
+            "bot_exchange": (
+                "text"
+                if config.mode is ExecutionMode.TEXT_BOT_TEST
+                else (None if config.mode is ExecutionMode.OFFLINE_SIMULATION else "audio")
+            ),
+            # Counted, never assumed: `bot_text_externally_received` in the
+            # report is derived from this, not from the mode.
+            "bot_text_replies_received": 0,
         }
         repo.update_pipeline_metadata(self._session, run, metadata)
 
@@ -594,6 +617,31 @@ class RunEngine:
             },
         )
         return run
+
+    def _check_adapter_fits_mode(self, mode: ExecutionMode) -> None:
+        """Refuse an adapter whose kind of exchange the mode cannot describe.
+
+        Three mismatches, each of which would put a false label on a run:
+        an offline simulation that contacts an external system, a text bot
+        test whose adapter cannot exchange text, and an audio mode handed an
+        adapter that carries no audio.
+        """
+        caps = self._bot.capabilities
+        is_text = isinstance(self._bot, TextBotAdapter)
+        if mode is ExecutionMode.OFFLINE_SIMULATION and caps.contacts_external_system:
+            raise PipelineConfigurationError(
+                f"offline_simulation contacts nothing, but the '{caps.name}' adapter sends "
+                "requests to an external system; use the text_bot_test mode for it"
+            )
+        if mode is ExecutionMode.TEXT_BOT_TEST and not (is_text and caps.contacts_external_system):
+            raise PipelineConfigurationError(
+                "text_bot_test needs an adapter that exchanges text with an external bot; "
+                f"'{caps.name}' does not. Use bot_adapter 'http'"
+            )
+        if mode not in TEXT_MODES and not caps.accepts_containers:
+            raise PipelineConfigurationError(
+                f"mode '{mode.value}' moves audio, and the '{caps.name}' adapter carries none"
+            )
 
     def _resolve_profile(self, config: RunConfig, spec: ScenarioSpec) -> NoiseProfile:
         """The profile this run will use.
@@ -775,6 +823,7 @@ class RunEngine:
                 error=f"the run exceeded its {timeout} second budget",
             )
 
+        await self._close_bot_session(run_id)
         return self.report(run_id)
 
     async def _advance_once(self, run_id: uuid.UUID) -> bool:
@@ -887,7 +936,7 @@ class RunEngine:
         meta["uses_language_model"] = bool(caller_now.get("uses_language_model", False))
 
         # -- Bot leg --------------------------------------------------------
-        if config_mode is ExecutionMode.OFFLINE_SIMULATION:
+        if config_mode in TEXT_MODES:
             meta["events"] = events
             meta["artefacts"] = artefacts
             meta["state_transitions"] = transitions
@@ -896,6 +945,11 @@ class RunEngine:
                 run, meta = self._load(run_id)
                 self._close_from_caller(run, meta, conversation, events, artefacts, transitions)
                 return False
+            if config_mode is ExecutionMode.TEXT_BOT_TEST:
+                caller_text = "" if caller_turn is None else (caller_turn.content or "")
+                return await self._text_bot_reply(
+                    run_id, conversation, turn_index + 1, caller_text=caller_text
+                )
             return self._offline_bot_reply(run_id, conversation, turn_index + 1)
 
         if caller_state_is_terminal(caller_state):
@@ -1467,6 +1521,171 @@ class RunEngine:
         self._session.expire_all()
         return True
 
+    async def _text_bot_reply(
+        self,
+        run_id: uuid.UUID,
+        conversation: CallSession,
+        bot_turn_index: int,
+        *,
+        caller_text: str,
+    ) -> bool:
+        """Send the caller's words to an external text bot and record its reply.
+
+        Returns True when a reply was recorded and the loop may continue. A
+        failure finishes the run with an outcome that says whose fault it was:
+        `bot_protocol_error` for a bot that broke its protocol,
+        `external_bot_unavailable` for one that could not be reached or
+        refused our credential.
+        """
+        run, meta = self._load_active(run_id)
+        events: list[dict[str, Any]] = list(meta.get("events", []))
+        adapter = self._bot
+        if not isinstance(adapter, TextBotAdapter):  # pragma: no cover - checked at create()
+            raise PipelineConfigurationError("text_bot_test needs a text adapter")
+
+        if meta.get("bot_ended_session"):
+            caller_meta = caller_repo.caller_metadata_of(conversation)
+            events.append(
+                StageEvent(
+                    turn_index=bot_turn_index,
+                    stage="bot_exchange",
+                    status="skipped",
+                    detail=(
+                        "the bot ended the session on its previous reply; the caller's "
+                        "last turn was not sent"
+                    ),
+                ).as_dict()
+            )
+            meta["events"] = events
+            goal = bool(caller_meta.get("goal_achieved"))
+            self._finish(
+                run,
+                meta,
+                status=PipelineStatus.COMPLETED,
+                outcome=RunOutcome.GOAL_ACHIEVED if goal else RunOutcome.BOT_ENDED_SESSION,
+            )
+            return False
+
+        started = monotonic_seconds()
+        try:
+            session_id = meta.get("bot_session_id")
+            if session_id is None:
+                session = await adapter.open_session(
+                    run_id=run_id, language=str(meta.get("language", ""))
+                )
+                session_id = session.session_id
+                meta["bot_session_id"] = session_id
+                meta["bot_greeting"] = session.greeting
+                events.append(
+                    StageEvent(
+                        turn_index=bot_turn_index,
+                        stage="bot_session",
+                        status="ok",
+                        duration_ms=session.latency_ms,
+                        detail="session opened with the external text bot",
+                    ).as_dict()
+                )
+            reply = await adapter.send_text(
+                caller_text, session_id=session_id, run_id=run_id, turn_index=bot_turn_index
+            )
+        except BotAdapterError as exc:
+            if isinstance(exc, BotProtocolError):
+                outcome, summary = RunOutcome.BOT_PROTOCOL_ERROR, "the bot broke its protocol"
+            elif isinstance(exc, BotAuthenticationError):
+                outcome, summary = (
+                    RunOutcome.EXTERNAL_BOT_UNAVAILABLE,
+                    "the bot refused the credential",
+                )
+            else:
+                outcome, summary = RunOutcome.EXTERNAL_BOT_UNAVAILABLE, "the bot could not be used"
+            events.append(
+                StageEvent(
+                    turn_index=bot_turn_index,
+                    stage="bot_exchange",
+                    status="failed",
+                    duration_ms=_elapsed(started),
+                    detail=f"{type(exc).__name__}: {redact(exc)}",
+                ).as_dict()
+            )
+            meta["events"] = events
+            self._finish(
+                run,
+                meta,
+                status=PipelineStatus.FAILED,
+                outcome=outcome,
+                error=f"{summary}: {redact(exc)}",
+            )
+            return False
+
+        self._orchestrator.submit_bot_text(
+            conversation.id,
+            reply.text,
+            metadata={
+                "source": "external_text_bot",
+                "adapter": adapter.capabilities.name,
+                "latency_ms": reply.latency_ms,
+                "attempts": reply.attempts,
+                "correlation_id": reply.correlation_id,
+                "received_from_bot": reply.received_from_bot,
+                "end_session": reply.end_session,
+            },
+        )
+        received = int(meta.get("bot_text_replies_received", 0))
+        meta["bot_text_replies_received"] = received + int(reply.received_from_bot)
+        if reply.end_session:
+            meta["bot_ended_session"] = True
+        detail = f"text reply from the external bot after {reply.attempts} attempt(s)"
+        if reply.end_session:
+            detail += "; the bot ended the session"
+        events.append(
+            StageEvent(
+                turn_index=bot_turn_index,
+                stage="bot_exchange",
+                status="ok",
+                duration_ms=reply.latency_ms,
+                detail=detail,
+            ).as_dict()
+        )
+        meta["events"] = events
+        repo.update_pipeline_metadata(self._session, run, meta)
+        self._session.expire_all()
+        return True
+
+    async def _close_bot_session(self, run_id: uuid.UUID) -> None:
+        """End the external bot's session once the run is over. Best effort.
+
+        A failure here is recorded as an event and changes nothing else: the
+        conversation's outcome was decided before the session was closed.
+        """
+        run, meta = self._load(run_id)
+        session_id = meta.get("bot_session_id")
+        adapter = self._bot
+        if not session_id or meta.get("bot_session_closed"):
+            return
+        if not isinstance(adapter, TextBotAdapter):
+            return
+        events: list[dict[str, Any]] = list(meta.get("events", []))
+        try:
+            await adapter.close_session(session_id=session_id, run_id=run_id)
+        except BotAdapterError as exc:
+            events.append(
+                StageEvent(
+                    turn_index=-1,
+                    stage="bot_session",
+                    status="failed",
+                    detail=f"closing the session failed: {type(exc).__name__}: {redact(exc)}",
+                ).as_dict()
+            )
+        else:
+            meta["bot_session_closed"] = True
+            events.append(
+                StageEvent(
+                    turn_index=-1, stage="bot_session", status="ok", detail="session closed"
+                ).as_dict()
+            )
+        meta["events"] = events
+        repo.update_pipeline_metadata(self._session, run, meta)
+
     async def supply_bot_text(self, run_id: uuid.UUID, *, text: str) -> RunReport:
         """Accept the bot's reply as text and carry an offline run on.
 
@@ -1667,6 +1886,14 @@ class RunEngine:
             started_at=None if run.started_at is None else run.started_at.isoformat(),
             finished_at=None if run.finished_at is None else run.finished_at.isoformat(),
             error=run.error_message,
+            bot_exchange=meta.get("bot_exchange"),
+            bot_text_replies_received=int(meta.get("bot_text_replies_received", 0)),
+            bot_text_externally_received=(
+                meta.get("mode") == ExecutionMode.TEXT_BOT_TEST.value
+                and int(meta.get("bot_text_replies_received", 0)) > 0
+            ),
+            bot_session_id=meta.get("bot_session_id"),
+            bot_greeting=meta.get("bot_greeting"),
         )
 
     async def close(self) -> None:

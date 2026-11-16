@@ -163,6 +163,30 @@ class RunResponse(BaseModel):
         "process. False for a fixture run, so an `external_bot_test` whose "
         "replies were fixtures can be seen to be mislabelled."
     )
+    bot_exchange: str | None = Field(
+        default=None,
+        description=(
+            "How the bot leg was carried: `text` (a text_bot_test), `audio`, or "
+            "null for an offline simulation, whose replies come from a fixture "
+            "or an operator rather than a bot."
+        ),
+    )
+    bot_text_externally_received: bool = Field(
+        default=False,
+        description=(
+            "True only for a text_bot_test that recorded at least one reply from "
+            "the external bot. Counted from the replies, never read from the mode. "
+            "A text exchange establishes nothing about audio."
+        ),
+    )
+    bot_text_replies_received: int = Field(default=0, ge=0)
+    bot_session_id: str | None = Field(
+        default=None, description="The external bot's own session identifier, when it has one."
+    )
+    bot_greeting: str | None = Field(
+        default=None,
+        description="The greeting the bot returned when the session opened. Not a turn.",
+    )
     noise_profile: NoiseProfile
     scenario_noise_profile: str | None = Field(
         default=None,
@@ -342,7 +366,15 @@ class BotAdapterResponse(BaseModel):
     selected: bool
     contacts_external_system: bool = Field(
         description="Whether using this adapter causes a request to leave this "
-        "process. False for every adapter in this phase."
+        "process. True only for `http`, which is never the default."
+    )
+    available: bool = Field(
+        default=True,
+        description="Whether this deployment has configured what the adapter needs.",
+    )
+    unavailable_reason: str | None = Field(
+        default=None,
+        description="Which setting is missing, when unavailable. Names settings, never values.",
     )
     supports_sessions: bool
     requires_credentials: bool
@@ -422,6 +454,22 @@ class RunSummary(BaseModel):
             "True only if **every** bot reply came from outside this process. "
             "False for a fixture run, so a mislabelled external_bot_test is "
             "visible in the listing without opening it."
+        ),
+    )
+    bot_exchange: str | None = Field(
+        default=None,
+        description=(
+            "How the bot leg was carried: `text` (a text_bot_test), `audio`, or "
+            "null for an offline simulation, whose replies come from a fixture "
+            "or an operator rather than a bot."
+        ),
+    )
+    bot_text_externally_received: bool = Field(
+        default=False,
+        description=(
+            "True only for a text_bot_test that recorded at least one reply from "
+            "the external bot. Counted from the replies, never read from the mode. "
+            "A text exchange establishes nothing about audio."
         ),
     )
     uses_language_model: bool = Field(

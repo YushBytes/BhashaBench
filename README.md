@@ -425,12 +425,12 @@ BhashaBench/
 │   │   │                      clients/ holds the Sarvam adapter (offline only)
 │   │   ├── pipeline/          end-to-end voice pipeline (Phase 7): run engine,
 │   │   │   │                  audio degradation, execution modes
-│   │   │   └── bots/          bot adapters. Neither opens a socket; the
-│   │   │                      default sends audio nowhere
+│   │   │   └── bots/          bot adapters. Only `http` opens a socket,
+│   │   │                      for text; the default sends nothing anywhere
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2509 tests across 45 modules
+│   ├── tests/                 2525 tests across 46 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -623,7 +623,14 @@ their phase lands.
 | `CALLER_TURN_TIMEOUT_SECONDS` | Ceiling on one full turn, synthesis and transcription included | `90.0` |
 | `CALLER_AUDIO_STORAGE_DIR` | Conversation audio directory; `storage/` is git-ignored | `storage/caller-audio` |
 | `CALLER_SYNTHESISE_AUDIO` | Synthesise caller audio per turn. Off deliberately — with `SPEECH_PROVIDER=timbre` every turn is a billable call. The pipeline forces it on for runs that move audio | `false` |
-| `PIPELINE_BOT_ADAPTER` | Default bot adapter. Both options send audio nowhere, which is why one is the default | `scripted` |
+| `PIPELINE_BOT_ADAPTER` | Default bot adapter. `scripted` and `manual` send nothing anywhere, which is why one is the default; `http` must be chosen per run | `scripted` |
+| `BOT_HTTP_BASE_URL` | Base URL of a bot speaking `bhashabench-text-bot/1` (`docs/BOT_PROTOCOL.md`) | empty |
+| `BOT_HTTP_TOKEN` | Bearer token for that bot. Never commit a value | empty |
+| `BOT_HTTP_ALLOWED_HOSTS` | Comma-separated hosts the `http` adapter may contact, exactly or `*.suffix`. Empty refuses every host | empty |
+| `BOT_HTTP_ALLOW_LOOPBACK` | Permit a loopback bot (the local reference bot). Refused when `APP_ENV` is staging or production | `false` |
+| `BOT_HTTP_ALLOW_PRIVATE` | Permit a bot on a private network range | `false` |
+| `BOT_HTTP_TIMEOUT_SECONDS` | Ceiling on one request to the bot | `10` |
+| `BOT_HTTP_MAX_ATTEMPTS` | Requests per turn, counting retries | `2` |
 | `PIPELINE_FIXTURE_AUDIO_PATH` | WAV the `scripted` adapter replays as every bot reply. Unset, a scripted audio run fails on turn 0 | _unset_ |
 | `PIPELINE_FIXTURE_BOT_TEXT_PATH` | Bot replies as text, one per line, for `offline_simulation` with the `scripted` adapter. Unset, such a run fails on its first bot turn | _unset_ |
 | `PIPELINE_RUN_TIMEOUT_SECONDS` | Wall-clock ceiling on one run | `600.0` |
@@ -743,10 +750,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2509 tests** across forty-five modules.
-**2468 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2525 tests** across forty-six modules.
+**2484 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2509) exceeds the number that run (2468):
+why the collected total (2525) exceeds the number that run (2484):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -783,10 +790,11 @@ why the collected total (2509) exceeds the number that run (2468):
 | `test_caller_orchestrator.py` | 39 | Multi-turn conversations against real PostgreSQL: success, every failure reason, determinism, persistence, transcription failure, audio artefacts |
 | `test_caller_api.py` | 44 | The caller routes through `TestClient`: creation, turns, text and audio submission, termination, limits, prompt injection, OpenAPI |
 | `test_pipeline_degradation.py` | 87 | The DSP: resampling, channel conversion, bandpass, noise at a measured SNR, clipping, packet loss, every profile, reproducibility from a seed |
-| `test_pipeline_bots.py` | 40 | The bot adapter protocol, both adapters and the registry - including that neither contacts anything and the default sends audio nowhere - and the offline text-reply fixture loader |
+| `test_pipeline_bots.py` | 43 | The bot adapter protocol, both adapters and the registry - including that neither contacts anything and the default sends audio nowhere - and the offline text-reply fixture loader |
 | `test_pipeline_http_bot.py` | 31 | The HTTP text bot adapter over real localhost sockets: a whole conversation with the reference bot, wrong credentials, concurrent sessions, bounded and idempotent retries, malformed and oversized replies, timeouts, redirects not followed, path-segment escaping, unreachable and disallowed hosts, SSRF and rebinding refusals, and that the token reaches no log or error |
+| `test_pipeline_text_bot.py` | 12 | `text_bot_test` end to end against real PostgreSQL and the reference bot on a real socket: a goal-achieving conversation, per-turn provenance, unreachable and credential-refused bots, a bot that hangs up early, mode/adapter mismatches refused, and the same run through the real API with no engine override |
 | `test_pipeline_engine.py` | 72 | Multi-turn audio runs against real PostgreSQL: the full workflow, every failure path, cancellation, the manual flow, reproducibility, declared scenario audio measured from the stored bytes (achieved SNR, realised packet loss, operator precedence), and settings declared but not enforced |
-| `test_pipeline_api.py` | 112 | The twelve test-run operations, plus the run's recorded bot adapter honoured on every route and offline simulation reaching a terminal state (text fixture, manual `/bot-text`): creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, the 503 at the concurrency limit, OpenAPI, plus the Phase 8 run listing (filters, pagination window, ILIKE wildcard escape, caller-only exclusion) and artefact audio (range handling, traversal through the turn index, per-environment access) |
+| `test_pipeline_api.py` | 113 | The twelve test-run operations, plus the run's recorded bot adapter honoured on every route and offline simulation reaching a terminal state (text fixture, manual `/bot-text`): creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, the 503 at the concurrency limit, OpenAPI, plus the Phase 8 run listing (filters, pagination window, ILIKE wildcard escape, caller-only exclusion) and artefact audio (range handling, traversal through the turn index, per-environment access) |
 | `test_pipeline_fixture_audio.py` | 9 | The fixture audio an API-started scripted run replays: the file read and repeated per turn, a missing/empty/directory path refused, the real engine factory wiring it to the scripted adapter, the reply still marked as not received from a bot, and the unset setting leaving the turn-0 failure intact |
 | `test_pipeline_concurrency.py` | 41 | The admission limiter: the configured maximum is never exceeded, capacity frees up for the next run, and exceptions, cancellation and timeouts all release it |
 | `test_speech_live.py` | 26 | **Opt-in, billable.** Real Gnani Timbre calls. Skipped unless `SPEECH_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
@@ -822,7 +830,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2468 passed, 41 skipped ================
+================ 2484 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

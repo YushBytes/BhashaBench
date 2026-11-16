@@ -707,4 +707,9 @@ class TestModesUnaffected:
         from app.pipeline.modes import IMPLEMENTED_MODES
 
         assert ExecutionMode.TELEPHONY_TEST not in IMPLEMENTED_MODES
-        assert len(IMPLEMENTED_MODES) == 3
+        assert {
+            ExecutionMode.OFFLINE_SIMULATION,
+            ExecutionMode.AUDIO_FIXTURE_TEST,
+            ExecutionMode.EXTERNAL_BOT_TEST,
+            ExecutionMode.TEXT_BOT_TEST,
+        } == IMPLEMENTED_MODES

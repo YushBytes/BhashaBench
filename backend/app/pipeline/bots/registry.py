@@ -15,6 +15,13 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from pydantic import SecretStr
+
+from app.core.config import Settings
+from app.core.outbound import OutboundPolicy
+from app.pipeline.bots.http_text import CAPABILITIES as HTTP_CAPABILITIES
+from app.pipeline.bots.http_text import PROVIDER_NAME as HTTP_ADAPTER
+from app.pipeline.bots.http_text import HttpBotConfig, HttpTextBotAdapter
 from app.pipeline.bots.manual import PROVIDER_NAME as MANUAL_ADAPTER
 from app.pipeline.bots.manual import ManualBotAdapter
 from app.pipeline.bots.protocol import BotAdapter, BotCapabilities
@@ -25,7 +32,7 @@ from app.pipeline.errors import PipelineConfigurationError
 DEFAULT_ADAPTER = SCRIPTED_ADAPTER
 
 
-def _build_scripted(replies: Sequence[bytes] | None) -> BotAdapter:
+def _build_scripted(replies: Sequence[bytes] | None, settings: Settings | None) -> BotAdapter:
     return ScriptedBotAdapter(replies or ())
 
 
@@ -112,7 +119,7 @@ def fixture_text_replies_from_path(path: str | Path, *, count: int) -> tuple[str
     return tuple(lines[i % len(lines)] for i in range(count))
 
 
-def _build_manual(replies: Sequence[bytes] | None) -> BotAdapter:
+def _build_manual(replies: Sequence[bytes] | None, settings: Settings | None) -> BotAdapter:
     # Scripted replies are meaningless here: the whole point of this adapter
     # is that the audio arrives later. Ignoring them silently would hide a
     # configuration mistake, so say so.
@@ -124,12 +131,51 @@ def _build_manual(replies: Sequence[bytes] | None) -> BotAdapter:
     return ManualBotAdapter()
 
 
-_FACTORIES: dict[str, Callable[[Sequence[bytes] | None], BotAdapter]] = {
+def http_unavailable_reason(settings: Settings | None) -> str | None:
+    """Why the `http` adapter cannot be built from `settings`, or `None`.
+
+    Names settings, never values.
+    """
+    if settings is None:
+        return "no settings were supplied to configure the HTTP bot adapter"
+    if not settings.bot_http_base_url.strip():
+        return "BOT_HTTP_BASE_URL is not set"
+    if not settings.bot_http_token.get_secret_value():
+        return "BOT_HTTP_TOKEN is not set"
+    if not settings.bot_http_allowed_hosts.strip():
+        return "BOT_HTTP_ALLOWED_HOSTS is empty, so no bot host may be contacted"
+    return None
+
+
+def _build_http(replies: Sequence[bytes] | None, settings: Settings | None) -> BotAdapter:
+    if replies:
+        raise PipelineConfigurationError("the http adapter takes no scripted replies")
+    reason = http_unavailable_reason(settings)
+    if reason is not None or settings is None:
+        raise PipelineConfigurationError(f"the http bot adapter is not configured: {reason}")
+    policy = OutboundPolicy.from_setting(
+        settings.bot_http_allowed_hosts,
+        allow_loopback=settings.bot_http_allow_loopback,
+        allow_private=settings.bot_http_allow_private,
+    )
+    config = HttpBotConfig(
+        base_url=settings.bot_http_base_url.strip(),
+        token=SecretStr(settings.bot_http_token.get_secret_value()),
+        policy=policy,
+        timeout_seconds=settings.bot_http_timeout_seconds,
+        max_attempts=settings.bot_http_max_attempts,
+    )
+    return HttpTextBotAdapter(config)  # type: ignore[return-value] - a TextBotAdapter
+
+
+_FACTORIES: dict[str, Callable[[Sequence[bytes] | None, Settings | None], BotAdapter]] = {
     SCRIPTED_ADAPTER: _build_scripted,
     MANUAL_ADAPTER: _build_manual,
+    HTTP_ADAPTER: _build_http,
 }
-# No entry for a real voice bot. Adding one means writing an adapter against
-# that bot's documented interface; this project does not guess at one.
+"""`http` is the only adapter that contacts anything, and it speaks the
+project's own documented protocol (docs/BOT_PROTOCOL.md) rather than any
+vendor's. A vendor bot gets an adapter written against its documentation."""
 
 
 def available_adapters() -> tuple[str, ...]:
@@ -137,7 +183,12 @@ def available_adapters() -> tuple[str, ...]:
     return tuple(sorted(_FACTORIES))
 
 
-def build_adapter(name: str, *, replies: Sequence[bytes] | None = None) -> BotAdapter:
+def build_adapter(
+    name: str,
+    *,
+    replies: Sequence[bytes] | None = None,
+    settings: Settings | None = None,
+) -> BotAdapter:
     """Build the named adapter.
 
     Raises:
@@ -152,20 +203,29 @@ def build_adapter(name: str, *, replies: Sequence[bytes] | None = None) -> BotAd
             "written against its published interface - this project does not "
             "invent one."
         )
-    return factory(replies)
+    return factory(replies, settings)
 
 
 def describe_adapters() -> tuple[BotCapabilities, ...]:
-    """Capabilities of every registered adapter."""
-    return tuple(build_adapter(name).capabilities for name in available_adapters())
+    """Capabilities of every registered adapter, without configuring any.
+
+    The http adapter's capabilities are static, so listing it neither needs
+    its settings nor opens a client.
+    """
+    return tuple(
+        HTTP_CAPABILITIES if name == HTTP_ADAPTER else build_adapter(name).capabilities
+        for name in available_adapters()
+    )
 
 
 __all__ = [
     "DEFAULT_ADAPTER",
+    "HTTP_ADAPTER",
     "MANUAL_ADAPTER",
     "SCRIPTED_ADAPTER",
     "available_adapters",
     "build_adapter",
     "describe_adapters",
     "fixture_replies_from_path",
+    "http_unavailable_reason",
 ]

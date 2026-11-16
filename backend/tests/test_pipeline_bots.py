@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from app.core.config import Settings
 from app.pipeline.bots.manual import PROVIDER_NAME as MANUAL
 from app.pipeline.bots.manual import ManualBotAdapter
 from app.pipeline.bots.protocol import BotAdapter, BotReply
@@ -56,7 +57,7 @@ def _send(adapter: BotAdapter, audio: bytes = b"RIFF....", *, turn: int = 0) -> 
 
 class TestRegistry:
     def test_both_adapters_are_registered(self) -> None:
-        assert available_adapters() == (MANUAL, SCRIPTED)
+        assert available_adapters() == ("http", MANUAL, SCRIPTED)
 
     def test_the_default_sends_audio_nowhere(self) -> None:
         """§7 requires the default configuration to be safe, and the way to be
@@ -64,11 +65,21 @@ class TestRegistry:
         assert DEFAULT_ADAPTER == SCRIPTED
         assert build_adapter(DEFAULT_ADAPTER).capabilities.contacts_external_system is False
 
-    def test_no_adapter_contacts_an_external_system(self) -> None:
-        assert all(c.contacts_external_system is False for c in describe_adapters())
+    def test_only_the_http_adapter_contacts_an_external_system(self) -> None:
+        external = {c.name for c in describe_adapters() if c.contacts_external_system}
+        assert external == {"http"}
+        assert DEFAULT_ADAPTER not in external
 
-    def test_no_adapter_requires_a_credential(self) -> None:
-        assert all(c.requires_credentials is False for c in describe_adapters())
+    def test_only_the_http_adapter_requires_a_credential(self) -> None:
+        assert {c.name for c in describe_adapters() if c.requires_credentials} == {"http"}
+
+    def test_the_http_adapter_carries_no_audio(self) -> None:
+        http = next(c for c in describe_adapters() if c.name == "http")
+        assert http.accepts_containers == frozenset()
+
+    def test_the_http_adapter_refuses_to_build_unconfigured(self) -> None:
+        with pytest.raises(PipelineConfigurationError, match="BOT_HTTP_BASE_URL"):
+            build_adapter("http", settings=Settings(app_env="test", _env_file=None))
 
     def test_there_is_no_adapter_for_an_invented_bot_api(self) -> None:
         """A registry entry for a bot whose interface nobody has read would be
@@ -93,9 +104,26 @@ class TestRegistry:
         with pytest.raises(PipelineConfigurationError, match="takes no scripted replies"):
             build_adapter(MANUAL, replies=[b"RIFF"])
 
-    def test_both_adapters_satisfy_the_protocol(self) -> None:
-        for name in available_adapters():
+    def test_the_audio_adapters_satisfy_the_audio_protocol(self) -> None:
+        for name in (MANUAL, SCRIPTED):
             assert isinstance(build_adapter(name), BotAdapter)
+
+    def test_the_http_adapter_satisfies_the_text_protocol(self) -> None:
+        from app.pipeline.bots.protocol import TextBotAdapter
+
+        settings = Settings(
+            app_env="test",
+            bot_http_base_url="http://127.0.0.1:9",
+            bot_http_token="registry-test-token-0123456789",
+            bot_http_allowed_hosts="127.0.0.1",
+            bot_http_allow_loopback=True,
+            _env_file=None,
+        )
+        adapter = build_adapter("http", settings=settings)
+        try:
+            assert isinstance(adapter, TextBotAdapter)
+        finally:
+            asyncio.run(adapter.close())
 
     def test_every_adapter_discloses_its_limitations(self) -> None:
         for capabilities in describe_adapters():

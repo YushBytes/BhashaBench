@@ -34,7 +34,8 @@ import asyncio
 import json
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
@@ -145,12 +146,11 @@ class HttpTextBotAdapter:
         self._resolver = resolver
         self._check(config.base_url)
         self._base = config.base_url.rstrip("/")
-        self._owns_client = client is None
-        self._client = client or httpx2.AsyncClient(
-            follow_redirects=False,
-            timeout=config.timeout_seconds,
-            limits=httpx2.Limits(max_keepalive_connections=0),
-        )
+        # An injected client belongs to its injector. Otherwise a client is
+        # opened per logical request and closed with it: the API tears its
+        # engine down synchronously, so a client held across requests could
+        # outlive the event loop that opened its connection.
+        self._client = client
         self._sleep = sleep
 
     @property
@@ -228,35 +228,50 @@ class HttpTextBotAdapter:
                 await self._sleep(self._config.backoff_seconds * attempt)
         raise last  # type: ignore[misc] - set on every path that reaches here
 
+    @asynccontextmanager
+    async def _client_for_request(self) -> AsyncIterator[httpx2.AsyncClient]:
+        if self._client is not None:
+            yield self._client
+            return
+        async with httpx2.AsyncClient(
+            follow_redirects=False,
+            timeout=self._config.timeout_seconds,
+            limits=httpx2.Limits(max_keepalive_connections=0),
+        ) as client:
+            yield client
+
     async def _send(
         self, method: str, url: str, headers: dict[str, str], body: dict[str, Any] | None
     ) -> tuple[int, dict[str, Any] | None]:
-        async with asyncio.timeout(self._config.timeout_seconds):
-            async with self._client.stream(method, url, headers=headers, json=body) as response:
-                if 300 <= response.status_code < 400:
+        async with (
+            asyncio.timeout(self._config.timeout_seconds),
+            self._client_for_request() as client,
+            client.stream(method, url, headers=headers, json=body) as response,
+        ):
+            if 300 <= response.status_code < 400:
+                raise BotProtocolError(
+                    f"the bot answered {response.status_code} (a redirect); redirects "
+                    "are not followed",
+                    adapter=PROVIDER_NAME,
+                )
+            chunks: list[bytes] = []
+            size = 0
+            async for chunk in response.aiter_bytes():
+                size += len(chunk)
+                if size > MAX_BODY_BYTES:
                     raise BotProtocolError(
-                        f"the bot answered {response.status_code} (a redirect); redirects "
-                        "are not followed",
+                        f"the bot's response exceeded {MAX_BODY_BYTES} bytes",
                         adapter=PROVIDER_NAME,
                     )
-                chunks: list[bytes] = []
-                size = 0
-                async for chunk in response.aiter_bytes():
-                    size += len(chunk)
-                    if size > MAX_BODY_BYTES:
-                        raise BotProtocolError(
-                            f"the bot's response exceeded {MAX_BODY_BYTES} bytes",
-                            adapter=PROVIDER_NAME,
-                        )
-                    chunks.append(chunk)
-                raw = b"".join(chunks)
-                if not raw:
-                    return response.status_code, None
-                try:
-                    parsed = json.loads(raw)
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    return response.status_code, None
-                return response.status_code, parsed if isinstance(parsed, dict) else None
+                chunks.append(chunk)
+            raw = b"".join(chunks)
+            if not raw:
+                return response.status_code, None
+            try:
+                parsed = json.loads(raw)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return response.status_code, None
+            return response.status_code, parsed if isinstance(parsed, dict) else None
 
     @staticmethod
     def _failure(status: int, payload: dict[str, Any] | None, action: str) -> BotAdapterError:
@@ -360,8 +375,7 @@ class HttpTextBotAdapter:
         )
 
     async def close(self) -> None:
-        if self._owns_client:
-            await self._client.aclose()
+        """Nothing is held between requests; an injected client is not ours."""
 
 
 def _path_segment(value: str) -> str:

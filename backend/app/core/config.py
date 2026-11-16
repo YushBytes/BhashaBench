@@ -466,6 +466,56 @@ class Settings(BaseSettings):
             "reaches it."
         ),
     )
+    # -- HTTP text bot (early Phase 9) ---------------------------------------
+    # Everything the `http` adapter needs. Nothing is reachable until
+    # BOT_HTTP_ALLOWED_HOSTS names the bot's host: the allowlist is empty by
+    # default, so an unconfigured deployment can contact no bot at all.
+    bot_http_base_url: str = Field(
+        default="",
+        description=(
+            "Base URL of a bot speaking bhashabench-text-bot/1, e.g. "
+            "'https://bot.example.com'. Checked against the allowlist and the "
+            "outbound address rules before every request."
+        ),
+    )
+    bot_http_token: SecretStr = Field(
+        default=SecretStr(""),
+        description="Bearer token sent to the bot. A `SecretStr`; never logged.",
+    )
+    bot_http_allowed_hosts: str = Field(
+        default="",
+        description=(
+            "Comma-separated hosts the adapter may contact, exactly or as "
+            "'*.example.com'. Empty refuses every host."
+        ),
+    )
+    bot_http_allow_loopback: bool = Field(
+        default=False,
+        description=(
+            "Permit a loopback bot (the local reference bot). Development and "
+            "tests only: refused when APP_ENV is staging or production."
+        ),
+    )
+    bot_http_allow_private: bool = Field(
+        default=False,
+        description="Permit a bot on a private network range (RFC 1918, ULA).",
+    )
+    bot_http_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        le=120,
+        description="Ceiling on one whole request to the bot, in seconds.",
+    )
+    bot_http_max_attempts: int = Field(
+        default=2,
+        ge=1,
+        le=5,
+        description=(
+            "Requests per turn, counting retries. Only a connection that never "
+            "opened or a 502/503/504 is retried, with the same idempotency key."
+        ),
+    )
+
     pipeline_run_timeout_seconds: float = Field(
         default=600.0,
         gt=0,
@@ -606,6 +656,17 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
+
+    @model_validator(mode="after")
+    def _reject_loopback_bots_when_deployed(self) -> Settings:
+        """A deployed server reaching its own loopback is an SSRF primitive."""
+        if self.app_env in (AppEnv.PRODUCTION, AppEnv.STAGING) and self.bot_http_allow_loopback:
+            raise ValueError(
+                f"BOT_HTTP_ALLOW_LOOPBACK is enabled while APP_ENV={self.app_env}. "
+                "Loopback bots are for development; a deployed server must not "
+                "send requests to its own host."
+            )
+        return self
 
     @model_validator(mode="after")
     def _reject_placeholder_secret_outside_development(self) -> Settings:

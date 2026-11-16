@@ -47,6 +47,17 @@ class ExecutionMode(StrEnum):
     name and whether each reply was genuinely received.
     """
 
+    TEXT_BOT_TEST = "text_bot_test"
+    """The caller's words were sent as text to a bot outside this process, and
+    the bot's words came back as text.
+
+    Tests what an external bot *says* over `bhashabench-text-bot/1`
+    (`docs/BOT_PROTOCOL.md`). No audio moves, so it establishes nothing about
+    recognition, synthesis or audio quality - and it is never described as an
+    audio or voice-bot test. Requires a text adapter that contacts an external
+    system; `bot_text_externally_received` is computed from the replies.
+    """
+
     TELEPHONY_TEST = "telephony_test"
     """A real phone call.
 
@@ -61,8 +72,14 @@ IMPLEMENTED_MODES: frozenset[ExecutionMode] = frozenset(
         ExecutionMode.OFFLINE_SIMULATION,
         ExecutionMode.AUDIO_FIXTURE_TEST,
         ExecutionMode.EXTERNAL_BOT_TEST,
+        ExecutionMode.TEXT_BOT_TEST,
     }
 )
+
+TEXT_MODES: frozenset[ExecutionMode] = frozenset(
+    {ExecutionMode.OFFLINE_SIMULATION, ExecutionMode.TEXT_BOT_TEST}
+)
+"""Modes whose bot leg is text: nothing is synthesised, sent or transcribed."""
 """Modes a run may actually be created in.
 
 `TELEPHONY_TEST` is absent because no telephony exists. An enum member that
@@ -146,6 +163,11 @@ class RunOutcome(StrEnum):
     not continue past. Never a statement about the bot."""
     AUDIO_VALIDATION_FAILED = "audio_validation_failed"
     EXTERNAL_BOT_UNAVAILABLE = "external_bot_unavailable"
+    BOT_PROTOCOL_ERROR = "bot_protocol_error"
+    """The bot answered outside its protocol: a malformed body, an unexpected
+    status. A finding about the bot's integration, not about our side."""
+    BOT_ENDED_SESSION = "bot_ended_session"
+    """The bot closed the session before the caller reached its objective."""
     CANCELLED = "cancelled"
     ABANDONED = "abandoned"
     """Closed by stale-run recovery: the run was left in flight with nothing

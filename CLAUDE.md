@@ -149,8 +149,8 @@ caller/llm/clients/
                may appear. Sarvam today, offline-tested only
 pipeline/      the end-to-end voice pipeline (Phase 7): run engine, audio
                degradation, execution modes, artefact records
-pipeline/bots/ one bot adapter per module. Neither shipping adapter opens a
-               socket, and the default is the one that sends audio nowhere
+pipeline/bots/ one bot adapter per module. Only `http` opens a socket, it
+               carries text and never audio, and it is never the default
 ```
 
 - Route handlers stay thin. No `select()` in a route, no HTTP concepts in a
@@ -327,8 +327,12 @@ and never to `sarvam-105b-conversations`.
 Full design in `docs/PIPELINE.md`. Six rules that are easy to break:
 
 **The execution mode is the honesty control.** `OFFLINE_SIMULATION` moves no
-audio, `AUDIO_FIXTURE_TEST` runs every stage with the bot stubbed, and only
-`EXTERNAL_BOT_TEST` may be described as testing a bot. `TELEPHONY_TEST` exists
+audio, `AUDIO_FIXTURE_TEST` runs every stage with the bot stubbed, only
+`EXTERNAL_BOT_TEST` may be described as testing a voice bot, and
+`TEXT_BOT_TEST` tests what an external bot says over HTTP and nothing about
+audio. `RunEngine._check_adapter_fits_mode` refuses an adapter whose exchange
+the mode cannot describe; keep `bot_text_externally_received` counted from
+the replies, like its audio twin. `TELEPHONY_TEST` exists
 in the enum and is excluded from `IMPLEMENTED_MODES`, so a run cannot be
 created in it — an enum member that cannot be used is the honest record of the
 gap. Do not add it to that set until telephony genuinely exists.
@@ -510,7 +514,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2509 collected; 2468 pass, 41 live ones skipped
+pytest                                  # 2525 collected; 2484 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

@@ -559,7 +559,13 @@ class ConversationOrchestrator:
         )
         return conversation
 
-    def submit_bot_text(self, conversation_id: uuid.UUID, text: str) -> CallSession:
+    def submit_bot_text(
+        self,
+        conversation_id: uuid.UUID,
+        text: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+    ) -> CallSession:
         """Record the bot's reply as text, skipping transcription.
 
         The path the offline simulation and the competition demo use: there is
@@ -574,7 +580,9 @@ class ConversationOrchestrator:
             turn_index=turn_index,
             speaker=DbSpeaker.BOT,
             content=text,
-            metadata={"source": "bot_text"},
+            # `metadata` can refine the source (an external text bot records
+            # `external_text_bot` with its latency) but never omit it.
+            metadata={"source": "bot_text", **(metadata or {})},
         )
         return conversation
 

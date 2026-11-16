@@ -51,12 +51,14 @@ from app.caller.service import CallerService
 from app.core.config import AppEnv
 from app.models.test_run import RunStatus, TestRun
 from app.pipeline.bots.registry import (
+    HTTP_ADAPTER,
     SCRIPTED_ADAPTER,
     available_adapters,
     build_adapter,
     describe_adapters,
     fixture_replies_from_path,
     fixture_text_replies_from_path,
+    http_unavailable_reason,
 )
 from app.pipeline.concurrency import get_run_slots
 from app.pipeline.degradation import NoiseProfile
@@ -145,7 +147,9 @@ def get_engine_factory(
                 settings.pipeline_fixture_audio_path,
                 count=settings.caller_max_turns,
             )
-        adapter = build_adapter(resolved_adapter or settings.pipeline_bot_adapter, replies=replies)
+        adapter = build_adapter(
+            resolved_adapter or settings.pipeline_bot_adapter, replies=replies, settings=settings
+        )
         # The scripted bot's side of an offline_simulation, as text. Only the
         # scripted adapter reads it; the manual adapter waits for /bot-text.
         text_replies: tuple[str, ...] | None = None
@@ -380,6 +384,11 @@ def _summary(run: TestRun, turn_counts: dict[str, int]) -> RunSummary:
         noise_profile=meta.get("noise_profile"),
         bot_adapter=meta.get("bot_adapter"),
         bot_audio_externally_received=bool(meta.get("bot_audio_externally_received", False)),
+        bot_exchange=meta.get("bot_exchange"),
+        bot_text_externally_received=(
+            meta.get("mode") == ExecutionMode.TEXT_BOT_TEST.value
+            and int(meta.get("bot_text_replies_received", 0)) > 0
+        ),
         uses_language_model=bool(meta.get("uses_language_model", False)),
         caller_turns=turn_counts.get(Speaker.CALLER.value, 0),
         bot_turns=turn_counts.get(Speaker.BOT.value, 0),
@@ -406,6 +415,11 @@ def _run(report: RunReport) -> RunResponse:
         tts_provider=report.tts_provider,
         bot_adapter=report.bot_adapter,
         bot_audio_externally_received=report.bot_audio_externally_received,
+        bot_exchange=report.bot_exchange,
+        bot_text_externally_received=report.bot_text_externally_received,
+        bot_text_replies_received=report.bot_text_replies_received,
+        bot_session_id=report.bot_session_id,
+        bot_greeting=report.bot_greeting,
         noise_profile=report.noise_profile,
         scenario_noise_profile=report.scenario_noise_profile,
         degradation_seed=report.degradation_seed,
@@ -859,10 +873,10 @@ def read_report(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunReportRespons
     response_model=BotAdapterListResponse,
     summary="List the bot adapters",
     description=(
-        "Every registered adapter with its capabilities. "
-        "`contacts_external_system` is `false` for all of them: nothing in "
-        "this phase sends audio anywhere by itself, which is why the default "
-        "configuration is safe."
+        "Every registered adapter with its capabilities and whether this "
+        "deployment has configured it. Only `http` has "
+        "`contacts_external_system: true`; it exchanges text, never audio, and "
+        "is never the default, so the default configuration contacts nothing."
     ),
 )
 def list_adapters(settings: SettingsDep) -> BotAdapterListResponse:
@@ -880,6 +894,12 @@ def list_adapters(settings: SettingsDep) -> BotAdapterListResponse:
                 requires_credentials=capabilities.requires_credentials,
                 accepts_containers=sorted(capabilities.accepts_containers),
                 notes=list(capabilities.notes),
+                available=(
+                    capabilities.name != HTTP_ADAPTER or http_unavailable_reason(settings) is None
+                ),
+                unavailable_reason=(
+                    http_unavailable_reason(settings) if capabilities.name == HTTP_ADAPTER else None
+                ),
             )
             for capabilities in describe_adapters()
         ],

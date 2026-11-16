@@ -701,17 +701,32 @@ class TestCancellation:
 class TestAdapterListing:
     def test_both_adapters_are_listed(self, pipeline_client: TestClient) -> None:
         body = pipeline_client.get(f"{BASE}/bot-adapters/available").json()
-        assert sorted(a["name"] for a in body["adapters"]) == ["manual", "scripted"]
+        assert sorted(a["name"] for a in body["adapters"]) == ["http", "manual", "scripted"]
 
-    def test_no_adapter_contacts_an_external_system(self, pipeline_client: TestClient) -> None:
-        """Which is why the default configuration is safe: nothing in this
-        phase sends audio anywhere by itself."""
+    def test_only_the_http_adapter_contacts_an_external_system(
+        self, pipeline_client: TestClient
+    ) -> None:
+        """And it is not the default, so the default configuration contacts
+        nothing."""
         body = pipeline_client.get(f"{BASE}/bot-adapters/available").json()
-        assert all(a["contacts_external_system"] is False for a in body["adapters"])
+        external = {a["name"] for a in body["adapters"] if a["contacts_external_system"]}
+        assert external == {"http"}
+        assert body["selected"] not in external
 
-    def test_no_adapter_needs_a_credential(self, pipeline_client: TestClient) -> None:
+    def test_only_the_http_adapter_needs_a_credential(self, pipeline_client: TestClient) -> None:
         body = pipeline_client.get(f"{BASE}/bot-adapters/available").json()
-        assert all(a["requires_credentials"] is False for a in body["adapters"])
+        assert {a["name"] for a in body["adapters"] if a["requires_credentials"]} == {"http"}
+
+    def test_an_unconfigured_http_adapter_says_which_setting_is_missing(
+        self, pipeline_client: TestClient
+    ) -> None:
+        body = pipeline_client.get(f"{BASE}/bot-adapters/available").json()
+        http = next(a for a in body["adapters"] if a["name"] == "http")
+        assert http["available"] is False
+        assert "BOT_HTTP_BASE_URL" in http["unavailable_reason"]
+        assert http["accepts_containers"] == []
+        others = [a for a in body["adapters"] if a["name"] != "http"]
+        assert all(a["available"] and a["unavailable_reason"] is None for a in others)
 
     def test_the_default_adapter_is_the_one_that_sends_nowhere(
         self, pipeline_client: TestClient
@@ -730,6 +745,7 @@ class TestAdapterListing:
             "audio_fixture_test",
             "external_bot_test",
             "offline_simulation",
+            "text_bot_test",
         ]
 
 
