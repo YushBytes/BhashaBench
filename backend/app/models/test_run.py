@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Text
+from sqlalchemy import CheckConstraint, DateTime, Enum, ForeignKey, Index, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -52,6 +52,12 @@ class TestRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "finished_at IS NULL OR started_at IS NULL OR finished_at >= started_at",
             name="finished_after_started",
         ),
+        # Phase 12: the listing, the exports and the trend all order or bucket
+        # by creation time, and every listing and report tests
+        # `run_metadata ? 'pipeline'`, which the GIN index serves. The value
+        # filters (`->>` equality) are not served by it; see the migration.
+        Index("ix_test_runs_created_at", "created_at"),
+        Index("ix_test_runs_run_metadata_gin", "run_metadata", postgresql_using="gin"),
     )
 
     suite_id: Mapped[uuid.UUID] = mapped_column(

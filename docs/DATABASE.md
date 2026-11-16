@@ -336,8 +336,9 @@ target whatever the application itself would connect to.
 | `3e3312d5327a` | Create the suite, scenario and execution tables (initial) |
 | `4997650a09c8` | Index `scenarios.spec` with GIN for tag filtering |
 | `1c40c48f72cf` | Add `run_evaluations` and `transcript_references` (Phase 11) — two new tables, nothing existing touched |
+| `6c64d84df105` | Index `test_runs.created_at` and GIN-index `test_runs.run_metadata` for the Phase 12 reporting queries |
 
-All three are reversible. The initial migration's `downgrade()` drops everything in
+All four are reversible. The initial migration's `downgrade()` drops everything in
 reverse dependency order and is exercised on every test run, so it is
 genuinely reversible rather than one-way; `4997650a09c8` drops its index.
 
