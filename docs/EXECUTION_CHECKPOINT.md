@@ -51,12 +51,20 @@ project pages, and deployment needs everything.
 **Early Phase 9 prerequisite: complete.** Text only; verified against the
 reference bot on localhost.
 
+| Phase 7 unit | Commit | CI |
+|------|--------|----|
+| Jitter, dropout, truncation and silence transformations | `a74ce2b` | ✅ 43921296391 |
+| Scenario-declared channel conditions and per-run overrides | `a47c3b3` | ✅ 43922977070 |
+| Exact G.711 codec; Phase 7 closed | `7825496` | ✅ 43924088839 |
+
+**Phase 7: complete** (synthetic noise; no recorded noise beds).
+
 ## Next task
 
-Phase 7: make the remaining audio conditions (clipping, level, silence,
-dropouts, sample-rate change, jitter) reachable from a scenario and an
-operator override, each applied or reported as not enforced, with achieved
-values measured per artefact.
+Phase 11, deterministic evaluation first: a metric registry with documented
+definitions, WER and CER with Indic-aware normalisation, task completion from
+the caller's recorded outcome, latency from recorded per-turn timings, and
+evaluation results persisted per run with their evaluator version.
 
 ## Outstanding issues
 
