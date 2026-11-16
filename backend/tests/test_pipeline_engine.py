@@ -1080,8 +1080,12 @@ class TestNoNewTables:
         """Phase 7 reuses the Phase 2 schema, so there is no migration."""
         from sqlalchemy import inspect
 
+        # Phase 11 is the first phase since 2 to add tables, and it names them;
+        # anything else appearing would be an unannounced schema change.
+        phase_eleven = {"run_evaluations", "transcript_references"}
         tables = set(inspect(db_session.get_bind()).get_table_names())
-        assert tables == {
+        assert phase_eleven <= tables
+        assert tables - phase_eleven == {
             "alembic_version",
             "call_sessions",
             "conversation_turns",

@@ -130,6 +130,23 @@ rather than relying on `created_at` ordering — two turns can share a timestamp
 at the resolution the database stores, and a transcript rendered in the wrong
 order is worse than useless.
 
+### `run_evaluations`, `transcript_references` (Phase 11)
+
+Both **append-only**. `run_evaluations` holds one row per evaluation of a
+run: the `evaluator_version`, a CHECK-constrained `verdict` (`pass`, `fail`,
+`undetermined`), the SHA-256 `evidence_fingerprint` of what was read, and the
+full `results` document. Re-evaluating adds a row; nothing updates one, so a
+run's history under every evaluator version survives.
+
+`transcript_references` holds reviewed ground-truth text for a bot turn. A
+correction is a new row and the newest wins; the history of what was reviewed
+is kept. `length(text) > 0` is enforced by the database.
+
+Both cascade from their parent (`test_runs`, `conversation_turns`), so neither
+outlives the evidence it describes. Rows are stamped with `clock_timestamp()`
+rather than `now()`, which is fixed per transaction and would make two rows
+written together tie on "latest".
+
 ---
 
 ## Schema decisions
@@ -318,8 +335,9 @@ target whatever the application itself would connect to.
 |----------|-------------|
 | `3e3312d5327a` | Create the suite, scenario and execution tables (initial) |
 | `4997650a09c8` | Index `scenarios.spec` with GIN for tag filtering |
+| `1c40c48f72cf` | Add `run_evaluations` and `transcript_references` (Phase 11) — two new tables, nothing existing touched |
 
-Both are reversible. The initial migration's `downgrade()` drops everything in
+All three are reversible. The initial migration's `downgrade()` drops everything in
 reverse dependency order and is exercised on every test run, so it is
 genuinely reversible rather than one-way; `4997650a09c8` drops its index.
 

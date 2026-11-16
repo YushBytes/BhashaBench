@@ -9,6 +9,7 @@ missing from this list silently disappears from migrations.
 from app.db.base import Base
 from app.models.call_session import CallSession, CallStatus
 from app.models.conversation_turn import ConversationTurn, Speaker
+from app.models.evaluation import RunEvaluation, TranscriptReference, Verdict
 from app.models.scenario import Scenario
 from app.models.suite import TestSuite
 from app.models.test_run import RunStatus, TestRun
@@ -18,9 +19,12 @@ __all__ = [
     "CallSession",
     "CallStatus",
     "ConversationTurn",
+    "RunEvaluation",
     "RunStatus",
     "Scenario",
     "Speaker",
     "TestRun",
     "TestSuite",
+    "TranscriptReference",
+    "Verdict",
 ]
