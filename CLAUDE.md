@@ -510,7 +510,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2478 collected; 2437 pass, 41 live ones skipped
+pytest                                  # 2509 collected; 2468 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

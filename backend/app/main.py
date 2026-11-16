@@ -33,6 +33,9 @@ from app.pipeline.errors import (
     AudioValidationError,
     BotAdapterError,
     BotAudioPendingError,
+    BotAuthenticationError,
+    BotProtocolError,
+    BotTargetRefusedError,
     BotTimeoutError,
     BotUnavailableError,
     DegradationError,
@@ -202,6 +205,13 @@ _PIPELINE_STATUS: dict[type[PipelineError], int] = {
     BotAudioPendingError: status.HTTP_409_CONFLICT,
     BotTimeoutError: status.HTTP_504_GATEWAY_TIMEOUT,
     BotUnavailableError: status.HTTP_502_BAD_GATEWAY,
+    # The bot rejected our credential or broke the protocol: an upstream
+    # failure, reported as one.
+    BotAuthenticationError: status.HTTP_502_BAD_GATEWAY,
+    BotProtocolError: status.HTTP_502_BAD_GATEWAY,
+    # The configured URL failed the outbound guard before anything was sent.
+    # The deployment's configuration is at fault, not the bot.
+    BotTargetRefusedError: status.HTTP_422_UNPROCESSABLE_CONTENT,
     BotAdapterError: status.HTTP_502_BAD_GATEWAY,
 }
 

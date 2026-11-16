@@ -143,6 +143,20 @@ class BotTimeoutError(BotAdapterError):
     """The bot did not reply within the configured timeout."""
 
 
+class BotAuthenticationError(BotAdapterError):
+    """The bot refused our credential, or none is configured. Not retried."""
+
+
+class BotProtocolError(BotAdapterError):
+    """The bot answered, but not in the protocol: a malformed body, an
+    unexpected status, a redirect, an oversized response. A bot defect, never
+    repaired on its behalf."""
+
+
+class BotTargetRefusedError(BotAdapterError):
+    """The configured bot URL failed the outbound guard. Nothing was sent."""
+
+
 class BotAudioPendingError(BotAdapterError):
     """The bot's audio has not been supplied yet.
 
@@ -157,6 +171,9 @@ __all__ = [
     "AudioValidationError",
     "BotAdapterError",
     "BotAudioPendingError",
+    "BotAuthenticationError",
+    "BotProtocolError",
+    "BotTargetRefusedError",
     "BotTimeoutError",
     "BotUnavailableError",
     "DegradationError",
