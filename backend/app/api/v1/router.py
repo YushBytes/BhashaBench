@@ -11,6 +11,7 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     caller,
+    evaluation,
     health,
     languages,
     scenarios,
@@ -42,3 +43,8 @@ api_router.include_router(speech.router)
 api_router.include_router(caller.router)
 # Phase 7. The pipeline, which drives all three.
 api_router.include_router(test_runs.router)
+# Phase 11. Evaluation reads what the pipeline stored. Its run-scoped routes
+# sit under `/test-runs/{id}/...` beside the pipeline's; the paths are
+# disjoint, so the two routers never compete for a request.
+api_router.include_router(evaluation.router)
+api_router.include_router(evaluation.run_router)

@@ -221,13 +221,15 @@ def settings_not_enforced(
         add(
             "constraints.required_phrases",
             constraints["required_phrases"],
-            "Nothing checks the bot's replies for these phrases; evaluation is Phase 11.",
+            "Not checked while the run executes. The evaluation checks them afterwards: "
+            "POST /api/v1/test-runs/{id}/evaluations.",
         )
     if constraints.get("forbidden_phrases"):
         add(
             "constraints.forbidden_phrases",
             constraints["forbidden_phrases"],
-            "Nothing checks the bot's replies for these phrases; evaluation is Phase 11.",
+            "Not checked while the run executes. The evaluation checks them afterwards: "
+            "POST /api/v1/test-runs/{id}/evaluations.",
         )
     if caller_provider == "deterministic":
         mixing = document.get("code_mixing") or {}

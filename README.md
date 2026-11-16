@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2634 tests across 51 modules
+│   ├── tests/                 2647 tests across 52 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -750,16 +750,17 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2634 tests** across fifty-one modules.
-**2593 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2647 tests** across fifty-two modules.
+**2606 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2634) exceeds the number that run (2593):
+why the collected total (2647) exceeds the number that run (2606):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
 | `test_health.py` | 16 | Root, liveness and versioned health endpoints; the database probe reachable and unreachable; the error envelope; a check that no secret appears in a response |
 | `test_config.py` | 14 | Defaults, environment overrides, comma-separated list parsing, validation failures, production behaviour, settings caching |
 | `test_app_metadata.py` | 9 | App title/summary/version, the generated OpenAPI document, the application factory |
+| `test_evaluation_api.py` | 13 | The evaluation endpoints through the real routes and PostgreSQL: the metric catalogue, the stateless error-rate scorer and its validation, evaluating, listing and re-evaluating a real run after a reference, appended corrections with history, caller turns refused, and 404s |
 | `test_evaluation_evaluator.py` | 25 | The run evaluator: every verdict path on synthetic evidence (pass, bot failures, our faults undetermined, unfinished, phrases), pooled error rates, excluded failed transcriptions, nearest-rank latency, fingerprint reproducibility, and real text-bot runs evaluated from what they stored, re-evaluated, and re-scored after a reference is added |
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
@@ -835,7 +836,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2593 passed, 41 skipped ================
+================ 2606 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -898,8 +899,8 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 
 ## API endpoints
 
-The API exposes **36 paths and 44 HTTP operations**, plus one WebSocket route
-that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 37
+The API exposes **40 paths and 50 HTTP operations**, plus one WebSocket route
+that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 41
 documented paths in total.
 
 Those figures come from the generated OpenAPI document, never from a hand
@@ -967,7 +968,13 @@ python scripts/api_surface.py --json   # same, machine-readable
 | `GET` | `/api/v1/test-runs/{id}/artifacts` | Audio references and measured metadata. A degraded artefact names the original it came from |
 | `GET` | `/api/v1/test-runs/{id}/artifacts/{turn_index}/audio` | The stored audio for one turn (`?variant=original\|processed`), with single-range `bytes=` support so a player can seek. Staging and production refuse with **403** unless `PIPELINE_SERVE_ARTEFACTS` is set - 403 and not 404, because the recording exists and the environment declines. It claims no authorisation: a run id is an identifier, not a credential |
 | `GET` | `/api/v1/test-runs/{id}/report` | Full evidence: state, artefacts, caller state transitions and every stage with its measured duration. Measurements, not scores |
-| `GET` | `/api/v1/test-runs/bot-adapters/available` | Bot adapters with their capabilities, plus the execution modes a run may use |
+| `GET` | `/api/v1/test-runs/bot-adapters/available` | Bot adapters with their capabilities and whether each is configured, plus the execution modes a run may use |
+| `POST` | `/api/v1/test-runs/{id}/evaluations` | Evaluates the run from its stored evidence and appends the result: a `pass` / `fail` / `undetermined` verdict with per-criterion reasons, and every metric with its working. See [docs/EVALUATION.md](docs/EVALUATION.md) |
+| `GET` | `/api/v1/test-runs/{id}/evaluations` | Every evaluation of the run, newest first |
+| `POST` | `/api/v1/test-runs/{id}/turns/{turn_index}/reference` | Records a reviewed reference transcript for a bot turn - the ground truth WER and CER need. Append-only; 409 for a caller turn |
+| `GET` | `/api/v1/test-runs/{id}/turns/{turn_index}/reference` | A bot turn's references, oldest first; the last is used |
+| `GET` | `/api/v1/evaluation/metrics` | Every metric's definition, formula, evidence, direction, missing-data rule and limitations. `composite_score` is always null |
+| `POST` | `/api/v1/evaluation/error-rate` | WER and CER of a hypothesis against a reference, with the full breakdown. Stores nothing |
 | `WS` | `/api/v1/transcription/stream` | Streaming transcription. Send PCM frames, receive `started` / `final_transcript` / `completed` events. Not in the OpenAPI document - OpenAPI 3.1 cannot describe a WebSocket; see [docs/PROVIDERS.md](docs/PROVIDERS.md) |
 | `POST` | `/api/v1/suites/{suite_id}/scenarios/import` | Bulk import from a bundle. Takes `{"yaml": ..., "dry_run": ..., "atomic": ...}` |
 | `GET` | `/api/v1/suites/{suite_id}/scenarios/export` | The suite as a deterministic, re-importable bundle |

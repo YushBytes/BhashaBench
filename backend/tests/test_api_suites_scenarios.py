@@ -682,6 +682,11 @@ class TestOpenApiSurface:
             "/api/v1/test-runs/{run_id}/artifacts/{turn_index}/audio",
             "/api/v1/test-runs/{run_id}/report",
             "/api/v1/test-runs/bot-adapters/available",
+            # Phase 11: evaluation.
+            "/api/v1/test-runs/{run_id}/evaluations",
+            "/api/v1/test-runs/{run_id}/turns/{turn_index}/reference",
+            "/api/v1/evaluation/metrics",
+            "/api/v1/evaluation/error-rate",
         }
 
     def test_scenario_spec_schema_is_published(self, client: TestClient) -> None:

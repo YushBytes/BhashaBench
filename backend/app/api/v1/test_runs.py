@@ -504,8 +504,10 @@ def list_runs(
         "is `created`; POST to `/start` to execute it.\n\n"
         "`mode` is the honesty control: `offline_simulation` moves no audio, "
         "`audio_fixture_test` runs every stage with the bot's replies read from "
-        "fixtures, and `external_bot_test` waits for an operator to supply the "
-        "bot's audio. `telephony_test` is refused - no telephony exists."
+        "fixtures, `external_bot_test` waits for an operator to supply the "
+        "bot's audio, and `text_bot_test` exchanges text with an external bot "
+        "over the http adapter - no audio. `telephony_test` is refused - no "
+        "telephony exists."
     ),
     responses={
         status.HTTP_404_NOT_FOUND: {
