@@ -194,3 +194,47 @@ class TestCombined:
     def test_truncation_then_padding_fixes_the_final_length(self) -> None:
         result = degrade(SINE, self.CONFIG)
         assert result.output_duration_seconds == pytest.approx(0.9 + 0.2, abs=1 / RATE)
+
+
+class TestCodec:
+    """G.711 is implemented exactly, so it is tested against its code table."""
+
+    def test_every_ulaw_code_round_trips(self) -> None:
+        from app.pipeline.degradation import _ulaw_decode, _ulaw_encode
+
+        # 0x7F is mu-law's negative zero; it decodes to 0, which encodes as 0xFF.
+        assert all(_ulaw_encode(_ulaw_decode(c)) == c for c in range(256) if c != 0x7F)
+        assert (_ulaw_encode(0), _ulaw_decode(0x80), _ulaw_decode(0x00)) == (0xFF, 32124, -32124)
+
+    def test_every_alaw_code_round_trips(self) -> None:
+        from app.pipeline.degradation import _alaw_decode, _alaw_encode
+
+        assert all(_alaw_encode(_alaw_decode(c)) == c for c in range(256))
+        assert (_alaw_encode(0), _alaw_decode(0xAA), _alaw_decode(0x2A)) == (0xD5, 32256, -32256)
+
+    @pytest.mark.parametrize("codec", ["g711_ulaw", "g711_alaw"])
+    def test_the_quantisation_snr_is_measured_and_plausible(self, codec: str) -> None:
+        result = degrade(SINE, DegradationConfig(codec=codec))
+        assert Transformation.CODEC in result.transformations
+        assert 30.0 < float(result.parameters["codec_sqnr_db_achieved"]) < 45.0
+        assert result.audio != SINE
+
+    def test_a_non_8khz_input_is_refused_rather_than_misrepresented(self) -> None:
+        with pytest.raises(DegradationError, match="8 kHz"):
+            degrade(_sine(rate=16000), DegradationConfig(codec="g711_ulaw"))
+
+    def test_an_unknown_codec_is_refused(self) -> None:
+        with pytest.raises(DegradationError, match="codec"):
+            degrade(SINE, DegradationConfig(codec="opus"))
+
+    def test_with_conditions_converts_to_8khz_for_the_codec(self) -> None:
+        from app.pipeline.degradation import with_conditions
+
+        config = with_conditions(DegradationConfig(), {"codec": "g711_alaw"})
+        assert (config.codec, config.target_sample_rate_hz, config.force_mono) == (
+            "g711_alaw",
+            8000,
+            True,
+        )
+        result = degrade(_sine(rate=16000), config)
+        assert result.output_sample_rate_hz == 8000

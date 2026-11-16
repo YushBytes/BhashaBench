@@ -158,6 +158,13 @@ class Goal(SpecModel):
     )
 
 
+class Codec(StrEnum):
+    """Telephone codecs the pipeline can round-trip exactly."""
+
+    G711_ULAW = "g711_ulaw"
+    G711_ALAW = "g711_alaw"
+
+
 SUPPORTED_SAMPLE_RATES_HZ: frozenset[int] = frozenset(
     {8000, 16000, 22050, 24000, 32000, 44100, 48000}
 )
@@ -191,6 +198,13 @@ class AudioConditions(SpecModel):
         default=None,
         description=f"Convert to this rate (mono). One of {sorted(SUPPORTED_SAMPLE_RATES_HZ)}.",
     )
+    codec: Codec | None = Field(
+        default=None,
+        description=(
+            "Round-trip through a telephone codec: g711_ulaw (North America, "
+            "Japan) or g711_alaw (India, Europe). Converts to 8 kHz mono."
+        ),
+    )
     jitter_ms: float | None = Field(
         default=None,
         ge=0.0,
@@ -221,6 +235,15 @@ class AudioConditions(SpecModel):
                 f"sample_rate_hz must be one of {sorted(SUPPORTED_SAMPLE_RATES_HZ)}, got {value}"
             )
         return value
+
+    @model_validator(mode="after")
+    def _codec_rate_agrees(self) -> AudioConditions:
+        if self.codec is not None and self.sample_rate_hz not in (None, 8000):
+            raise ValueError(
+                f"codec {self.codec.value} runs at 8000 Hz; sample_rate_hz "
+                f"{self.sample_rate_hz} contradicts it"
+            )
+        return self
 
 
 CONDITION_FIELDS: tuple[str, ...] = tuple(AudioConditions.model_fields)

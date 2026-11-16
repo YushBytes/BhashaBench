@@ -58,7 +58,7 @@ keep the numbering they were written in. Use this table to translate.
 | 4 | Gnani Prisma — Speech to Text | ✅ Complete (batch live-verified; streaming not live-verified) |
 | 5 | Gnani Timbre — Text to Speech | ✅ Complete (batch; streaming not implemented) |
 | 6 | AI Caller Simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
-| 7 | Audio Degradation Engine | 🟡 Partial |
+| 7 | Audio Degradation Engine | ✅ Complete (synthetic noise; no recorded noise beds) |
 | 8 | Telephony Integration | ⬜ Not started |
 | 9 | Real-Time Conversation Engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & Transcription | 🟡 Partial — per-turn artefacts only |
@@ -676,11 +676,20 @@ deterministic caller remains selectable; no invented provider constant.
 
 ---
 
-## Phase 7 — Audio Degradation Engine 🟡
+## Phase 7 — Audio Degradation Engine ✅
 
-The DSP exists (Part A). Phase 0 makes runs apply a scenario's declared SNR
-and packet loss. Remaining: codec simulation, jitter, level and clipping
-reachable from a scenario, and per-language noise beds.
+**Complete on 2026-11-16.** The DSP existed (Part A) and Phase 0 made runs
+apply a scenario's declared SNR and packet loss. Delivered since: jitter
+under-runs, dropouts, truncation and silence padding; an exact G.711 μ-law
+and A-law round trip; and all ten channel conditions declarable by a scenario
+and overridable per run, field by field, with the source and the measured
+achieved value recorded on every artefact.
+
+**Not delivered, and not claimed:** per-language noise beds (they need
+licensed field recordings this project does not have — the noise is synthetic
+and is never described as a recording), speech-rate change (needs a
+pitch-preserving time-stretch) and overlapping speech (needs a second voice
+source). Neither of the last two can be declared.
 
 **Exit criteria.** Every declared audio condition is applied or rejected,
 never silently ignored, and the achieved values are recorded per artefact and

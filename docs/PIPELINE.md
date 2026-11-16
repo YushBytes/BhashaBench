@@ -198,7 +198,8 @@ wire:
 | 4 | `add_noise` | Scaled from the signal's own RMS, so the stated ratio holds for *this* utterance |
 | 5 | `reduce_amplitude` | Quiet speech |
 | 6 | `clip` | Hard clip at a fraction of full scale; the count clipped is recorded |
-| 7 | `packet_loss` | Whole 20 ms packets, filled with silence — scattered samples would sound like crackle, not like a gap |
+| 7 | `codec` | G.711 μ-law or A-law, implemented exactly from the ITU algorithm and tested against its code table; 8 kHz mono only, and the measured `codec_sqnr_db_achieved` is recorded |
+| 7b | `packet_loss` | Whole 20 ms packets, filled with silence — scattered samples would sound like crackle, not like a gap |
 | 8 | `jitter` | Seeded per-packet delay up to `jitter_ms`; where it exceeds the fixed `jitter_buffer_ms` the receiver under-runs and the shortfall is inserted as silence. Gaps and inserted milliseconds are recorded. The harsh end of jitter: real receivers adapt and conceal |
 | 9 | `dropout` | `dropout_count` seeded silent gaps of `dropout_ms` — a fade or dead spot, longer than a packet. The silenced duration is measured over the union, so overlapping gaps are not double-counted, and a shortfall is noted |
 | 10 | `truncate` | Cut at `truncate_after_seconds`, as a dropped call does; the seconds removed are recorded, and audio already shorter is noted |
@@ -302,10 +303,10 @@ silently running it clean would report a result for a condition never applied.
 
 ### Channel conditions, from the scenario or the operator
 
-A scenario's `audio` section may declare nine channel conditions (gain,
-clipping, sample rate, jitter, dropouts, truncation, leading and trailing
-silence; see `docs/SCENARIO_FORMAT.md`). `POST /test-runs` accepts the same
-nine under `audio_conditions`, with the same bounds, as operator overrides.
+A scenario's `audio` section may declare ten channel conditions (gain,
+clipping, sample rate, codec, jitter, dropouts, truncation, leading and
+trailing silence; see `docs/SCENARIO_FORMAT.md`). `POST /test-runs` accepts the same
+ten under `audio_conditions`, with the same bounds, as operator overrides.
 Resolution is **per field**: an operator value wins over the scenario's for
 that field only. The run records the result in
 `degradation_requested.conditions` and, beside it,
@@ -314,7 +315,8 @@ applied field — so a report can say who asked for every condition.
 
 `with_conditions` in `app/pipeline/degradation.py` is the one place the
 mapping onto the DSP lives (`gain_db` becomes `amplitude_scale = 10^(g/20)`;
-`sample_rate_hz`, jitter and dropouts force mono). Each degraded artefact then
+`sample_rate_hz`, the codec, jitter and dropouts force mono, and the codec
+converts to 8 kHz). Each degraded artefact then
 records what was achieved, measured from its bytes: `gain_db_achieved`,
 `clipped_samples`, the output rate, `jitter_gaps_inserted` and
 `jitter_silence_inserted_ms`, `dropout_silenced_ms_achieved`,

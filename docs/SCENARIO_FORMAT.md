@@ -99,6 +99,7 @@ expected_outcomes:
 | `gain_db` | number | no | — | −40–0 dB. Quieter speech. |
 | `clip_threshold` | number | no | — | 0.05–1, fraction of full scale. An overdriven microphone. |
 | `sample_rate_hz` | integer | no | — | One of 8000, 16000, 22050, 24000, 32000, 44100, 48000; converts to mono. |
+| `codec` | enum | no | — | `g711_ulaw` or `g711_alaw`: an exact round trip through the telephone codec. Converts to 8 kHz mono; any other `sample_rate_hz` is refused. |
 | `jitter_ms` | number | no | — | 0–300 ms of per-packet delay; under-runs past a 40 ms buffer become silence. |
 | `dropout_count` | integer | no | — | 0–20 silent dead spots. |
 | `dropout_ms` | number | no | — | 20–2000 ms per dead spot (200 when only `dropout_count` is set). |
@@ -106,7 +107,7 @@ expected_outcomes:
 | `leading_silence_ms` | number | no | — | 0–5000 ms before the caller speaks. |
 | `trailing_silence_ms` | number | no | — | 0–5000 ms after. |
 
-The nine fields after `packet_loss_percent` are channel conditions. Each is
+The ten fields after `packet_loss_percent` are channel conditions. Each is
 optional with **no default**: an undeclared condition is never applied and
 never reported, so a scenario written before they existed means what it
 always meant and serialises to the same bytes. A declared one is applied to

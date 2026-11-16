@@ -306,7 +306,7 @@ names the original phase that delivers it.
 | ~~Speech to text~~ | **Done (Phase 4).** Transcribe bot audio via Gnani Prisma — batch and streaming, behind a provider-independent interface | 4 |
 | ~~Text to speech~~ | **Done (Phase 5).** Synthesise caller speech via Gnani Timbre - 13 voices, 10 languages, telephony-rate audio | 5 |
 | ~~Simulated callers~~ | **Done (Phase 6).** A caller that pursues a goal rather than replaying a script - deterministic and rule-based. Gnani Evon is **not** integrated: no documented API access exists | 6 |
-| ~~Audio degradation~~ | **Delivered (Phase 7, partial).** Band-limiting, background noise at a measured SNR, clipping, level and packet loss, reproducible from a fixed seed. Simulated conditions, not field recordings | 7 |
+| ~~Audio degradation~~ | **Delivered (Phase 7).** Band-limiting, background noise at a measured SNR, gain, clipping, G.711 codecs, packet loss, jitter, dropouts, truncation and silence - declarable per scenario, overridable per run, measured per artefact and reproducible from a seed. Simulated conditions, not field recordings | 7 |
 | ~~Operator workspace~~ | **Delivered (Phase 13, partial).** A public site at `/` and a workspace at `/app`: run history, a conversation inspector with audio playback and waveforms drawn from the stored bytes, scenario library and provider status | 13 |
 | Live telephony | Outbound calls with Twilio bidirectional media streaming | 8 |
 | Real-time conversation | External voice bots over a documented protocol, streaming audio, barge-in and silence handling | 9 |
@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2569 tests across 48 modules
+│   ├── tests/                 2578 tests across 48 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -750,10 +750,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2569 tests** across forty-eight modules.
-**2528 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2578 tests** across forty-eight modules.
+**2537 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2569) exceeds the number that run (2528):
+why the collected total (2578) exceeds the number that run (2537):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -797,8 +797,8 @@ why the collected total (2569) exceeds the number that run (2528):
 | `test_pipeline_api.py` | 113 | The twelve test-run operations, plus the run's recorded bot adapter honoured on every route and offline simulation reaching a terminal state (text fixture, manual `/bot-text`): creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, the 503 at the concurrency limit, OpenAPI, plus the Phase 8 run listing (filters, pagination window, ILIKE wildcard escape, caller-only exclusion) and artefact audio (range handling, traversal through the turn index, per-environment access) |
 | `test_pipeline_fixture_audio.py` | 9 | The fixture audio an API-started scripted run replays: the file read and repeated per turn, a missing/empty/directory path refused, the real engine factory wiring it to the scripted adapter, the reply still marked as not received from a bot, and the unset setting leaving the turn-0 failure intact |
 | `test_pipeline_concurrency.py` | 41 | The admission limiter: the configured maximum is never exceeded, capacity frees up for the next run, and exceptions, cancellation and timeouts all release it |
-| `test_pipeline_conditions.py` | 26 | Jitter, dropouts, truncation, silence padding and measured gain, each alone and combined: achieved values measured from the bytes, shortfalls noted, seeded reproducibility, range validation, fixed order, and the original never modified |
-| `test_pipeline_declared_conditions.py` | 18 | Channel conditions declared by a scenario or overridden per run, applied in real audio runs against PostgreSQL: per-field operator precedence and recorded sources, achieved values on each artefact, truncation, a disabled stage reported as not enforced, end-to-end reproducibility, and bounds |
+| `test_pipeline_conditions.py` | 33 | Jitter, dropouts, truncation, silence padding and measured gain, each alone and combined: achieved values measured from the bytes, shortfalls noted, seeded reproducibility, range validation, fixed order, and the original never modified |
+| `test_pipeline_declared_conditions.py` | 20 | Channel conditions declared by a scenario or overridden per run, applied in real audio runs against PostgreSQL: per-field operator precedence and recorded sources, achieved values on each artefact, truncation, a disabled stage reported as not enforced, end-to-end reproducibility, and bounds |
 | `test_speech_live.py` | 26 | **Opt-in, billable.** Real Gnani Timbre calls. Skipped unless `SPEECH_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
 | `test_caller_llm_contract.py` | 84 | The provider-independent LLM caller contract, offline: the prompt is built from the caller context alone (no expected outcomes, rubric or accounting), the states offered to a model are a subset of the transition table, a reply is parsed strictly and then meets the same validation gate as the rule engine, and cost arithmetic never treats an unknown price or unknown usage as zero |
 | `test_caller_llm_provider.py` | 53 | The model-backed caller strategy driven by a scripted client, with no network: a generated turn and its evidence, bounded retry across every kind of failure, deterministic fallback with the reason recorded and never reported as model-generated, per-turn token and per-run cost limits judged on the worst case, unknown usage charged not zeroed, and the scripted client being unselectable by configuration |
@@ -832,7 +832,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2528 passed, 41 skipped ================
+================ 2537 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -1037,7 +1037,7 @@ documentation. Full detail in
 | 4 | Speech to text (Gnani Prisma) | ✅ Complete (batch live-verified; streaming not live-verified) |
 | 5 | Text to speech (Gnani Timbre) | ✅ Complete (batch; streaming not implemented) |
 | 6 | AI caller simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
-| 7 | Audio degradation engine | 🟡 Partial |
+| 7 | Audio degradation engine | ✅ Complete (synthetic noise; no recorded noise beds) |
 | 8 | Telephony integration | ⬜ Not started |
 | 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & transcription | 🟡 Partial — per-turn artefacts only |

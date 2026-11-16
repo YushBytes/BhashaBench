@@ -59,6 +59,7 @@ class Transformation(StrEnum):
     ADD_NOISE = "add_noise"
     CLIP = "clip"
     REDUCE_AMPLITUDE = "reduce_amplitude"
+    CODEC = "codec"
     PACKET_LOSS = "packet_loss"
     JITTER = "jitter"
     DROPOUT = "dropout"
@@ -102,6 +103,9 @@ class DegradationConfig:
     """Hard-clip at this fraction of full scale, in (0, 1]."""
     amplitude_scale: float | None = None
     """Multiply samples by this, in (0, 1]. Quiet speech, not silence."""
+    codec: str | None = None
+    """`g711_ulaw` or `g711_alaw`: encode and decode through the telephone
+    codec's companding (ITU-T G.711), at 8 kHz. Exact, not approximated."""
     packet_loss_percent: float = 0.0
     packet_duration_ms: float = 20.0
     """Length of one simulated packet. 20 ms is the common RTP payload size."""
@@ -159,6 +163,8 @@ class DegradationConfig:
             )
         if self.packet_duration_ms <= 0:
             problems.append(f"packet_duration_ms must be positive, got {self.packet_duration_ms}")
+        if self.codec is not None and self.codec not in CODECS:
+            problems.append(f"codec must be one of {sorted(CODECS)}, got {self.codec!r}")
         if not (0 <= self.jitter_ms <= 500):
             problems.append(f"jitter_ms must be in [0, 500], got {self.jitter_ms}")
         if not (0 <= self.jitter_buffer_ms <= 500):
@@ -223,6 +229,8 @@ class DegradationConfig:
             steps.append(Transformation.REDUCE_AMPLITUDE)
         if self.clip_threshold is not None:
             steps.append(Transformation.CLIP)
+        if self.codec is not None:
+            steps.append(Transformation.CODEC)
         if self.packet_loss_percent > 0:
             steps.append(Transformation.PACKET_LOSS)
         if self.jitter_ms > 0:
@@ -264,6 +272,11 @@ def with_conditions(
             updates[name] = float(conditions[name])  # type: ignore[arg-type]
     if conditions.get("dropout_count") is not None:
         updates["dropout_count"] = int(conditions["dropout_count"])  # type: ignore[arg-type]
+    if conditions.get("codec") is not None:
+        updates["codec"] = str(conditions["codec"])
+        # G.711 is 8 kHz mono; reaching it from any other rate is a conversion.
+        updates.setdefault("target_sample_rate_hz", 8000)
+        updates["force_mono"] = True
     if conditions.get("truncate_after_seconds") is not None:
         updates["truncate_after_seconds"] = float(conditions["truncate_after_seconds"])  # type: ignore[arg-type]
     if (updates.get("jitter_ms") or updates.get("dropout_count")) and not (
@@ -637,6 +650,71 @@ def _packet_loss(
     return out, dropped, total_packets
 
 
+CODECS = frozenset({"g711_ulaw", "g711_alaw"})
+_ULAW_BIAS = 0x84
+_ULAW_CLIP = 32635
+
+
+def _ulaw_encode(sample: int) -> int:
+    sign = 0x80 if sample < 0 else 0
+    magnitude = min(abs(sample), _ULAW_CLIP) + _ULAW_BIAS
+    exponent = 7
+    mask = 0x4000
+    while exponent > 0 and not magnitude & mask:
+        exponent -= 1
+        mask >>= 1
+    mantissa = (magnitude >> (exponent + 3)) & 0x0F
+    return ~(sign | (exponent << 4) | mantissa) & 0xFF
+
+
+def _ulaw_decode(code: int) -> int:
+    code = ~code & 0xFF
+    sign, exponent, mantissa = code & 0x80, (code >> 4) & 0x07, code & 0x0F
+    magnitude = (((mantissa << 3) + _ULAW_BIAS) << exponent) - _ULAW_BIAS
+    return -magnitude if sign else magnitude
+
+
+def _alaw_encode(sample: int) -> int:
+    # As the ITU reference: a 13-bit value, negatives folded to -x - 1.
+    pcm = sample >> 3
+    if pcm >= 0:
+        mask = 0xD5
+    else:
+        mask = 0x55
+        pcm = -pcm - 1
+    if pcm < 32:
+        code = pcm >> 1
+    else:
+        exponent = pcm.bit_length() - 5
+        code = (exponent << 4) | ((pcm >> exponent) & 0x0F)
+    return code ^ mask
+
+
+def _alaw_decode(code: int) -> int:
+    code ^= 0x55
+    sign, exponent, mantissa = code & 0x80, (code >> 4) & 0x07, code & 0x0F
+    magnitude = (mantissa << 4) + (8 if exponent == 0 else 0x108)
+    if exponent > 1:
+        magnitude <<= exponent - 1
+    return magnitude if sign else -magnitude
+
+
+def _codec(samples: array.array, codec: str) -> tuple[array.array, float | None]:
+    """Round-trip through G.711, returning the audio and the measured
+    signal-to-quantisation-noise ratio in dB (`None` for silence)."""
+    encode, decode = (
+        (_ulaw_encode, _ulaw_decode) if codec == "g711_ulaw" else (_alaw_encode, _alaw_decode)
+    )
+    out = array.array("h", (_clamp(decode(encode(value))) for value in samples))
+    signal = sum(v * v for v in samples)
+    noise = sum((a - b) * (a - b) for a, b in zip(samples, out, strict=True))
+    if not signal:
+        return out, None
+    if not noise:
+        return out, math.inf
+    return out, round(10 * math.log10(signal / noise), 3)
+
+
 def _jitter(
     samples: array.array,
     *,
@@ -816,6 +894,19 @@ def degrade(audio: bytes, config: DegradationConfig) -> DegradationResult:
         parameters["clip_threshold"] = config.clip_threshold
         parameters["clipped_samples"] = clipped
         applied.append(Transformation.CLIP)
+
+    if config.codec is not None:
+        if rate != 8000 or channels != 1:
+            raise DegradationError(
+                f"G.711 is an 8 kHz mono codec; this audio is {rate} Hz with "
+                f"{channels} channel(s) at the codec stage. Declare sample_rate_hz 8000",
+                stage="degradation",
+            )
+        samples, sqnr = _codec(samples, config.codec)
+        parameters["codec"] = config.codec
+        if sqnr is not None and math.isfinite(sqnr):
+            parameters["codec_sqnr_db_achieved"] = sqnr
+        applied.append(Transformation.CODEC)
 
     if config.packet_loss_percent > 0:
         samples, dropped, total = _packet_loss(

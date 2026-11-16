@@ -60,6 +60,7 @@ CONDITIONS: dict[str, Any] = {
     "gain_db": -6.0,
     "clip_threshold": 0.4,
     "sample_rate_hz": 8000,
+    "codec": "g711_alaw",
     "jitter_ms": 120.0,
     "dropout_count": 1,
     "dropout_ms": 100.0,
@@ -122,11 +123,18 @@ class TestTheSpecification:
             ("dropout_ms", 10.0),
             ("truncate_after_seconds", 0.1),
             ("leading_silence_ms", 6000.0),
+            ("codec", "opus"),
         ],
     )
     def test_out_of_range_declarations_are_refused(self, field: str, value: float) -> None:
         with pytest.raises(ValidationError, match=field):
             ScenarioSpec.model_validate({**SPEC, "audio": {field: value}})
+
+    def test_a_codec_with_a_contradicting_rate_is_refused(self) -> None:
+        with pytest.raises(ValidationError, match="8000 Hz"):
+            ScenarioSpec.model_validate(
+                {**SPEC, "audio": {"codec": "g711_ulaw", "sample_rate_hz": 16000}}
+            )
 
 
 class TestTheMapping:
@@ -167,6 +175,7 @@ class TestDeclaredConditionsAreApplied:
                 Transformation.RESAMPLE.value,
                 Transformation.REDUCE_AMPLITUDE.value,
                 Transformation.CLIP.value,
+                Transformation.CODEC.value,
                 Transformation.JITTER.value,
                 Transformation.DROPOUT.value,
                 Transformation.PAD_SILENCE.value,
@@ -175,6 +184,8 @@ class TestDeclaredConditionsAreApplied:
             assert artefact.sample_rate_hz == 8000
             assert params["gain_db_achieved"] == pytest.approx(-6.0, abs=0.2)
             assert params["clip_threshold"] == 0.4
+            assert params["codec"] == "g711_alaw"
+            assert "codec_sqnr_db_achieved" in params
             assert params["dropout_silenced_ms_achieved"] == pytest.approx(100.0, abs=1)
             assert "jitter_silence_inserted_ms" in params
             assert params["leading_silence_ms"] == 200.0

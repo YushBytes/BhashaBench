@@ -24,7 +24,7 @@ work. Current progress and the next task are in
 | 4 | Speech to text (Gnani Prisma) | ✅ Complete (batch live-verified; streaming not live-verified) |
 | 5 | Text to speech (Gnani Timbre) | ✅ Complete (batch; streaming not implemented) |
 | 6 | AI caller simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
-| 7 | Audio degradation engine | 🟡 Partial |
+| 7 | Audio degradation engine | ✅ Complete (synthetic noise; no recorded noise beds) |
 | 8 | Telephony integration | ⬜ Not started |
 | 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & transcription | 🟡 Partial — per-turn artefacts only |
@@ -514,7 +514,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2569 collected; 2528 pass, 41 live ones skipped
+pytest                                  # 2578 collected; 2537 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```
