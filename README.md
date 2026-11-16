@@ -309,9 +309,9 @@ names the original phase that delivers it.
 | ~~Audio degradation~~ | **Delivered (Phase 7).** Band-limiting, background noise at a measured SNR, gain, clipping, G.711 codecs, packet loss, jitter, dropouts, truncation and silence - declarable per scenario, overridable per run, measured per artefact and reproducible from a seed. Simulated conditions, not field recordings | 7 |
 | ~~Operator workspace~~ | **Delivered (Phase 13, partial).** A public site at `/` and a workspace at `/app`: run history, a conversation inspector with audio playback and waveforms drawn from the stored bytes, scenario library and provider status | 13 |
 | Live telephony | Outbound calls with Twilio bidirectional media streaming | 8 |
-| Real-time conversation | External voice bots over a documented protocol, streaming audio, barge-in and silence handling | 9 |
+| Real-time conversation | External voice bots over a streaming audio protocol, barge-in and silence handling. (A text protocol and HTTP adapter exist: see `docs/BOT_PROTOCOL.md`) | 9 |
 | Recording | Full-conversation recording, retention and deletion | 10 |
-| Automated scoring | Word error rate, latency, task completion and an LLM judge with per-criterion reasoning, comparable across languages | 11 |
+| ~~Automated scoring~~ | **Delivered (Phase 11).** A reproducible pass / fail / undetermined verdict with per-criterion reasons, WER and CER against reviewed references with Indic-aware normalisation, latency and phrase checks - every metric defined in one registry, no composite score. The LLM judge interface exists but is offline-only: no model has judged anything | 11 |
 | Reporting | Aggregate queries, run comparison and regression detection | 12 |
 | CI regression testing | Every pull request runs the suite and fails on quality regression | 14 |
 
@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2647 tests across 52 modules
+│   ├── tests/                 2664 tests across 53 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -650,7 +650,7 @@ their phase lands.
 | `PUBLIC_BASE_URL` | 8 |
 | `ALLOWED_BOT_NUMBERS`, `MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS` | 8 |
 | `AUDIO_STORAGE_PATH`, `NOISE_MASTER_SEED` | superseded by `CALLER_AUDIO_STORAGE_DIR` and `PIPELINE_NOISE_SEED` in Phase 7 |
-| `JUDGE_RETRIES`, `PASS_THRESHOLD` | 11 |
+| `JUDGE_RETRIES`, `PASS_THRESHOLD` | not adopted in Phase 11: the judge's attempt limit is a call argument capped at 3, and the verdict is a conjunction of criteria, so there is no threshold to set |
 
 No endpoint paths, authentication schemes or request parameters for
 third-party providers are assumed anywhere in this repository. Those are
@@ -750,10 +750,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2647 tests** across fifty-two modules.
-**2606 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2664 tests** across fifty-three modules.
+**2623 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2647) exceeds the number that run (2606):
+why the collected total (2664) exceeds the number that run (2623):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -762,6 +762,7 @@ why the collected total (2647) exceeds the number that run (2606):
 | `test_app_metadata.py` | 9 | App title/summary/version, the generated OpenAPI document, the application factory |
 | `test_evaluation_api.py` | 13 | The evaluation endpoints through the real routes and PostgreSQL: the metric catalogue, the stateless error-rate scorer and its validation, evaluating, listing and re-evaluating a real run after a reference, appended corrections with history, caller turns refused, and 404s |
 | `test_evaluation_evaluator.py` | 25 | The run evaluator: every verdict path on synthetic evidence (pass, bot failures, our faults undetermined, unfinished, phrases), pooled error rates, excluded failed transcriptions, nearest-rank latency, fingerprint reproducibility, and real text-bot runs evaluated from what they stored, re-evaluated, and re-scored after a reference is added |
+| `test_evaluation_judge.py` | 17 | The LLM judge contract with the scripted client: strict parsing that rejects invented citations, unscored or duplicate criteria and uncited scores; bounded retries; non-retryable failures stop; the live gate recorded as no request sent; and the information boundary |
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_outbound.py` | 36 | The outbound-request guard: scheme and userinfo rules, the host allowlist and its wildcards, metadata/link-local/private/loopback address rules including IPv4-mapped IPv6 and decimal literals, and plain http only to loopback |
@@ -836,7 +837,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2606 passed, 41 skipped ================
+================ 2623 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -1051,7 +1052,7 @@ documentation. Full detail in
 | 8 | Telephony integration | ⬜ Not started |
 | 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & transcription | 🟡 Partial — per-turn artefacts only |
-| 11 | Evaluation & judge engine | ⬜ Not started |
+| 11 | Evaluation & judge engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & analytics backend | 🟡 Partial — run list and per-run report only |
 | 13 | Frontend dashboard | 🟡 Partial — operator workspace, no analytics |
 | 14 | CI/CD & safety | ⬜ Not started |

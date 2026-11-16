@@ -103,3 +103,30 @@ Evaluations are append-only: re-evaluating adds a row and never replaces one.
 A failed transcription with a reference is **excluded** from the error rates
 and counted as excluded, not scored as deletions — that failure is ours, and is
 reported under `transcription_failure_rate` instead.
+
+## The LLM judge — supplementary, offline only
+
+`backend/app/evaluation/judge.py`. A judge scores a versioned rubric
+(`DEFAULT_RUBRIC`: did the bot address the objective, were its statements
+consistent, was any refusal appropriate) as `pass`, `fail` or `uncertain`,
+and **must cite the turns** each score rests on. The reply is validated
+strictly: an unknown criterion, a duplicate, a score outside the three, a
+citation of a turn that does not exist, a non-`uncertain` score with no
+citation, or a missing explanation rejects the whole reply. Invalid output is
+retried within `max_attempts` (at most 3), and every attempt is logged.
+
+- **It never moves the verdict.** Its result is marked `supplementary`.
+- **Information boundary.** `JudgeInput` holds the language, the objective,
+  the expected outcomes and the turns — nothing else. The deterministic
+  verdict is not shown to it, so it cannot anchor on it.
+- **Versioned.** Rubric name and version, prompt version (`bb-judge-prompt-1`),
+  model requested and model reported are recorded with every judgement.
+- **Cost and live calls.** It speaks through the caller's `LlmClient`, so it
+  inherits the code-level live gate (`LIVE_CALLS_AUTHORISED = False`), the
+  worst-case costing of unknown usage, and the rule that clients never retry.
+
+**Not wired into the API, and not validated.** The only model client is
+Sarvam's, which is not authorised for live calls, so no judgement has ever
+been produced by a model, and its agreement with human labels has not been
+measured — no labelled set exists. It is tested end to end with the scripted
+client only.

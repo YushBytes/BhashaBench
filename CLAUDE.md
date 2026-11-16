@@ -28,7 +28,7 @@ work. Current progress and the next task are in
 | 8 | Telephony integration | ⬜ Not started |
 | 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & transcription | 🟡 Partial — per-turn artefacts only |
-| 11 | Evaluation & judge engine | ⬜ Not started |
+| 11 | Evaluation & judge engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & analytics backend | 🟡 Partial — run list and per-run report only |
 | 13 | Frontend dashboard | 🟡 Partial — operator workspace, no analytics |
 | 14 | CI/CD & safety | ⬜ Not started |
@@ -516,7 +516,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2647 collected; 2606 pass, 41 live ones skipped
+pytest                                  # 2664 collected; 2623 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

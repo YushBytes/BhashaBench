@@ -62,7 +62,7 @@ keep the numbering they were written in. Use this table to translate.
 | 8 | Telephony Integration | ⬜ Not started |
 | 9 | Real-Time Conversation Engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & Transcription | 🟡 Partial — per-turn artefacts only |
-| 11 | Evaluation & Judge Engine | ⬜ Not started |
+| 11 | Evaluation & Judge Engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & Analytics Backend | 🟡 Partial — run list and per-run report only |
 | 13 | Frontend Dashboard | 🟡 Partial — operator workspace, no analytics |
 | 14 | CI/CD & Safety | ⬜ Not started |
@@ -751,7 +751,21 @@ a retention period enforced and deletion tested.
 
 ---
 
-## Phase 11 — Evaluation & Judge Engine ⬜
+## Phase 11 — Evaluation & Judge Engine ✅
+
+**Complete on 2026-11-17** against its exit criteria: a completed run yields a
+reproducible pass/fail with per-criterion reasoning (`POST
+/test-runs/{id}/evaluations`, fingerprinted and append-only), and WER and CER
+are computed against reviewed references recorded per bot turn. Methodology:
+`docs/EVALUATION.md`.
+
+**Not delivered, and not claimed:** a live LLM judge (the interface and its
+validation exist and are tested with the scripted client; no model has judged
+anything, because live calls are not authorised) and agreement checks against
+a human-labelled set (none exists). Latency is the HTTP exchange only;
+interruption counts need Phase 9's streaming.
+
+Original scope:
 
 - Deterministic metrics: word and character error rate against reviewed
   references with per-language normalisation, latency percentiles,
