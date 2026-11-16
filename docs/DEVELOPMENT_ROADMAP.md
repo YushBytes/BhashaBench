@@ -60,7 +60,7 @@ keep the numbering they were written in. Use this table to translate.
 | 6 | AI Caller Simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
 | 7 | Audio Degradation Engine | 🟡 Partial |
 | 8 | Telephony Integration | ⬜ Not started |
-| 9 | Real-Time Conversation Engine | 🟡 Partial — sequential turn loop only |
+| 9 | Real-Time Conversation Engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & Transcription | 🟡 Partial — per-turn artefacts only |
 | 11 | Evaluation & Judge Engine | ⬜ Not started |
 | 12 | Reporting & Analytics Backend | 🟡 Partial — run list and per-run report only |
@@ -711,8 +711,14 @@ a call to any other number is refused before dialling, and `DIALING`,
 Delivered: a sequential, request-driven turn loop with a process-wide
 concurrency limit (Part A, competition Phases 7 and 7.1).
 
-Remaining: a documented HTTP/WebSocket protocol for external voice bots and a
-genuine reference sample bot; a background worker model so a run does not
+Delivered 2026-11-16, as the approved early prerequisite: the text protocol
+`bhashabench-text-bot/1` (`docs/BOT_PROTOCOL.md`), a reference bot that
+implements it (`backend/reference_bot/`), an outbound guard against SSRF, and
+the `http` adapter behind a new `text_bot_test` mode. Verified over real
+localhost sockets against the reference bot only; no third-party bot has been
+tested, and the exchange is text, never audio.
+
+Remaining: a WebSocket/audio protocol for external voice bots; a background worker model so a run does not
 live inside a request; streaming STT and TTS in the loop; voice-activity
 detection, end-pointing, barge-in, silence timeouts and per-turn deadlines;
 measured bot response latency.

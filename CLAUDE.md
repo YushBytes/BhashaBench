@@ -26,7 +26,7 @@ work. Current progress and the next task are in
 | 6 | AI caller simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
 | 7 | Audio degradation engine | 🟡 Partial |
 | 8 | Telephony integration | ⬜ Not started |
-| 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop only |
+| 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & transcription | 🟡 Partial — per-turn artefacts only |
 | 11 | Evaluation & judge engine | ⬜ Not started |
 | 12 | Reporting & analytics backend | 🟡 Partial — run list and per-run report only |

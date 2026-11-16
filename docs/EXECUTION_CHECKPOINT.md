@@ -42,13 +42,21 @@ project pages, and deployment needs everything.
 |------|--------|----|
 | Hide exported provider credentials from offline tests | `b1e1c26` | ✅ 43897753071 |
 | Hold the Gnani key as a masked `SecretStr` | `007e283` | ✅ 43911871562 |
-| Record the owner's authorisation and this checkpoint | this commit | — |
+| Record the owner's authorisation and this checkpoint | `33091ee` | ✅ |
+| Outbound-request guard against SSRF | `02b1ff7` | ✅ 43913687809 |
+| Reference text bot and `bhashabench-text-bot/1` | `b98b944` | ✅ 43915170226 |
+| HTTP text bot adapter | `f9eed46` | ✅ 43916620115 |
+| `text_bot_test` runs through the adapter, engine and API | `47b61eb` | ✅ 43920069081 |
+
+**Early Phase 9 prerequisite: complete.** Text only; verified against the
+reference bot on localhost.
 
 ## Next task
 
-Early Phase 9 prerequisite: a local reference chatbot service under
-`sample_bot/` and an HTTP bot adapter with SSRF protection, tested over a
-real localhost socket.
+Phase 7: make the remaining audio conditions (clipping, level, silence,
+dropouts, sample-rate change, jitter) reachable from a scenario and an
+operator override, each applied or reported as not enforced, with achieved
+values measured per artefact.
 
 ## Outstanding issues
 
