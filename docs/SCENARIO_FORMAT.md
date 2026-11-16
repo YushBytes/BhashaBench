@@ -96,6 +96,23 @@ expected_outcomes:
 | `noise_profile` | enum | no | `clean` | `clean`, `urban`, `rural`, `market`, `indoor_fan`, `worst_case`. |
 | `snr_db` | number | no | `30.0` | 0–40 dB. Higher is cleaner. |
 | `packet_loss_percent` | number | no | `0.0` | 0–30 percent. |
+| `gain_db` | number | no | — | −40–0 dB. Quieter speech. |
+| `clip_threshold` | number | no | — | 0.05–1, fraction of full scale. An overdriven microphone. |
+| `sample_rate_hz` | integer | no | — | One of 8000, 16000, 22050, 24000, 32000, 44100, 48000; converts to mono. |
+| `jitter_ms` | number | no | — | 0–300 ms of per-packet delay; under-runs past a 40 ms buffer become silence. |
+| `dropout_count` | integer | no | — | 0–20 silent dead spots. |
+| `dropout_ms` | number | no | — | 20–2000 ms per dead spot (200 when only `dropout_count` is set). |
+| `truncate_after_seconds` | number | no | — | 0.5–600 s. The utterance is cut here, as a dropped call. |
+| `leading_silence_ms` | number | no | — | 0–5000 ms before the caller speaks. |
+| `trailing_silence_ms` | number | no | — | 0–5000 ms after. |
+
+The nine fields after `packet_loss_percent` are channel conditions. Each is
+optional with **no default**: an undeclared condition is never applied and
+never reported, so a scenario written before they existed means what it
+always meant and serialises to the same bytes. A declared one is applied to
+every degraded caller turn, and its achieved value is measured on the
+artefact (`docs/PIPELINE.md`). Speech-rate change and overlapping speech are
+not simulated and cannot be declared.
 
 ### `constraints`
 

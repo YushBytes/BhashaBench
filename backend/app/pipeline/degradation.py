@@ -34,7 +34,7 @@ import io
 import math
 import random
 import wave
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from app.pipeline.errors import DegradationError
@@ -234,6 +234,44 @@ class DegradationConfig:
         if self.leading_silence_ms > 0 or self.trailing_silence_ms > 0:
             steps.append(Transformation.PAD_SILENCE)
         return tuple(steps)
+
+
+def with_conditions(
+    config: DegradationConfig, conditions: dict[str, float | int | None]
+) -> DegradationConfig:
+    """Apply declared channel conditions on top of a profile's configuration.
+
+    Keys are `AudioConditions` field names; a missing or `None` key leaves the
+    configuration alone. The mapping, in one place:
+
+    - `gain_db` -> `amplitude_scale = 10 ** (gain_db / 20)`
+    - `sample_rate_hz` -> `target_sample_rate_hz`, with `force_mono`, because
+      resampling is mono-only and a profile that resamples also forces mono
+    - `dropout_ms` without `dropout_count` changes nothing
+    - everything else maps to the field of the same name
+    """
+    updates: dict[str, object] = {}
+    gain = conditions.get("gain_db")
+    if gain is not None:
+        updates["amplitude_scale"] = 10 ** (float(gain) / 20)
+    if conditions.get("clip_threshold") is not None:
+        updates["clip_threshold"] = float(conditions["clip_threshold"])  # type: ignore[arg-type]
+    if conditions.get("sample_rate_hz") is not None:
+        updates["target_sample_rate_hz"] = int(conditions["sample_rate_hz"])  # type: ignore[arg-type]
+        updates["force_mono"] = True
+    for name in ("jitter_ms", "leading_silence_ms", "trailing_silence_ms", "dropout_ms"):
+        if conditions.get(name) is not None:
+            updates[name] = float(conditions[name])  # type: ignore[arg-type]
+    if conditions.get("dropout_count") is not None:
+        updates["dropout_count"] = int(conditions["dropout_count"])  # type: ignore[arg-type]
+    if conditions.get("truncate_after_seconds") is not None:
+        updates["truncate_after_seconds"] = float(conditions["truncate_after_seconds"])  # type: ignore[arg-type]
+    if (updates.get("jitter_ms") or updates.get("dropout_count")) and not (
+        config.force_mono or updates.get("force_mono")
+    ):
+        # Jitter and dropouts are mono-only, like resampling.
+        updates["force_mono"] = True
+    return replace(config, **updates) if updates else config
 
 
 def profile_config(profile: NoiseProfile, *, seed: int | None = None) -> DegradationConfig:
@@ -898,4 +936,5 @@ __all__ = [
     "Transformation",
     "degrade",
     "profile_config",
+    "with_conditions",
 ]

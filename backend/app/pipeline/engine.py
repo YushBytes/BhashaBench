@@ -61,6 +61,7 @@ from app.pipeline.degradation import (
     NoiseProfile,
     degrade,
     profile_config,
+    with_conditions,
 )
 from app.pipeline.errors import (
     BotAdapterError,
@@ -83,6 +84,7 @@ from app.pipeline.modes import (
 from app.repositories import caller_conversations as caller_repo
 from app.repositories import pipeline_runs as repo
 from app.schemas.scenario import ScenarioSpec
+from app.schemas.scenario_spec import CONDITION_FIELDS
 from app.services.errors import NotFoundError
 from app.speech.errors import SpeechError
 from app.transcription import audio as audio_tools
@@ -142,6 +144,10 @@ class RunConfig:
     bot_adapter: str = "scripted"
     max_turns: int | None = None
     """Ceiling on caller turns, on top of the scenario's and the settings'."""
+    audio_overrides: dict[str, Any] | None = None
+    """Operator values for `AudioConditions` fields. Each one present wins over
+    the scenario's declaration for that field, and the run records which
+    source every applied condition came from."""
     degrade_caller_audio: bool = True
     """Whether to degrade before sending. False keeps the original on the wire.
 
@@ -174,7 +180,11 @@ class RunConfig:
 
 
 def settings_not_enforced(
-    spec: ScenarioSpec, *, uses_audio: bool, caller_provider: str | None
+    spec: ScenarioSpec,
+    *,
+    uses_audio: bool,
+    caller_provider: str | None,
+    degrades: bool = True,
 ) -> list[dict[str, Any]]:
     """Scenario settings this run declares and nothing in it enforces.
 
@@ -243,7 +253,14 @@ def settings_not_enforced(
         add(
             "audio",
             document.get("audio"),
-            "An offline simulation moves no audio, so no acoustic condition is applied.",
+            "This run moves no audio, so no acoustic condition is applied.",
+        )
+    elif not degrades:
+        add(
+            "audio",
+            document.get("audio"),
+            "degrade_caller_audio is false for this run, so the caller's original "
+            "audio was sent and no declared condition was applied.",
         )
     return entries
 
@@ -579,6 +596,7 @@ class RunEngine:
                 spec,
                 uses_audio=config.uses_audio,
                 caller_provider=caller_meta.get("provider"),
+                degrades=config.degrade_caller_audio,
             ),
             "degrade_caller_audio": config.degrade_caller_audio and config.uses_audio,
             "degradation_seed": self._resolve_seed(config),
@@ -676,18 +694,33 @@ class RunEngine:
         if not config.uses_audio:
             return None
         if config.noise_profile is not NoiseProfile.CLEAN:
-            return {
+            requested: dict[str, Any] = {
                 "source": "operator",
                 "snr_db": profile_config(profile).snr_db,
                 "packet_loss_percent": 0.0,
             }
-        declared = getattr(spec.audio, "noise_profile", None)
-        key = str(getattr(declared, "value", declared) or "clean")
-        return {
-            "source": "scenario",
-            "snr_db": None if key == "clean" else float(spec.audio.snr_db),
-            "packet_loss_percent": float(spec.audio.packet_loss_percent),
-        }
+        else:
+            declared = getattr(spec.audio, "noise_profile", None)
+            key = str(getattr(declared, "value", declared) or "clean")
+            requested = {
+                "source": "scenario",
+                "snr_db": None if key == "clean" else float(spec.audio.snr_db),
+                "packet_loss_percent": float(spec.audio.packet_loss_percent),
+            }
+        # Channel conditions, field by field: an operator value wins over the
+        # scenario's, and each applied value records where it came from.
+        conditions: dict[str, Any] = {}
+        sources: dict[str, str] = {}
+        overrides = config.audio_overrides or {}
+        for name in CONDITION_FIELDS:
+            if overrides.get(name) is not None:
+                conditions[name], sources[name] = overrides[name], "operator"
+            elif getattr(spec.audio, name, None) is not None:
+                conditions[name], sources[name] = getattr(spec.audio, name), "scenario"
+        if conditions:
+            requested["conditions"] = conditions
+            requested["condition_sources"] = sources
+        return requested
 
     def _resolve_seed(self, config: RunConfig) -> int | None:
         """The seed for anything stochastic in this run."""
@@ -1033,6 +1066,7 @@ class RunEngine:
                         snr_db=requested.get("snr_db"),
                         packet_loss_percent=float(requested.get("packet_loss_percent") or 0.0),
                     )
+                    config = with_conditions(config, requested.get("conditions") or {})
                 result = degrade(original, config)
             except DegradationError as exc:
                 events.append(

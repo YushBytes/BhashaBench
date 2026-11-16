@@ -12,6 +12,7 @@ from app.caller.schemas import TerminationReason
 from app.caller.state import CallerState
 from app.pipeline.degradation import NoiseProfile
 from app.pipeline.modes import ExecutionMode, PipelineStatus, RunOutcome
+from app.schemas.scenario_spec import AudioConditions
 
 
 class CreateRunRequest(BaseModel):
@@ -59,6 +60,16 @@ class CreateRunRequest(BaseModel):
         description="Whether to degrade before sending. `false` sends the "
         "original - distinct from a `clean` profile, which is a deliberate "
         "choice of condition rather than a stage that did not run.",
+    )
+    audio_conditions: AudioConditions | None = Field(
+        default=None,
+        description=(
+            "Operator overrides for the scenario's channel conditions (gain, "
+            "clipping, sample rate, jitter, dropouts, truncation, silence). A "
+            "field set here wins over the scenario's value for that field; "
+            "`degradation_requested.condition_sources` records which applied. "
+            "Ignored, and reported as not enforced, for a run that moves no audio."
+        ),
     )
     bot_adapter: str | None = Field(
         default=None,

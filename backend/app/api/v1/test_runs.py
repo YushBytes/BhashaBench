@@ -538,6 +538,11 @@ def create_run(
                 bot_adapter=payload.bot_adapter or "scripted",
                 max_turns=payload.max_turns,
                 degrade_caller_audio=payload.degrade_caller_audio,
+                audio_overrides=(
+                    payload.audio_conditions.model_dump(exclude_none=True)
+                    if payload.audio_conditions is not None
+                    else None
+                ),
             ),
         )
         session.commit()

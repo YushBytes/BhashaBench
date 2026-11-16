@@ -158,7 +158,75 @@ class Goal(SpecModel):
     )
 
 
-class AudioConfig(SpecModel):
+SUPPORTED_SAMPLE_RATES_HZ: frozenset[int] = frozenset(
+    {8000, 16000, 22050, 24000, 32000, 44100, 48000}
+)
+"""Rates a scenario may ask the caller's audio to be converted to."""
+
+
+class AudioConditions(SpecModel):
+    """Channel conditions beyond noise and loss. Every field is optional.
+
+    `None` means "not declared", which is different from zero: an undeclared
+    condition is never applied and never reported, so a scenario written
+    before these existed means exactly what it meant before. Each declared
+    value is applied by the pipeline and its achieved value measured per
+    artefact (`docs/PIPELINE.md`). Shared by a scenario's `audio` section and
+    a run's operator overrides, so both obey the same bounds.
+    """
+
+    gain_db: float | None = Field(
+        default=None,
+        ge=-40.0,
+        le=0.0,
+        description="Level change in dB; negative is quieter. A soft-spoken caller.",
+    )
+    clip_threshold: float | None = Field(
+        default=None,
+        ge=0.05,
+        le=1.0,
+        description="Hard-clip at this fraction of full scale. An overdriven microphone.",
+    )
+    sample_rate_hz: int | None = Field(
+        default=None,
+        description=f"Convert to this rate (mono). One of {sorted(SUPPORTED_SAMPLE_RATES_HZ)}.",
+    )
+    jitter_ms: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=300.0,
+        description="Largest per-packet network delay; under-runs become silence.",
+    )
+    dropout_count: int | None = Field(
+        default=None, ge=0, le=20, description="Number of silent dead spots."
+    )
+    dropout_ms: float | None = Field(
+        default=None, ge=20.0, le=2000.0, description="Length of each dead spot. Default 200."
+    )
+    truncate_after_seconds: float | None = Field(
+        default=None, ge=0.5, le=600.0, description="Cut the utterance here: a dropped call."
+    )
+    leading_silence_ms: float | None = Field(
+        default=None, ge=0.0, le=5000.0, description="Silence before the caller speaks."
+    )
+    trailing_silence_ms: float | None = Field(
+        default=None, ge=0.0, le=5000.0, description="Silence after the caller speaks."
+    )
+
+    @field_validator("sample_rate_hz")
+    @classmethod
+    def _supported_rate(cls, value: int | None) -> int | None:
+        if value is not None and value not in SUPPORTED_SAMPLE_RATES_HZ:
+            raise ValueError(
+                f"sample_rate_hz must be one of {sorted(SUPPORTED_SAMPLE_RATES_HZ)}, got {value}"
+            )
+        return value
+
+
+CONDITION_FIELDS: tuple[str, ...] = tuple(AudioConditions.model_fields)
+
+
+class AudioConfig(AudioConditions):
     """Acoustic conditions to simulate."""
 
     noise_profile: NoiseProfile = Field(

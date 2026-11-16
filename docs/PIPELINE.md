@@ -300,6 +300,30 @@ A scenario's declared environment wins unless the request names a profile
 explicitly: the scenario's audio section is part of the test's definition, and
 silently running it clean would report a result for a condition never applied.
 
+### Channel conditions, from the scenario or the operator
+
+A scenario's `audio` section may declare nine channel conditions (gain,
+clipping, sample rate, jitter, dropouts, truncation, leading and trailing
+silence; see `docs/SCENARIO_FORMAT.md`). `POST /test-runs` accepts the same
+nine under `audio_conditions`, with the same bounds, as operator overrides.
+Resolution is **per field**: an operator value wins over the scenario's for
+that field only. The run records the result in
+`degradation_requested.conditions` and, beside it,
+`degradation_requested.condition_sources` — `scenario` or `operator` for each
+applied field — so a report can say who asked for every condition.
+
+`with_conditions` in `app/pipeline/degradation.py` is the one place the
+mapping onto the DSP lives (`gain_db` becomes `amplitude_scale = 10^(g/20)`;
+`sample_rate_hz`, jitter and dropouts force mono). Each degraded artefact then
+records what was achieved, measured from its bytes: `gain_db_achieved`,
+`clipped_samples`, the output rate, `jitter_gaps_inserted` and
+`jitter_silence_inserted_ms`, `dropout_silenced_ms_achieved`,
+`truncated_seconds`, and the padding applied.
+
+A declared condition is never silently dropped. In a run that moves no audio
+the whole `audio` section is listed in `settings_not_enforced`; with
+`degrade_caller_audio: false` it is listed there too, with that reason.
+
 ### Reproducibility
 
 A degraded artefact is only evidence if the same input, profile and seed
