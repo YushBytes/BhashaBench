@@ -71,7 +71,7 @@ reasoning behind its score.
                                                           ┌──────────▼────────┐
                                                           │ Bot under test    │
                                                           │ (customer / local │
-                                                          │  sample_bot)      │
+                                                          │  reference_bot)   │
                                                           └───────────────────┘
 ```
 
