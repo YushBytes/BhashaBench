@@ -12,7 +12,8 @@ Indian-language voice bots. It is being built in **15 controlled phases**; see
 **The original 15-phase plan is in force.** Phase 0 (baseline and defect
 remediation) is complete: approved by the owner, pushed, and green in CI.
 A closing audit of Phase 1 on 2026-11-15 found its criteria met with no new
-work, so the next unfinished phase is Phase 6.
+work. Current progress and the next task are in
+`docs/EXECUTION_CHECKPOINT.md`.
 
 | # | Phase | Status |
 |---|-------|--------|
@@ -50,22 +51,33 @@ telephony is Phase 8, the real-time engine Phase 9, evaluation Phase 11.
 
 ## Phase discipline
 
-**The frontend is frozen.** Do not modify anything under `frontend/` -
-files, components, layouts, styles, routes, configuration or dependencies -
-until Ayush provides the demo frontend and explicitly approves frontend
-work. Phase 13 is deferred until then. Read the frontend to understand how
-it calls the API, and keep backend changes compatible with it, but a
-backend change must not reach into `frontend/`: when the API contract
-moves, document the contract instead of editing `lib/api/types.ts`.
-There is no standing exception: a failure in the frontend CI job is
-reported to the owner, not fixed, without that approval.
+**Standing owner authorisation (2026-11-16).** The owner has authorised
+continuous execution of every remaining phase, in the order recorded in
+`docs/EXECUTION_CHECKPOINT.md`, without a review stop between phases. The
+checkpoint is the resume point: read it, verify Git against it, and continue
+from its "next task". Phases still close honestly: a phase is complete only
+when its exit criteria are met and verified, and a phase whose exit criteria
+need a live call (6) or a real telephone call (8) stays 🟡 however much code
+exists.
 
-Do not implement functionality belonging to a future phase, even if it seems
-convenient. A change that does will be asked to split. Telephony
-(Phase 8), real-time orchestration (Phase 9) and evaluation (Phase 11) are
-explicitly out of scope until their phase. In particular, do not add a Twilio client or any
-telephony bridge, and do not set `CallSession`'s `DIALING`, `NO_ANSWER` or
-`BUSY` statuses: an offline simulation must not claim a telephony state.
+What that authorisation does **not** cover, and never implies:
+
+- **No live provider call.** No Sarvam, Gnani or telephony request, in tests,
+  CI or by hand. `LIVE_CALLS_AUTHORISED` stays `False`.
+- **No spending.** No paid infrastructure, domain, subscription, credits or
+  telephone number. Deployment is prepared; anything that costs money is
+  written down with its price and left for the owner.
+- **No `.env` access.** Never read, print or edit it.
+
+**The frontend freeze is lifted** for building the approved BhashaBench
+interface (Phase 13); the owner's visual reference is a premium minimal
+black-and-white system with electric-blue accents. Every control must call a
+real endpoint, and the API-client rules below still hold.
+
+**Telephony (Phase 8) is built against a provider abstraction and a mocked
+provider only.** Do not set `CallSession`'s `DIALING`, `NO_ANSWER` or `BUSY`
+from an offline simulation: only a telephony provider's own event may set
+them, so a mocked call is labelled mocked in its evidence.
 
 **Do not add a Gnani Evon client, and do not invent its endpoints or
 credentials.** Phase 6's feasibility gate established that no Gnani
@@ -575,10 +587,9 @@ ruff check . && ruff format --check .   # from the repository root
   that mixes concerns rather than committing it whole.
 - Conventional Commits. Explain **why** in the body, not just what.
 - Never force-push or rewrite pushed history.
-- Never start a phase before the owner has approved the previous one.
-  The standing push approval covers finished units inside an approved
-  phase; it does not approve starting the next phase, a paid provider
-  call, or a migration.
+- The owner's standing authorisation (see Phase discipline) covers
+  starting the next phase and adding migrations a phase needs. It never
+  covers a paid provider call or any spending.
 - Roll back with `git revert`, never with `reset` on pushed history.
 - Review `git diff --cached` before committing: no secrets, no build
   artefacts.
