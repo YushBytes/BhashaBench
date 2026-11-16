@@ -59,12 +59,23 @@ reference bot on localhost.
 
 **Phase 7: complete** (synthetic noise; no recorded noise beds).
 
+| Phase 11 unit | Commit | CI |
+|------|--------|----|
+| Normalisation, WER/CER, metric registry | `git log --grep "normalisation, WER"` | ✅ 43925429634 |
+| Append-only evaluations and references (migration `1c40c48f72cf`) | see log | ✅ 43927628576 |
+| Evaluator with reasoned verdict | see log | ✅ 43928854156 |
+| Evaluation API | see log | ✅ 43930963986 |
+| Offline LLM judge; Phase 11 closed | see log | ✅ 43932115730 |
+
+**Phase 11: complete** (deterministic; judge offline-only, not validated
+against human labels).
+
 ## Next task
 
-Phase 11, deterministic evaluation first: a metric registry with documented
-definitions, WER and CER with Indic-aware normalisation, task completion from
-the caller's recorded outcome, latency from recorded per-turn timings, and
-evaluation results persisted per run with their evaluator version.
+Phase 12: SQL-side aggregation over runs and their latest evaluations
+(by language, scenario, adapter, mode), pass rate with a Wilson interval,
+run-to-run comparison with comparability warnings, regression detection
+between two groups of runs with an exact test, trends, and JSON/CSV export.
 
 ## Outstanding issues
 
