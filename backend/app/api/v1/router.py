@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    analytics,
     caller,
     evaluation,
     health,
@@ -48,3 +49,7 @@ api_router.include_router(test_runs.router)
 # disjoint, so the two routers never compete for a request.
 api_router.include_router(evaluation.router)
 api_router.include_router(evaluation.run_router)
+# Phase 12. Reporting reads runs and their latest evaluations; read-only.
+# `/test-runs/{id}/export` is disjoint from every pipeline and evaluation path.
+api_router.include_router(analytics.router)
+api_router.include_router(analytics.run_router)

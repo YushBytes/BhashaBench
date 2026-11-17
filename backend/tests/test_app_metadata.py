@@ -102,6 +102,13 @@ class TestOpenApiDocument:
             "/api/v1/test-runs/{run_id}/turns/{turn_index}/reference",
             "/api/v1/evaluation/metrics",
             "/api/v1/evaluation/error-rate",
+            # Phase 12: reporting and export.
+            "/api/v1/analytics/summary",
+            "/api/v1/analytics/compare",
+            "/api/v1/analytics/regressions",
+            "/api/v1/analytics/trend",
+            "/api/v1/analytics/runs.csv",
+            "/api/v1/test-runs/{run_id}/export",
         }
 
     def test_info_block_matches_settings(self, client: TestClient, settings: Settings) -> None:

@@ -687,6 +687,13 @@ class TestOpenApiSurface:
             "/api/v1/test-runs/{run_id}/turns/{turn_index}/reference",
             "/api/v1/evaluation/metrics",
             "/api/v1/evaluation/error-rate",
+            # Phase 12: reporting and export.
+            "/api/v1/analytics/summary",
+            "/api/v1/analytics/compare",
+            "/api/v1/analytics/regressions",
+            "/api/v1/analytics/trend",
+            "/api/v1/analytics/runs.csv",
+            "/api/v1/test-runs/{run_id}/export",
         }
 
     def test_scenario_spec_schema_is_published(self, client: TestClient) -> None:

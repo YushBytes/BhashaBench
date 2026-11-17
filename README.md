@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2664 tests across 53 modules
+│   ├── tests/                 2697 tests across 54 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -750,10 +750,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2664 tests** across fifty-three modules.
-**2623 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2697 tests** across fifty-four modules.
+**2656 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2664) exceeds the number that run (2623):
+why the collected total (2697) exceeds the number that run (2656):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -765,6 +765,7 @@ why the collected total (2664) exceeds the number that run (2623):
 | `test_evaluation_judge.py` | 17 | The LLM judge contract with the scripted client: strict parsing that rejects invented citations, unscored or duplicate criteria and uncited scores; bounded retries; non-retryable failures stop; the live gate recorded as no request sent; and the information boundary |
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
+| `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
 | `test_outbound.py` | 36 | The outbound-request guard: scheme and userinfo rules, the host allowlist and its wildcards, metadata/link-local/private/loopback address rules including IPv4-mapped IPv6 and decimal literals, and plain http only to loopback |
 | `test_reference_bot.py` | 28 | The reference text bot over a real localhost socket: the full session lifecycle, bearer authentication, the error envelope, idempotent retries, correlation echo, session capacity and expiry, and reply-script validation |
 | `test_scenario_spec.py` | 107 | YAML syntax, unsafe payloads, recursive/cyclic aliases, size and expansion limits, every validation rule, round-trip serialisation, file loading |
@@ -837,7 +838,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2623 passed, 41 skipped ================
+================ 2656 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -900,8 +901,8 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 
 ## API endpoints
 
-The API exposes **40 paths and 50 HTTP operations**, plus one WebSocket route
-that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 41
+The API exposes **46 paths and 56 HTTP operations**, plus one WebSocket route
+that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 47
 documented paths in total.
 
 Those figures come from the generated OpenAPI document, never from a hand
@@ -976,6 +977,12 @@ python scripts/api_surface.py --json   # same, machine-readable
 | `GET` | `/api/v1/test-runs/{id}/turns/{turn_index}/reference` | A bot turn's references, oldest first; the last is used |
 | `GET` | `/api/v1/evaluation/metrics` | Every metric's definition, formula, evidence, direction, missing-data rule and limitations. `composite_score` is always null |
 | `POST` | `/api/v1/evaluation/error-rate` | WER and CER of a hypothesis against a reference, with the full breakdown. Stores nothing |
+| `GET` | `/api/v1/analytics/summary` | Verdict counts and pass rate (pass / (pass + fail), Wilson 95% interval), pooled WER and per-run latency distribution, optionally `group_by` language, scenario, adapter, mode, outcome or suite. See [docs/REPORTING.md](docs/REPORTING.md) |
+| `GET` | `/api/v1/analytics/compare` | Two evaluated runs side by side with per-metric deltas and comparability warnings. 409 if either is unevaluated; makes no statistical claim |
+| `GET` | `/api/v1/analytics/regressions` | Pass-rate regression between `baseline_*` and `candidate_*` groups by Fisher's exact test; `insufficient_evidence` below five decided runs a side |
+| `GET` | `/api/v1/analytics/trend` | Verdict counts and pass rate per day or week |
+| `GET` | `/api/v1/analytics/runs.csv` | Runs with their latest verdict and key metrics as CSV, cells neutralised against formula injection |
+| `GET` | `/api/v1/test-runs/{id}/export` | One run's metadata, turns, references and latest evaluation as JSON (default) or per-turn CSV |
 | `WS` | `/api/v1/transcription/stream` | Streaming transcription. Send PCM frames, receive `started` / `final_transcript` / `completed` events. Not in the OpenAPI document - OpenAPI 3.1 cannot describe a WebSocket; see [docs/PROVIDERS.md](docs/PROVIDERS.md) |
 | `POST` | `/api/v1/suites/{suite_id}/scenarios/import` | Bulk import from a bundle. Takes `{"yaml": ..., "dry_run": ..., "atomic": ...}` |
 | `GET` | `/api/v1/suites/{suite_id}/scenarios/export` | The suite as a deterministic, re-importable bundle |

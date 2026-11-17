@@ -462,7 +462,7 @@ The generated OpenAPI document is the authority, and `scripts/api_surface.py`
 is the single place the documented figures come from:
 
 ```bash
-python scripts/api_surface.py          # 40 paths, 50 operations
+python scripts/api_surface.py          # 46 paths, 56 operations
 python scripts/api_surface.py --json   # machine-readable
 ```
 
@@ -472,7 +472,7 @@ non-operation fields (`$ref`, `summary`, `description`, `servers`,
 it cannot classify instead of silently miscounting. One WebSocket route
 (`/api/v1/transcription/stream`) is deliberately absent from the schema —
 OpenAPI 3.1 cannot describe a WebSocket — so it is counted separately in prose,
-never folded into the 36.
+never folded into the operation count.
 
 If the numbers change, run the script and update `README.md` and this file
 together. Do not hardcode a figure the script does not produce.
@@ -516,7 +516,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2664 collected; 2623 pass, 41 live ones skipped
+pytest                                  # 2697 collected; 2656 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```
@@ -613,6 +613,7 @@ ruff check . && ruff format --check .   # from the repository root
 | `docs/CALLER.md` | a caller state, rule, validation check, limit, endpoint, LLM control or evidence field changes |
 | `docs/PIPELINE.md` | an execution mode, degradation profile, bot adapter, artefact rule or run endpoint changes |
 | `docs/EVALUATION.md` | a metric, normalisation step, criterion or the evaluator version changes |
+| `docs/REPORTING.md` | an aggregate, statistical rule, export format or analytics endpoint changes |
 | `docs/SECURITY.md` | a security control, known gap or incident changes |
 | `docs/BOT_PROTOCOL.md` | the bot protocol changes |
 | `docs/FRONTEND.md` | a route, design token, primitive or API-client rule changes |
