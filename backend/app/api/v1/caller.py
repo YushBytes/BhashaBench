@@ -12,13 +12,12 @@ interface is asynchronous - they still hold a synchronous session, which is
 safe here because the orchestrator does its database work around the await
 rather than across it.
 
-**On authentication:** the project has none. Phases 1-5 ship an unauthenticated
-API, and §10 says to follow existing conventions "if already implemented" -
-inventing an auth scheme for one subsystem would leave the other two open while
-implying the whole API was protected. Phase 15 is where authentication lands,
-for all of it at once. What is enforced here instead is what can be: bounded
-request bodies, bounded uploads, bounded turn counts, and no secret in any
-response.
+**On access:** since Phase 14 every route here authenticates the caller and
+checks their role in the conversation's workspace (`app/api/access.py`); a
+conversation in another workspace is a 404. Starting one also requires the
+scenario to belong to the named suite, so a run cannot borrow another
+tenant's scenario. Alongside that: bounded request bodies, bounded uploads,
+bounded turn counts, and no secret in any response.
 """
 
 from __future__ import annotations
@@ -30,7 +29,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 
-from app.api.deps import DbSession, SettingsDep
+from app.api.access import Authenticated, ConversationAccess
+from app.api.deps import CurrentPrincipal, DbSession, SettingsDep
 from app.caller.artefacts import AudioArtefactStore
 from app.caller.orchestrator import ConversationOrchestrator, ConversationReport
 from app.caller.protocol import CallerCapabilities
@@ -48,6 +48,7 @@ from app.schemas.caller import (
     TurnResponse,
 )
 from app.schemas.common import ErrorResponse
+from app.services import access_service
 from app.services.errors import NotFoundError
 from app.services.transcription_service import TranscriptionService
 from app.speech.registry import build_provider as build_speech_provider
@@ -179,9 +180,11 @@ def _to_response(report: ConversationReport) -> ConversationResponse:
 def start_conversation(
     payload: StartConversationRequest,
     orchestrator: OrchestratorDep,
+    principal: CurrentPrincipal,
     session: DbSession,
 ) -> ConversationResponse:
     """Open a conversation."""
+    access_service.require_run_target(session, principal, payload.suite_id, payload.scenario_id)
     conversation = orchestrator.start(suite_id=payload.suite_id, scenario_id=payload.scenario_id)
     session.commit()
     return _to_response(orchestrator.report(conversation.id))
@@ -199,6 +202,7 @@ def start_conversation(
         "Returns 409 once the conversation has reached a terminal state."
     ),
     responses=_COMMON_ERRORS,
+    dependencies=[ConversationAccess.EDIT],
 )
 async def next_turn(
     conversation_id: uuid.UUID,
@@ -222,6 +226,7 @@ async def next_turn(
         "audio layer honestly."
     ),
     responses=_COMMON_ERRORS,
+    dependencies=[ConversationAccess.EDIT],
 )
 def submit_bot_text(
     conversation_id: uuid.UUID,
@@ -258,6 +263,7 @@ def submit_bot_text(
             "description": "A format the transcription provider does not accept.",
         },
     },
+    dependencies=[ConversationAccess.EDIT],
 )
 async def submit_bot_audio(
     conversation_id: uuid.UUID,
@@ -299,6 +305,7 @@ async def submit_bot_audio(
         "can show progress - **not** a score. Evaluation is Phase 11."
     ),
     responses=_COMMON_ERRORS,
+    dependencies=[ConversationAccess.VIEW],
 )
 def get_conversation(
     conversation_id: uuid.UUID, orchestrator: OrchestratorDep
@@ -317,6 +324,7 @@ def get_conversation(
         "the storage root; absolute filesystem paths are never returned."
     ),
     responses=_COMMON_ERRORS,
+    dependencies=[ConversationAccess.VIEW],
 )
 def list_conversation_turns(
     conversation_id: uuid.UUID, session: DbSession
@@ -362,6 +370,7 @@ def list_conversation_turns(
         "like a scenario the bot failed."
     ),
     responses=_COMMON_ERRORS,
+    dependencies=[ConversationAccess.EDIT],
 )
 def terminate_conversation(
     conversation_id: uuid.UUID,
@@ -384,6 +393,7 @@ def terminate_conversation(
         "not implemented, so no client can mistake the deterministic caller "
         "for a language model."
     ),
+    dependencies=[Authenticated],
 )
 def list_caller_providers(settings: SettingsDep) -> CallerProviderListResponse:
     """Describe all registered caller providers."""

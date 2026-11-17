@@ -44,6 +44,7 @@ from app.transcription.providers.fake import (
     timeout_failure,
     unavailable_failure,
 )
+from tests.conftest import authenticate_without_database
 
 # ---------------------------------------------------------------------------
 # Service layer
@@ -496,6 +497,7 @@ class TestProvidersEndpointWithPrismaConfigured:
             _env_file=None,
         )
         app = create_app(settings=settings)
+        authenticate_without_database(app)
         app.dependency_overrides[get_settings] = lambda: settings
         app.dependency_overrides[get_database_probe] = lambda: (
             lambda: (True, "Connected; SELECT 1 succeeded.")
@@ -812,6 +814,7 @@ class TestResourceCleanup:
         fake_provider.transcribe_batch = explode  # type: ignore[method-assign]
 
         app = create_app(settings=transcription_settings)
+        authenticate_without_database(app)
         app.dependency_overrides[get_settings] = lambda: transcription_settings
         app.dependency_overrides[get_database_probe] = lambda: lambda: (True, "ok")
         app.dependency_overrides[get_service_factory] = lambda: (

@@ -5,9 +5,10 @@ dependencies, call one method, shape the response. No `select()`, no business
 rules, and no `HTTPException` - the handlers in `app/main.py` remain the single
 place a domain failure becomes a status code.
 
-**There is no authentication**, because Phases 1-6 ship none and authentication
-lands in Phase 15. Do not expose this service publicly before then: these
-endpoints write files to disk and, with a provider configured, spend money.
+**Access (Phase 14).** Every route authenticates the caller and checks their
+role in the run's workspace before the handler runs (`app/api/access.py`):
+reads need `viewer`, anything that drives a run needs `member`. A run in
+another workspace answers 404, exactly like one that does not exist.
 
 **Artefacts are served, carefully.** An earlier revision of this module listed
 artefacts and refused to stream them, on the grounds that who may hear a
@@ -27,9 +28,9 @@ three constraints, and all three are load-bearing:
 - **The route is off where it would be reachable.** Staging and production
   refuse unless `PIPELINE_SERVE_ARTEFACTS` is set, because this payload is a
   recording rather than a status field.
-- **It claims no authorisation.** A run id is an identifier, not a credential,
-  and this route is exactly as open as every other one here. Real access
-  control arrives with authentication in Phase 15.
+- **It is authorised.** Since Phase 14 the caller needs the `viewer` role in
+  the run's workspace. The environment gate above stays as a second layer
+  until Phase 10 adds signed, expiring URLs and a retention period.
 """
 
 from __future__ import annotations
@@ -41,7 +42,9 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, Header, Path, Query, UploadFile, status
 from fastapi.responses import Response
 
-from app.api.deps import DbSession, PaginationParams, SettingsDep
+from app.api.access import Authenticated, RunAccess
+from app.api.deps import CurrentPrincipal, DbSession, PaginationParams, SettingsDep
+from app.auth.permissions import Permission
 from app.caller.artefacts import AudioArtefactStore
 from app.caller.errors import CallerError
 from app.caller.orchestrator import ConversationOrchestrator
@@ -96,6 +99,7 @@ from app.schemas.pipeline import (
     StageEventResponse,
 )
 from app.schemas.suite import Page
+from app.services import access_service
 from app.services.errors import NotFoundError
 from app.services.transcription_service import TranscriptionService
 from app.speech.registry import build_provider as build_speech_provider
@@ -459,6 +463,7 @@ def _run(report: RunReport) -> RunResponse:
 )
 def list_runs(
     session: DbSession,
+    principal: CurrentPrincipal,
     page: PaginationParams,
     suite_id: Annotated[uuid.UUID | None, Query(description="Only runs in this suite.")] = None,
     status_filter: Annotated[
@@ -476,7 +481,10 @@ def list_runs(
     ] = None,
 ) -> Page[RunSummary]:
     """A filtered page of runs, with the totals a pager needs."""
+    if suite_id is not None:
+        access_service.require_suite(session, principal, suite_id, Permission.VIEW)
     filters = {
+        "project_ids": access_service.visible_project_ids(session, principal),
         "suite_id": suite_id,
         "status": status_filter,
         "mode": None if mode is None else mode.value,
@@ -524,9 +532,11 @@ def list_runs(
 def create_run(
     payload: CreateRunRequest,
     factory: EngineFactoryDep,
+    principal: CurrentPrincipal,
     session: DbSession,
 ) -> RunResponse:
     """Open a run for one scenario."""
+    access_service.require_run_target(session, principal, payload.suite_id, payload.scenario_id)
     engine_iter = factory(payload.bot_adapter)
     engine = next(engine_iter)
     try:
@@ -572,6 +582,7 @@ def create_run(
         "untouched - not started, not failed - so retrying is safe."
     ),
     responses=_COMMON_ERRORS | _CAPACITY_ERROR,
+    dependencies=[RunAccess.EDIT],
 )
 async def start_run(run_id: uuid.UUID, engine: EngineDep, session: DbSession) -> RunResponse:
     """Execute a run to its terminal state, or to its next wait."""
@@ -604,6 +615,7 @@ async def start_run(run_id: uuid.UUID, engine: EngineDep, session: DbSession) ->
             "description": "The audio is in a container that cannot be decoded.",
         },
     },
+    dependencies=[RunAccess.EDIT],
 )
 async def submit_bot_audio(
     run_id: uuid.UUID,
@@ -646,6 +658,7 @@ async def submit_bot_audio(
         "`PIPELINE_FIXTURE_BOT_TEXT_PATH` instead and never pauses here."
     ),
     responses=_COMMON_ERRORS,
+    dependencies=[RunAccess.EDIT],
 )
 async def submit_bot_text(
     run_id: uuid.UUID,
@@ -674,6 +687,7 @@ async def submit_bot_text(
         "would punish the bot for the operator's decision."
     ),
     responses=_COMMON_ERRORS,
+    dependencies=[RunAccess.EDIT],
 )
 def cancel_run(run_id: uuid.UUID, engine: ReadingEngineDep, session: DbSession) -> RunResponse:
     """Stop a run from outside."""
@@ -687,6 +701,7 @@ def cancel_run(run_id: uuid.UUID, engine: ReadingEngineDep, session: DbSession) 
     response_model=RunResponse,
     summary="Read a run's state",
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "No such run."}},
+    dependencies=[RunAccess.VIEW],
 )
 def read_run(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunResponse:
     """A run's current state and, once finished, its outcome."""
@@ -698,6 +713,7 @@ def read_run(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunResponse:
     response_model=RunTurnsResponse,
     summary="Read a run's conversation",
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "No such run."}},
+    dependencies=[RunAccess.VIEW],
 )
 def read_turns(run_id: uuid.UUID, engine: ReadingEngineDep, session: DbSession) -> RunTurnsResponse:
     """Every utterance of the run's conversation, in order."""
@@ -739,6 +755,7 @@ def read_turns(run_id: uuid.UUID, engine: ReadingEngineDep, session: DbSession) 
         "be compared after the fact."
     ),
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "No such run."}},
+    dependencies=[RunAccess.VIEW],
 )
 def read_artefacts(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunArtefactsResponse:
     """Every audio artefact the run produced."""
@@ -762,13 +779,11 @@ def read_artefacts(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunArtefactsR
         "the storage root. There is no request field a path could travel in, "
         "and the store refuses anything resolving outside its root regardless."
         "\n\n"
-        "**Access model: there is none beyond knowing the run id.** This "
-        "application has no authentication, so this route is exactly as open "
-        "as every other one, and a run id is an identifier rather than a "
-        "credential. Because the payload here is a recording of a "
-        "conversation, the route is switched off in staging and production "
-        "unless `PIPELINE_SERVE_ARTEFACTS` is explicitly set; development "
-        "serves it, where the operator is the only listener.\n\n"
+        "**Access:** the `viewer` role in the run's workspace; a run elsewhere "
+        "is 404. Because the payload is a recording of a conversation, the "
+        "route is additionally switched off in staging and production unless "
+        "`PIPELINE_SERVE_ARTEFACTS` is set, until signed expiring URLs and a "
+        "retention period exist (Phase 10).\n\n"
         "Supports a single `Range` header so a player can seek."
     ),
     response_class=Response,
@@ -790,6 +805,7 @@ def read_artefacts(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunArtefactsR
             "description": "The requested range lies outside the file."
         },
     },
+    dependencies=[RunAccess.VIEW],
 )
 def read_artefact_audio(
     run_id: uuid.UUID,
@@ -811,8 +827,7 @@ def read_artefact_audio(
         settings.pipeline_serve_artefacts
     ):
         raise ArtefactAccessDisabledError(
-            "this environment does not stream stored conversation audio; "
-            "the application has no authentication, so the route is off "
+            "this environment does not stream stored conversation audio "
             "unless PIPELINE_SERVE_ARTEFACTS is set",
             run_id=str(run_id),
             stage="artefact_access",
@@ -854,6 +869,7 @@ def read_artefact_audio(
         "reviewed reference transcript, and evaluation is a later phase."
     ),
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "No such run."}},
+    dependencies=[RunAccess.VIEW],
 )
 def read_report(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunReportResponse:
     """The run's complete evidence."""
@@ -885,6 +901,7 @@ def read_report(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunReportRespons
         "`contacts_external_system: true`; it exchanges text, never audio, and "
         "is never the default, so the default configuration contacts nothing."
     ),
+    dependencies=[Authenticated],
 )
 def list_adapters(settings: SettingsDep) -> BotAdapterListResponse:
     """What bot adapters exist, and which modes a run may use."""

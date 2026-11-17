@@ -21,7 +21,9 @@ from fastapi.responses import Response
 from app.analytics import service
 from app.analytics.export import RUN_COLUMNS, TURN_COLUMNS, to_csv
 from app.analytics.service import NUMERIC_METRICS, dig
-from app.api.deps import DbSession
+from app.api.access import RunAccess
+from app.api.deps import CurrentPrincipal, DbSession
+from app.auth.permissions import Permission
 from app.evaluation.registry import EVALUATOR_VERSION
 from app.repositories import analytics as repo
 from app.repositories import caller_conversations as caller_repo
@@ -29,6 +31,7 @@ from app.repositories import evaluations as eval_repo
 from app.repositories import pipeline_runs as pipeline_repo
 from app.repositories.analytics import DIMENSIONS, RunFilter
 from app.schemas.common import ErrorResponse
+from app.services import access_service
 from app.services.errors import NotFoundError
 from app.utils.timing import utc_now
 
@@ -45,6 +48,8 @@ def _filter(
     """A dependency building a `RunFilter` from query parameters with `prefix`."""
 
     def build(
+        session: DbSession,
+        principal: CurrentPrincipal,
         suite_id: Annotated[uuid.UUID | None, Query(alias=f"{prefix}suite_id")] = None,
         mode: Annotated[str | None, Query(alias=f"{prefix}mode", max_length=40)] = None,
         language: Annotated[str | None, Query(alias=f"{prefix}language", max_length=35)] = None,
@@ -57,7 +62,10 @@ def _filter(
         created_after: Annotated[datetime | None, Query(alias=f"{prefix}created_after")] = None,
         created_before: Annotated[datetime | None, Query(alias=f"{prefix}created_before")] = None,
     ) -> RunFilter:
+        if suite_id is not None:
+            access_service.require_suite(session, principal, suite_id, Permission.VIEW)
         return RunFilter(
+            project_ids=access_service.visible_project_ids(session, principal),
             suite_id=suite_id,
             mode=mode,
             language=language,
@@ -103,7 +111,11 @@ def summary(
         status.HTTP_409_CONFLICT: {"model": ErrorResponse, "description": "Not evaluated."},
     },
 )
-def compare(session: DbSession, baseline: uuid.UUID, candidate: uuid.UUID) -> dict[str, Any]:
+def compare(
+    session: DbSession, principal: CurrentPrincipal, baseline: uuid.UUID, candidate: uuid.UUID
+) -> dict[str, Any]:
+    for run_id in (baseline, candidate):
+        access_service.require_run(session, principal, run_id, Permission.VIEW)
     return service.compare_runs(session, baseline, candidate)
 
 
@@ -184,6 +196,7 @@ def export_runs(
         200: {"content": {"application/json": {}, "text/csv": {}}},
         status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
     },
+    dependencies=[RunAccess.VIEW],
 )
 def export_run(
     run_id: uuid.UUID, session: DbSession, format: Literal["json", "csv"] = "json"

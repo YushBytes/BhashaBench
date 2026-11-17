@@ -135,10 +135,10 @@ Telephony and automated evaluation are **not** implemented - see
 
 
 _TRANSCRIPTION_STATUS: dict[type[TranscriptionError], int] = {
-    # A credential problem is ours, not the caller's: BhashaBench's own API is
-    # unauthenticated in this phase, so returning 401 would tell a client to
-    # fix credentials they do not have. 502 says "the upstream rejected us",
-    # which is what actually happened.
+    # A provider credential problem is ours, not the caller's: a 401 here would
+    # tell the client their own BhashaBench session is bad when it is the
+    # server's vendor key that was refused. 502 says "the upstream rejected
+    # us", which is what actually happened.
     AuthenticationError: status.HTTP_502_BAD_GATEWAY,
     ConfigurationError: status.HTTP_500_INTERNAL_SERVER_ERROR,
     # Caller-fixable input problems.

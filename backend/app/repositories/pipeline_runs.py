@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.call_session import CallSession
 from app.models.conversation_turn import ConversationTurn
+from app.models.suite import TestSuite
 from app.models.test_run import RunStatus, TestRun
 from app.utils.timing import utc_now
 
@@ -73,6 +74,7 @@ def _listing_statement(
     language: str | None = None,
     outcome: str | None = None,
     scenario_contains: str | None = None,
+    project_ids: Sequence[uuid.UUID] | None = None,
 ) -> Select[tuple[TestRun]]:
     """Build the filtered run-listing query.
 
@@ -90,6 +92,10 @@ def _listing_statement(
     pipeline = TestRun.run_metadata[PIPELINE_NAMESPACE]
     statement = select(TestRun).where(TestRun.run_metadata.has_key(PIPELINE_NAMESPACE))
 
+    if project_ids is not None:
+        statement = statement.where(
+            TestRun.suite_id.in_(select(TestSuite.id).where(TestSuite.project_id.in_(project_ids)))
+        )
     if suite_id is not None:
         statement = statement.where(TestRun.suite_id == suite_id)
     if status is not None:
@@ -118,6 +124,7 @@ def search_runs(
     language: str | None = None,
     outcome: str | None = None,
     scenario_contains: str | None = None,
+    project_ids: Sequence[uuid.UUID] | None = None,
     limit: int,
     offset: int,
 ) -> list[TestRun]:
@@ -135,6 +142,7 @@ def search_runs(
             language=language,
             outcome=outcome,
             scenario_contains=scenario_contains,
+            project_ids=project_ids,
         )
         .order_by(TestRun.created_at.desc(), TestRun.id.desc())
         .limit(limit)
@@ -152,6 +160,7 @@ def count_runs(
     language: str | None = None,
     outcome: str | None = None,
     scenario_contains: str | None = None,
+    project_ids: Sequence[uuid.UUID] | None = None,
 ) -> int:
     """Count the runs matching the same filters, for the page envelope."""
     inner = _listing_statement(
@@ -161,6 +170,7 @@ def count_runs(
         language=language,
         outcome=outcome,
         scenario_contains=scenario_contains,
+        project_ids=project_ids,
     ).subquery()
     return session.scalar(select(func.count()).select_from(inner)) or 0
 

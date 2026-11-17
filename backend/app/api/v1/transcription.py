@@ -29,7 +29,8 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, WebSocket
 from fastapi.encoders import jsonable_encoder
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
-from app.api.deps import SettingsDep
+from app.api.access import Authenticated
+from app.api.deps import SettingsDep, WebSocketPrincipal
 from app.core import languages
 from app.schemas.common import ErrorResponse
 from app.schemas.transcription import (
@@ -177,6 +178,7 @@ ServiceDep = Annotated[TranscriptionService, Depends(get_transcription_service)]
             "description": "The provider did not respond in time.",
         },
     },
+    dependencies=[Authenticated],
 )
 async def transcribe_file(
     service: ServiceDep,
@@ -244,6 +246,7 @@ async def transcribe_file(
         "`unsupported_catalogue_languages` lists languages a scenario may be "
         "authored in that this provider cannot transcribe."
     ),
+    dependencies=[Authenticated],
 )
 def list_providers(settings: SettingsDep) -> ProviderListResponse:
     """Describe all registered providers.
@@ -334,6 +337,7 @@ def _unavailable_provider(
 @router.websocket("/stream")
 async def transcribe_websocket(
     websocket: WebSocket,
+    principal: WebSocketPrincipal,
     factory: ServiceFactoryDep,
     language: Annotated[str, Query(description="BhashaBench language tag.")],
     sample_rate_hz: Annotated[
@@ -362,6 +366,7 @@ async def transcribe_websocket(
     happen before the handshake, leaving no socket to report it on; building
     it here turns a missing setting into a `failed` frame the client can read.
     """
+    del principal  # authenticated before the handshake is accepted; see deps
     await websocket.accept()
 
     try:

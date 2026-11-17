@@ -177,7 +177,7 @@ def project_roles(session: Session, user_id: uuid.UUID) -> dict[uuid.UUID, Role]
         .join(WorkspaceMembership, WorkspaceMembership.workspace_id == Project.workspace_id)
         .where(WorkspaceMembership.user_id == user_id)
     )
-    return dict(rows.tuples().all())
+    return {row[0]: row[1] for row in rows}
 
 
 __all__ = [

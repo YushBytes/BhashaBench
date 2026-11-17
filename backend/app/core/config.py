@@ -597,11 +597,10 @@ class Settings(BaseSettings):
         description=(
             "Whether a deployed environment may stream stored conversation "
             "audio over the API. Development always may; staging and "
-            "production refuse unless this is turned on. There is no "
-            "authentication in this application, so on a reachable host the "
-            "artefact route would let anyone hear a recorded conversation - "
-            "turning it on there is a deliberate act, and the point of the "
-            "flag is that nobody does it by accident."
+            "production refuse unless this is turned on. The route requires "
+            "the viewer role in the run's workspace; this flag is a second "
+            "layer until signed, expiring URLs and retention exist (Phase 10), "
+            "so serving recordings from a reachable host stays a deliberate act."
         ),
     )
 

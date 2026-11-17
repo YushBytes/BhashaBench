@@ -32,7 +32,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
@@ -109,6 +109,10 @@ class AuthSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Drives the idle timeout. Written at most once a minute per session."""
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Declared so the unit of work orders inserts parent-first within one
+    # flush; `raise_on_sql` so nothing is ever loaded implicitly through it.
+    user: Mapped[User] = relationship(lazy="raise_on_sql")
+
 
 class Workspace(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """The tenancy boundary. Nothing is shared between workspaces."""
@@ -140,6 +144,9 @@ class WorkspaceMembership(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     role: Mapped[Role] = mapped_column(_enum(Role, "workspace_role"), nullable=False)
 
+    workspace: Mapped[Workspace] = relationship(lazy="raise_on_sql")
+    user: Mapped[User] = relationship(lazy="raise_on_sql")
+
 
 class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """A group of suites inside a workspace."""
@@ -157,6 +164,8 @@ class Project(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+    workspace: Mapped[Workspace] = relationship(lazy="raise_on_sql")
 
 
 __all__ = ["AuthSession", "Project", "Role", "User", "Workspace", "WorkspaceMembership"]

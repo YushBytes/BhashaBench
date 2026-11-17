@@ -9,6 +9,7 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.models.scenario import Scenario
+from app.models.suite import TestSuite
 
 
 def get_by_id(session: Session, scenario_id: uuid.UUID) -> Scenario | None:
@@ -68,6 +69,7 @@ def _search_statement(
     language: str | None,
     name_contains: str | None,
     tags: Sequence[str] | None,
+    project_ids: Sequence[uuid.UUID] | None = None,
 ) -> Select[tuple[Scenario]]:
     """Build the shared WHERE clause for searching and counting.
 
@@ -75,6 +77,13 @@ def _search_statement(
     total, which is how a list endpoint ends up reporting "3 of 1".
     """
     statement = select(Scenario)
+
+    if project_ids is not None:
+        # Tenancy: only scenarios whose suite is in a visible project. `None`
+        # is the trusted CLI, which is unscoped.
+        statement = statement.join(TestSuite, TestSuite.id == Scenario.suite_id).where(
+            TestSuite.project_id.in_(project_ids)
+        )
 
     if suite_id is not None:
         statement = statement.where(Scenario.suite_id == suite_id)
@@ -106,6 +115,7 @@ def search(
     language: str | None = None,
     name_contains: str | None = None,
     tags: Sequence[str] | None = None,
+    project_ids: Sequence[uuid.UUID] | None = None,
     limit: int,
     offset: int,
 ) -> list[Scenario]:
@@ -116,7 +126,11 @@ def search(
     """
     statement = (
         _search_statement(
-            suite_id=suite_id, language=language, name_contains=name_contains, tags=tags
+            suite_id=suite_id,
+            language=language,
+            name_contains=name_contains,
+            tags=tags,
+            project_ids=project_ids,
         )
         .order_by(Scenario.name.asc(), Scenario.id.asc())
         .limit(limit)
@@ -132,10 +146,15 @@ def count_search(
     language: str | None = None,
     name_contains: str | None = None,
     tags: Sequence[str] | None = None,
+    project_ids: Sequence[uuid.UUID] | None = None,
 ) -> int:
     """Return the total number of scenarios matching the same filters."""
     inner = _search_statement(
-        suite_id=suite_id, language=language, name_contains=name_contains, tags=tags
+        suite_id=suite_id,
+        language=language,
+        name_contains=name_contains,
+        tags=tags,
+        project_ids=project_ids,
     ).subquery()
     return session.scalar(select(func.count()).select_from(inner)) or 0
 

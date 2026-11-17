@@ -1127,9 +1127,11 @@ class TestRunListing:
         suite_id, _ = scenario_ids
         _create(pipeline_client, scenario_ids)
         mine = pipeline_client.get(BASE, params={"suite_id": str(suite_id)}).json()
-        other = pipeline_client.get(BASE, params={"suite_id": str(uuid.uuid4())}).json()
         assert mine["total"] == 1
-        assert other["total"] == 0
+        # Phase 14: an unknown suite is a 404, as a suite in another workspace
+        # is - an empty page would distinguish "exists elsewhere" from "never".
+        other = pipeline_client.get(BASE, params={"suite_id": str(uuid.uuid4())})
+        assert other.status_code == 404
 
     def test_an_unknown_filter_value_is_rejected_not_ignored(
         self, pipeline_client: TestClient
@@ -1297,10 +1299,10 @@ class TestArtefactAudio:
 class TestArtefactAccessGuard:
     """Where the artefact route is switched off, and why.
 
-    The application has no authentication, so on a reachable host this route
-    would let anyone hear a recorded conversation. Development serves it
-    because the operator is the only listener; a deployed environment has to
-    say so deliberately.
+    The route is authorised (viewer role in the run's workspace); this gate
+    is the second layer for deployed environments until Phase 10's signed,
+    expiring URLs and retention exist. Development serves it; a deployed
+    environment has to say so deliberately.
     """
 
     @pytest.fixture

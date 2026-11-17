@@ -10,6 +10,7 @@ import uuid
 
 from fastapi import APIRouter, Path, status
 
+from app.api.access import Authenticated, RunAccess
 from app.api.deps import DbSession
 from app.evaluation.metrics import character_error_rate, word_error_rate
 from app.evaluation.registry import EVALUATOR_VERSION, METRICS
@@ -88,6 +89,7 @@ def list_metrics() -> MetricCatalogueResponse:
         "WER and CER under normalisation bb-norm-1, with the full breakdown. "
         "Stateless: nothing is stored."
     ),
+    dependencies=[Authenticated],
 )
 def error_rate(payload: ErrorRateRequest) -> ErrorRateResponse:
     wer = word_error_rate(payload.reference, payload.hypothesis, language=payload.language)
@@ -109,6 +111,7 @@ def error_rate(payload: ErrorRateRequest) -> ErrorRateResponse:
         "that ended by our fault, is `undetermined` - not failed."
     ),
     responses=_NOT_FOUND,
+    dependencies=[RunAccess.EDIT],
 )
 def evaluate_run(run_id: uuid.UUID, session: DbSession) -> EvaluationResponse:
     return _evaluation(service.evaluate(session, run_id))
@@ -119,6 +122,7 @@ def evaluate_run(run_id: uuid.UUID, session: DbSession) -> EvaluationResponse:
     response_model=EvaluationListResponse,
     summary="List a run's evaluations",
     responses=_NOT_FOUND,
+    dependencies=[RunAccess.VIEW],
 )
 def list_run_evaluations(run_id: uuid.UUID, session: DbSession) -> EvaluationListResponse:
     rows = service.list_evaluations(session, run_id)
@@ -139,6 +143,7 @@ def list_run_evaluations(run_id: uuid.UUID, session: DbSession) -> EvaluationLis
         **_NOT_FOUND,
         status.HTTP_409_CONFLICT: {"model": ErrorResponse, "description": "A caller turn."},
     },
+    dependencies=[RunAccess.EDIT],
 )
 def add_reference(
     run_id: uuid.UUID,
@@ -157,6 +162,7 @@ def add_reference(
     response_model=ReferenceHistoryResponse,
     summary="A bot turn's reference transcripts, oldest first",
     responses=_NOT_FOUND,
+    dependencies=[RunAccess.VIEW],
 )
 def reference_history(
     run_id: uuid.UUID, session: DbSession, turn_index: int = TurnIndex

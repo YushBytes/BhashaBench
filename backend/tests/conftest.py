@@ -22,24 +22,33 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import uuid
 from collections.abc import Iterator
+from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, event, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.api.deps import get_database_probe
+from app.api.deps import get_database_probe, get_principal, get_websocket_principal
 from app.api.v1.transcription import get_service_factory
+from app.auth import tokens
+from app.auth.passwords import hash_password
 from app.core.config import AppEnv, Settings, get_settings
 from app.db.session import get_db
 from app.main import create_app
+from app.models.identity import Project, Role, User, Workspace, WorkspaceMembership
+from app.models.suite import TestSuite as SuiteModel
+from app.repositories import identity as identity_repo
+from app.services.auth_service import Principal
 from app.services.transcription_service import TranscriptionService
 from app.transcription.providers.fake import FakeTranscriptionProvider
+from app.utils.timing import utc_now
 from tests.db_gate import database_required, database_unreachable
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -184,6 +193,7 @@ def transcription_client(
     app.dependency_overrides[get_service_factory] = lambda: (
         lambda: TranscriptionService(fake_provider, settings=transcription_settings)
     )
+    authenticate_without_database(app)
     with TestClient(app) as client:
         yield client
 
@@ -223,6 +233,23 @@ def test_app(settings: Settings) -> FastAPI:
     return app
 
 
+OFFLINE_PRINCIPAL = Principal(
+    user_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+    email="offline@example.test",
+    display_name="Offline test principal",
+    session_id=None,
+)
+"""The caller for clients with no database. Authentication needs a session
+row, so routes that hold no tenant data (transcription, speech) are driven as
+this principal through a dependency override. The override is a test seam:
+nothing outside tests can bypass `get_principal`."""
+
+
+def authenticate_without_database(app: FastAPI) -> None:
+    app.dependency_overrides[get_principal] = lambda: OFFLINE_PRINCIPAL
+    app.dependency_overrides[get_websocket_principal] = lambda: OFFLINE_PRINCIPAL
+
+
 @pytest.fixture
 def client(test_app: FastAPI) -> Iterator[TestClient]:
     """HTTP client that runs the app's lifespan, as a real server would.
@@ -230,6 +257,7 @@ def client(test_app: FastAPI) -> Iterator[TestClient]:
     No database is wired in, so this client serves the Phase 1 endpoints. API
     tests that need persistence use `api_client` instead.
     """
+    authenticate_without_database(test_app)
     with TestClient(test_app) as test_client:
         yield test_client
 
@@ -374,6 +402,7 @@ def db_session(db_engine: Engine) -> Iterator[Session]:
     transaction = connection.begin()
     factory = sessionmaker(bind=connection, autoflush=False, expire_on_commit=False)
     session = factory()
+    event.listen(session, "before_flush", _default_suite_project)
 
     try:
         yield session
@@ -382,6 +411,76 @@ def db_session(db_engine: Engine) -> Iterator[Session]:
         if transaction.is_active:
             transaction.rollback()
         connection.close()
+
+
+# ---------------------------------------------------------------------------
+# The default tenant (Phase 14)
+# ---------------------------------------------------------------------------
+
+TENANT_KEY = "bhashabench.test_tenant"
+
+
+def default_tenant(session: Session, *, flush: bool = True) -> tuple[User, Workspace, Project]:
+    """One owner, workspace and `Default` project per test, created on demand.
+
+    Tests that are not about tenancy create suites without naming a project
+    and call the API through `api_client`; both land here, so they behave as
+    one workspace's owner would. Tests that ARE about tenancy build their own
+    users and workspaces (`tests/auth_helpers.py`) and never rely on this.
+    """
+    cached = session.info.get(TENANT_KEY)
+    if cached is not None and all(
+        (state := inspect(obj)).persistent or state.pending for obj in cached
+    ):
+        return cached
+    # Absent, or rolled back with a failed flush (which detaches the rows):
+    # create it again rather than point a suite at a project that is gone.
+    tag = uuid.uuid4().hex[:10]
+    # Explicit ids, so the rows can join a flush already in progress (the
+    # `before_flush` hook below) without flushing re-entrantly.
+    user = User(
+        id=uuid.uuid4(),
+        email=f"owner-{tag}@example.test",
+        display_name="Default test owner",
+        password_hash=hash_password("default test owner password", log2_n=10),
+    )
+    workspace = Workspace(id=uuid.uuid4(), name="Default test workspace", slug=f"test-{tag}")
+    project = Project(id=uuid.uuid4(), workspace_id=workspace.id, name="Default")
+    membership = WorkspaceMembership(workspace_id=workspace.id, user_id=user.id, role=Role.OWNER)
+    session.add_all([user, workspace, project, membership])
+    if flush:
+        session.flush()
+    session.info[TENANT_KEY] = (user, workspace, project)
+    return user, workspace, project
+
+
+def _default_suite_project(session: Session, _context: object, _instances: object) -> None:
+    """A suite flushed without a project goes to the default tenant's."""
+    pending = [o for o in session.new if isinstance(o, SuiteModel) and o.project_id is None]
+    if pending:
+        _, _, project = default_tenant(session, flush=False)
+        for suite in pending:
+            suite.project_id = project.id
+
+
+@pytest.fixture
+def tenant(db_session: Session) -> tuple[User, Workspace, Project]:
+    return default_tenant(db_session)
+
+
+def bearer_for(session: Session, user: User) -> dict[str, str]:
+    """A live session for `user`, created directly rather than by logging in."""
+    token = tokens.new_token()
+    now = utc_now()
+    identity_repo.add_session(
+        session,
+        user_id=user.id,
+        token_hash=tokens.token_hash(token),
+        now=now,
+        expires_at=now + timedelta(hours=1),
+    )
+    session.flush()
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
@@ -396,9 +495,20 @@ def api_client(test_app: FastAPI, db_session: Session) -> Iterator[TestClient]:
         yield db_session
 
     test_app.dependency_overrides[get_db] = override_get_db
+    owner, _, _ = default_tenant(db_session)
     with TestClient(test_app) as test_client:
+        # Signed in as the default tenant's owner. A test about authentication
+        # uses `anonymous`, which drops this header, and presents its own.
+        test_client.headers.update(bearer_for(db_session, owner))
         yield test_client
     test_app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture
+def anonymous(api_client: TestClient) -> TestClient:
+    """`api_client` with no credential: what an unauthenticated caller sees."""
+    api_client.headers.pop("Authorization", None)
+    return api_client
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:

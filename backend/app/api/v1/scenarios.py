@@ -13,7 +13,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
-from app.api.deps import DbSession, PaginationParams
+from app.api.access import Authenticated, ScenarioAccess, SuiteAccess
+from app.api.deps import CurrentPrincipal, DbSession, PaginationParams
+from app.auth.permissions import Permission
 from app.models.scenario import Scenario
 from app.schemas.common import ErrorResponse
 from app.schemas.scenario import (
@@ -32,7 +34,7 @@ from app.schemas.scenario import (
     ValidationFieldError,
 )
 from app.schemas.suite import Page
-from app.services import scenario_service
+from app.services import access_service, scenario_service
 from app.services.scenario_loader import (
     ScenarioSyntaxError,
     ScenarioTooLargeError,
@@ -70,6 +72,7 @@ def _to_read(scenario: Scenario) -> ScenarioRead:
     status_code=status.HTTP_201_CREATED,
     summary="Create a scenario from YAML",
     responses=_YAML_ERROR_RESPONSES,
+    dependencies=[SuiteAccess.EDIT],
 )
 def create_scenario(
     suite_id: uuid.UUID, payload: ScenarioCreate, session: DbSession
@@ -85,6 +88,7 @@ def create_scenario(
     summary="List a suite's scenarios",
     description="Ordered by name. Summaries omit the full specification.",
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Not found"}},
+    dependencies=[SuiteAccess.VIEW],
 )
 def list_scenarios(
     suite_id: uuid.UUID, session: DbSession, pagination: PaginationParams
@@ -118,6 +122,7 @@ def list_scenarios(
             "description": "YAML exceeds the size limit",
         }
     },
+    dependencies=[Authenticated],
 )
 def validate_scenario(payload: ScenarioValidateRequest) -> ScenarioValidateResponse:
     """Validate YAML and report the verdict.
@@ -149,6 +154,7 @@ def validate_scenario(payload: ScenarioValidateRequest) -> ScenarioValidateRespo
     response_model=ScenarioRead,
     summary="Retrieve a scenario",
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Not found"}},
+    dependencies=[ScenarioAccess.VIEW],
 )
 def get_scenario(scenario_id: uuid.UUID, session: DbSession) -> ScenarioRead:
     """Return one scenario, including its full specification."""
@@ -165,6 +171,7 @@ def get_scenario(scenario_id: uuid.UUID, session: DbSession) -> ScenarioRead:
         "within the same suite."
     ),
     responses=_YAML_ERROR_RESPONSES,
+    dependencies=[ScenarioAccess.EDIT],
 )
 def update_scenario(
     scenario_id: uuid.UUID, payload: ScenarioUpdate, session: DbSession
@@ -186,6 +193,7 @@ def update_scenario(
             "description": "Referenced by call history",
         },
     },
+    dependencies=[ScenarioAccess.DELETE],
 )
 def delete_scenario(scenario_id: uuid.UUID, session: DbSession) -> None:
     """Delete a scenario."""
@@ -213,6 +221,7 @@ def delete_scenario(scenario_id: uuid.UUID, session: DbSession) -> None:
 )
 def search_scenarios(
     session: DbSession,
+    principal: CurrentPrincipal,
     pagination: PaginationParams,
     suite_id: Annotated[
         uuid.UUID | None, Query(description="Restrict to one suite. Must exist.")
@@ -232,8 +241,11 @@ def search_scenarios(
     ] = None,
 ) -> Page[ScenarioSummary]:
     """Return a filtered page of scenarios."""
+    if suite_id is not None:
+        access_service.require_suite(session, principal, suite_id, Permission.VIEW)
     scenarios, total = scenario_service.search_scenarios(
         session,
+        project_ids=access_service.visible_project_ids(session, principal),
         suite_id=suite_id,
         language=language,
         name_contains=name,
@@ -271,10 +283,17 @@ def search_scenarios(
             "description": "Name already used in the target suite",
         },
     },
+    dependencies=[ScenarioAccess.VIEW],
 )
 def copy_scenario(
-    scenario_id: uuid.UUID, payload: ScenarioCopyRequest, session: DbSession
+    scenario_id: uuid.UUID,
+    payload: ScenarioCopyRequest,
+    principal: CurrentPrincipal,
+    session: DbSession,
 ) -> ScenarioRead:
+    # Reading the source is checked by the route dependency; writing the
+    # copy needs edit rights on the destination, which may be another project.
+    access_service.require_suite(session, principal, payload.target_suite_id, Permission.EDIT)
     """Copy a scenario into the target suite."""
     copy = scenario_service.copy_scenario(
         session,
@@ -305,11 +324,16 @@ def copy_scenario(
             "description": "Name already used in the target suite",
         },
     },
+    dependencies=[ScenarioAccess.EDIT],
 )
 def move_scenario(
-    scenario_id: uuid.UUID, payload: ScenarioMoveRequest, session: DbSession
+    scenario_id: uuid.UUID,
+    payload: ScenarioMoveRequest,
+    principal: CurrentPrincipal,
+    session: DbSession,
 ) -> ScenarioRead:
-    """Move a scenario into the target suite."""
+    """Move a scenario into the target suite (edit rights on both ends)."""
+    access_service.require_suite(session, principal, payload.target_suite_id, Permission.EDIT)
     moved = scenario_service.move_scenario(
         session,
         scenario_id,
@@ -348,6 +372,7 @@ def move_scenario(
             "description": "Not a bundle, or unsafe/malformed YAML",
         },
     },
+    dependencies=[SuiteAccess.EDIT],
 )
 def import_bundle(
     suite_id: uuid.UUID, payload: BundleImportRequest, session: DbSession
@@ -393,6 +418,7 @@ def import_bundle(
     responses={
         status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Suite not found"}
     },
+    dependencies=[SuiteAccess.VIEW],
 )
 def export_suite(suite_id: uuid.UUID, session: DbSession) -> BundleExportResponse:
     """Export the suite's scenarios as a bundle."""

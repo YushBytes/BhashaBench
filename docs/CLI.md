@@ -193,6 +193,13 @@ looking for a flag that does not exist.
 
 ---
 
+### `suite create --project`
+
+Since Phase 14 a suite belongs to a project. `--project <id>` names it; it
+may be omitted only when exactly one project exists, and otherwise exits 2.
+The CLI is not scoped by workspace: it holds database credentials, which
+already grant everything.
+
 ## Scenarios
 
 ```bash

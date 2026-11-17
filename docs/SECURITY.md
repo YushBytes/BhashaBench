@@ -22,6 +22,33 @@ against the code.
 pytest printed it in a session transcript. Both causes are fixed (above); the
 key is treated as compromised and its rotation is the owner's manual task.
 
+## Authentication and authorisation (Phase 14)
+
+Design and rules: [AUTH.md](AUTH.md). In short:
+
+- Every route outside a short public list (liveness, the language and metric
+  catalogues, login, sign-up) requires a session; `test_access_control.py`
+  sweeps the OpenAPI document to prove it.
+- Passwords: stdlib scrypt at N = 2^17 (refused below that when deployed),
+  length-based policy, `SecretStr` in request models, never echoed by the
+  validation handler.
+- Sessions: 256-bit opaque tokens, stored as SHA-256 only; absolute and idle
+  expiry; server-side revocation on logout and on password change.
+- Browser sessions use an `HttpOnly`, `SameSite=Strict`, `Secure`-when-deployed
+  cookie whose token never appears in a response body. Cookie-authenticated
+  writes and WebSocket handshakes from a foreign `Origin` are refused.
+- Login failures are indistinguishable in body and in timing; ten in a row
+  lock the account for fifteen minutes.
+- Tenancy: a resource in another workspace is a 404 identical to a missing
+  one; the role matrix decides the rest. A run cannot use another suite's
+  scenario.
+
+**Known gaps.** No per-client rate limiting yet (Phase 14 part 2), so the
+lockout is the only brake on guessing and can be used to lock a known
+account. No multi-factor authentication. No email verification or password
+reset by email: the application sends no email, and an account is created
+by an operator (`bhashabench users create`) or by sign-up when enabled.
+
 ## Outbound requests (SSRF)
 
 `app/core/outbound.py` guards every request whose destination comes from

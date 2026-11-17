@@ -22,6 +22,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
+from app.api.access import Authenticated
 from app.api.deps import SettingsDep
 from app.core import languages
 from app.schemas.common import ErrorResponse
@@ -133,6 +134,7 @@ SpeechServiceDep = Annotated[SpeechService, Depends(get_speech_service)]
             "description": "The provider did not respond in time.",
         },
     },
+    dependencies=[Authenticated],
 )
 async def generate_speech(
     payload: SpeechGenerateRequest,
@@ -201,6 +203,7 @@ async def generate_speech(
         "are documented, so an unlisted name is forwarded rather than refused. "
         "`notes` carries verified vendor documentation gaps."
     ),
+    dependencies=[Authenticated],
 )
 def list_speech_providers(settings: SettingsDep) -> SpeechProviderListResponse:
     """Describe all registered synthesis providers.

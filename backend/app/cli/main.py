@@ -316,15 +316,47 @@ def suite_show(
     typer.echo(f"  created:     {row['created_at']}")
 
 
+def _project_for_new_suite(session: Session, project: str | None) -> uuid.UUID:
+    """`--project`, or the only project there is. Never a guess between several."""
+    from sqlalchemy import select
+
+    from app.models.identity import Project
+
+    if project is not None:
+        project_id = _parse_uuid(project, "project")
+        if session.get(Project, project_id) is None:
+            raise NotFoundError("Project", project_id)
+        return project_id
+    ids = list(session.scalars(select(Project.id).limit(2)))
+    if len(ids) == 1:
+        return ids[0]
+    fail(
+        "--project is required: "
+        + ("there is more than one project" if ids else "no project exists yet; "
+           "create a user first with: bhashabench users create"),
+        ExitCode.INVALID_INPUT,
+    )  # fmt: skip
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 @suite_app.command("create")
 def suite_create(
-    name: Annotated[str, typer.Argument(help="Suite name. Must be unique.")],
+    name: Annotated[str, typer.Argument(help="Suite name. Unique within its project.")],
     description: Annotated[str | None, typer.Option(help="Optional description.")] = None,
+    project: Annotated[
+        str | None,
+        typer.Option(help="Project id. May be omitted only when exactly one project exists."),
+    ] = None,
     as_json: JsonFlag = False,
 ) -> None:
-    """Create a suite."""
+    """Create a suite in a project."""
     with _session() as session:
-        suite = suite_service.create_suite(session, name=name, description=description)
+        suite = suite_service.create_suite(
+            session,
+            name=name,
+            description=description,
+            project_id=_project_for_new_suite(session, project),
+        )
         row = {"id": str(suite.id), "name": suite.name, "description": suite.description}
 
     if as_json:

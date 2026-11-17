@@ -111,8 +111,9 @@ No call is placed, so a conversation opens as `IN_PROGRESS`, never `PENDING`;
 must not claim.
 
 Phase 4 still persists no transcript of its own: deciding which turn a loose
-transcript belongs to is orchestration (Phase 9). The transcription and speech
-endpoints therefore work with PostgreSQL down; the caller endpoints do not.
+transcript belongs to is orchestration (Phase 9). Since Phase 14 the
+transcription and speech endpoints read the caller's session, so they need
+PostgreSQL like everything else that is not public.
 
 ## Architecture rules
 
@@ -434,6 +435,42 @@ is what keeps every route a static shell with streamed content. `min-w-0` on
 grid and flex children is load-bearing: without it a panel holding a
 `min-w-max` table inflates its own track and the page scrolls sideways.
 
+### Authentication and tenancy (Phase 14)
+
+Full design in `docs/AUTH.md`. Six rules that are easy to break:
+
+**Every private route declares its check; the sweep enforces it.**
+`tests/test_access_control.py` walks the OpenAPI document: every operation
+outside `PUBLIC` must answer 401 with no credential, and every route with a
+path id must answer 404 to an outsider and 403 to a viewer on a write. A new
+route that forgets `dependencies=[RunAccess.VIEW]` (or the like, from
+`app/api/access.py`) fails that test. Do not add to `PUBLIC` casually.
+
+**A foreign resource is a 404, never a 403.** `access_service` raises the
+same `NotFoundError`, with the same resource name, for "does not exist" and
+"exists in a workspace you are not in". A 403 there confirms the id is real.
+403 is for a member whose role is too low.
+
+**A run's scenario must be its suite's own.** `require_run_target` checks
+both, because a member could otherwise open a run in their own suite against
+another tenant's scenario id and read it back through the report.
+
+**Listings are scoped by `visible_project_ids`; `None` means unscoped and
+only the CLI passes it.** Every repository listing takes `project_ids`. The
+CLI holds database credentials and is a different trust boundary.
+
+**Credentials never echo.** Passwords are `SecretStr`; the 422 handler drops
+the input of any `password`/`token`/`secret` field; only a token's SHA-256 is
+stored. Every login failure is one 401 with one message, and an unknown
+email still pays for a full scrypt verification.
+
+**Tests run as the default tenant unless they say otherwise.**
+`api_client` is signed in as the owner of a per-test workspace, and a suite
+flushed without a project goes to its `Default` project (a `before_flush`
+hook in `conftest.py`). Tests about authentication use `anonymous` and
+`tests/auth_helpers.py`. The no-database `client` fixtures override
+`get_principal` - a test seam only; nothing in the app bypasses it.
+
 ### Front ends share services, not messages
 
 The API and the CLI both call `services/`. A domain error that suggests a
@@ -462,7 +499,7 @@ The generated OpenAPI document is the authority, and `scripts/api_surface.py`
 is the single place the documented figures come from:
 
 ```bash
-python scripts/api_surface.py          # 57 paths, 72 operations
+python scripts/api_surface.py          # 57 paths, 73 operations
 python scripts/api_surface.py --json   # machine-readable
 ```
 
@@ -516,7 +553,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2805 collected; 2764 pass, 41 live ones skipped
+pytest                                  # 2831 collected; 2790 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

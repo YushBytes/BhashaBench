@@ -85,11 +85,10 @@ class ArtefactAccessDisabledError(PipelineError):
 
     Not a missing artefact and not a bad request: the recording exists and the
     reference resolves, but this process is running somewhere the route is
-    switched off. The application has no authentication, so on a reachable
-    host an open artefact route would let anyone hear a recorded conversation.
-    Development serves audio because the operator is the only listener;
-    staging and production refuse until `PIPELINE_SERVE_ARTEFACTS` says
-    otherwise.
+    switched off. The route is authorised (viewer role in the run's
+    workspace), and this gate is a second layer for deployed environments
+    until Phase 10 adds signed expiring URLs and retention. Staging and
+    production refuse until `PIPELINE_SERVE_ARTEFACTS` says otherwise.
     """
 
 

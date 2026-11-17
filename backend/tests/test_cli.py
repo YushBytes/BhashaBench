@@ -25,6 +25,7 @@ from app.cli.main import app
 from app.cli.output import ExitCode
 from app.core import languages
 from app.services.bundle import BUNDLE_FORMAT
+from tests.conftest import default_tenant
 
 runner = CliRunner()
 
@@ -109,6 +110,10 @@ def cli_db(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> Iterator[Ses
         yield db_session
 
     monkeypatch.setattr("app.cli.main.session_scope", scoped)
+    # One project exists, so `suite create` can infer its target as it does
+    # on a deployment with a single project. Multi-project inference is
+    # tested in test_access_control.py.
+    default_tenant(db_session)
     yield db_session
 
 

@@ -102,6 +102,32 @@ Rules enforced by the service, not trusted to a client:
 - Creating a workspace makes the caller its owner and gives it a `Default`
   project.
 
+## Enforcement on every route
+
+| Routes | Check |
+|--------|-------|
+| `/`, `/health`, `/api/v1/health`, `/api/v1/languages`, `/api/v1/evaluation/metrics`, `/auth/login`, `/auth/signup` | Public |
+| Transcription, speech, scenario validation, error-rate, provider and adapter lists | Authenticated (they hold no tenant data, but spend provider credit or describe configuration) |
+| `/suites/{suite_id}...`, `/scenarios/{scenario_id}...`, `/test-runs/{run_id}...`, `/caller/conversations/{conversation_id}...` | A route dependency from `app/api/access.py` resolves the resource to its workspace before the handler runs: `view` to read, `edit` to change or drive, `delete` to delete |
+| Lists and aggregates (`GET /suites`, `/scenarios`, `/test-runs`, `/analytics/*`) | Scoped to the caller's visible projects in SQL; a `suite_id` filter naming a suite the caller cannot see is 404, not an empty page |
+| `POST /test-runs`, `POST /caller/conversations` | `edit` on the suite, `view` on the scenario, and the scenario must belong to that suite (422 otherwise) |
+| Copy and move a scenario | `view` (copy) or `edit` (move) on the source, and `edit` on the destination suite |
+| The transcription WebSocket | Authenticated at the handshake (cookie with an `Origin` check, or a bearer header); refused with close code 1008 |
+
+**Suites belong to projects.** `POST /suites` takes `project_id`; it may be
+omitted only when the caller can edit exactly one project (422 otherwise),
+because a suite created in the wrong workspace is visible to the wrong
+people. Suite names are unique per project. A project holding suites cannot
+be deleted (409).
+
+**Pre-tenancy data.** Migration `b588560f044d` moves every suite that existed
+before tenancy into a `Default` project of a workspace with slug `legacy`,
+which has no members. Grant access with
+`bhashabench users create --email you@example.com --workspace legacy`.
+
+**The CLI is unscoped.** It holds database credentials, which already grant
+everything; it is a different trust boundary from the API, not a client of it.
+
 ## Endpoints
 
 | Method | Path | |
@@ -122,3 +148,4 @@ Rules enforced by the service, not trusted to a client:
 | `POST` | `/api/v1/workspaces/{id}/projects` | 201 (admin or owner); 409 on a duplicate name |
 | `GET` | `/api/v1/projects/{id}` | One project; 404 to a non-member |
 | `PATCH` | `/api/v1/projects/{id}` | Rename or describe (admin or owner) |
+| `DELETE` | `/api/v1/projects/{id}` | Delete an empty project (admin or owner); 409 while it holds suites |

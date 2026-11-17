@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.orm import Session
 
 from app.models.evaluation import RunEvaluation
+from app.models.suite import TestSuite
 from app.models.test_run import TestRun
 from app.repositories.pipeline_runs import PIPELINE_NAMESPACE
 
@@ -39,10 +40,15 @@ class RunFilter:
     created_after: datetime | None = None
     created_before: datetime | None = None
     run_ids: tuple[uuid.UUID, ...] | None = None
+    project_ids: tuple[uuid.UUID, ...] | None = None
+    """Tenancy scope, set by the API from the caller's memberships; `None` is
+    unscoped and only the trusted CLI passes it. Never echoed in `as_dict`."""
 
     def as_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
         for name in self.__slots__:  # type: ignore[attr-defined]
+            if name == "project_ids":
+                continue
             value = getattr(self, name)
             if value is not None:
                 out[name] = (
@@ -94,6 +100,12 @@ def _filtered(statement: Select[Any], run_filter: RunFilter) -> Select[Any]:
         statement = statement.where(TestRun.created_at < run_filter.created_before)
     if run_filter.run_ids is not None:
         statement = statement.where(TestRun.id.in_(run_filter.run_ids))
+    if run_filter.project_ids is not None:
+        statement = statement.where(
+            TestRun.suite_id.in_(
+                select(TestSuite.id).where(TestSuite.project_id.in_(run_filter.project_ids))
+            )
+        )
     return statement
 
 

@@ -16,7 +16,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Query, status
 
-from app.api.deps import DbSession, PaginationParams
+from app.api.access import SuiteAccess
+from app.api.deps import CurrentPrincipal, DbSession, PaginationParams
+from app.auth.permissions import Permission
 from app.models.suite import TestSuite
 from app.schemas.common import ErrorResponse
 from app.schemas.suite import (
@@ -27,7 +29,7 @@ from app.schemas.suite import (
     SuiteSummary,
     SuiteUpdate,
 )
-from app.services import suite_service
+from app.services import access_service, suite_service
 
 router = APIRouter(prefix="/suites", tags=["suites"])
 
@@ -41,6 +43,7 @@ def _to_read(suite: TestSuite, scenario_count: int) -> SuiteRead:
     """
     return SuiteRead(
         id=suite.id,
+        project_id=suite.project_id,
         name=suite.name,
         description=suite.description,
         created_at=suite.created_at,
@@ -56,9 +59,14 @@ def _to_read(suite: TestSuite, scenario_count: int) -> SuiteRead:
     summary="Create a test suite",
     responses={status.HTTP_409_CONFLICT: {"model": ErrorResponse, "description": "Name taken"}},
 )
-def create_suite(payload: SuiteCreate, session: DbSession) -> SuiteRead:
-    """Create a suite. Suite names are unique."""
-    suite = suite_service.create_suite(session, name=payload.name, description=payload.description)
+def create_suite(
+    payload: SuiteCreate, principal: CurrentPrincipal, session: DbSession
+) -> SuiteRead:
+    """Create a suite in a project the caller may edit. Names are unique per project."""
+    project_id = access_service.editable_project(session, principal, payload.project_id)
+    suite = suite_service.create_suite(
+        session, name=payload.name, description=payload.description, project_id=project_id
+    )
     # A newly created suite has no scenarios yet.
     return _to_read(suite, scenario_count=0)
 
@@ -67,12 +75,25 @@ def create_suite(payload: SuiteCreate, session: DbSession) -> SuiteRead:
     "",
     response_model=Page[SuiteSummary],
     summary="List test suites",
-    description="Newest first. Use `limit` and `offset` to page.",
+    description=(
+        "Suites in every project the caller can see, newest first; `project_id` narrows "
+        "to one. Use `limit` and `offset` to page."
+    ),
 )
-def list_suites(session: DbSession, pagination: PaginationParams) -> Page[SuiteSummary]:
-    """Return a page of suites."""
+def list_suites(
+    session: DbSession,
+    principal: CurrentPrincipal,
+    pagination: PaginationParams,
+    project_id: uuid.UUID | None = None,
+) -> Page[SuiteSummary]:
+    """Return a page of the caller's suites."""
+    if project_id is not None:
+        access_service.require_project(session, principal, project_id, Permission.VIEW)
+        visible: tuple[uuid.UUID, ...] = (project_id,)
+    else:
+        visible = access_service.visible_project_ids(session, principal)
     suites, total = suite_service.list_suites(
-        session, limit=pagination.limit, offset=pagination.offset
+        session, limit=pagination.limit, offset=pagination.offset, project_ids=visible
     )
     return Page[SuiteSummary](
         items=[SuiteSummary.model_validate(suite) for suite in suites],
@@ -87,6 +108,7 @@ def list_suites(session: DbSession, pagination: PaginationParams) -> Page[SuiteS
     response_model=SuiteRead,
     summary="Retrieve a test suite",
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Not found"}},
+    dependencies=[SuiteAccess.VIEW],
 )
 def get_suite(suite_id: uuid.UUID, session: DbSession) -> SuiteRead:
     """Return one suite with its scenario count."""
@@ -108,6 +130,7 @@ def get_suite(suite_id: uuid.UUID, session: DbSession) -> SuiteRead:
         status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Not found"},
         status.HTTP_409_CONFLICT: {"model": ErrorResponse, "description": "Name taken"},
     },
+    dependencies=[SuiteAccess.EDIT],
 )
 def update_suite(suite_id: uuid.UUID, payload: SuiteUpdate, session: DbSession) -> SuiteRead:
     """Update a suite's name and/or description."""
@@ -144,6 +167,7 @@ def update_suite(suite_id: uuid.UUID, payload: SuiteUpdate, session: DbSession) 
             "description": "Suite is not empty, or a scenario is referenced by call history",
         },
     },
+    dependencies=[SuiteAccess.DELETE],
 )
 def delete_suite(
     suite_id: uuid.UUID,

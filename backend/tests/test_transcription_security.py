@@ -32,6 +32,7 @@ from app.transcription.redaction import (
     redact_headers,
 )
 from app.transcription.registry import describe_providers
+from tests.conftest import authenticate_without_database
 
 SECRET = "gnani_live_key_9f3a21c7b85e4d06af12"
 """A fabricated credential-shaped string. Every test below asserts it does not
@@ -207,6 +208,7 @@ class TestCredentialContainment:
             _env_file=None,
         )
         app = create_app(settings=settings)
+        authenticate_without_database(app)
         app.dependency_overrides[get_settings] = lambda: settings
         app.dependency_overrides[get_database_probe] = lambda: lambda: (True, "ok")
         with TestClient(app) as client:
@@ -226,6 +228,7 @@ class TestCredentialContainment:
             _env_file=None,
         )
         app = create_app(settings=settings)
+        authenticate_without_database(app)
         app.dependency_overrides[get_settings] = lambda: settings
         app.dependency_overrides[get_database_probe] = lambda: lambda: (True, "ok")
         with TestClient(app) as client:
@@ -287,6 +290,7 @@ class TestInternalsAreNotLeaked:
         fake_provider.transcribe_batch = explode  # type: ignore[method-assign]
 
         app = create_app(settings=transcription_settings)
+        authenticate_without_database(app)
         app.dependency_overrides[get_settings] = lambda: transcription_settings
         app.dependency_overrides[get_database_probe] = lambda: lambda: (True, "ok")
         app.dependency_overrides[get_service_factory] = lambda: (

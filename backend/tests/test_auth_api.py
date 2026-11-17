@@ -21,12 +21,17 @@ from app.api.deps import SESSION_COOKIE
 from app.auth import tokens
 from app.cli import app as cli_app
 from app.core.config import Settings
-from app.models import AuthSession, Project, Role, User, WorkspaceMembership
+from app.models import AuthSession, Project, Role, User, Workspace, WorkspaceMembership
 from app.services import auth_service
 from app.utils.timing import utc_now
 
 AUTH = "/api/v1/auth"
 PASSWORD = "a long enough passphrase"
+
+
+@pytest.fixture(autouse=True)
+def _no_default_credential(anonymous: TestClient) -> None:
+    """These tests present their own credentials, or deliberately none."""
 
 
 @pytest.fixture
@@ -434,7 +439,10 @@ class TestUsersCreateCli:
         )
         assert result.exit_code == 0, result.output
         assert "viewer of acme" in result.output
-        roles = cli_db.scalars(select(WorkspaceMembership.role)).all()
+        acme = cli_db.scalar(select(Workspace.id).where(Workspace.slug == "acme"))
+        roles = cli_db.scalars(
+            select(WorkspaceMembership.role).where(WorkspaceMembership.workspace_id == acme)
+        ).all()
         assert sorted(roles) == sorted([Role.OWNER, Role.VIEWER])
 
     def test_a_weak_password_exits_2_and_a_duplicate_exits_1(self, cli_db: Session) -> None:

@@ -33,6 +33,7 @@ from app.speech.providers.fake import (
     unavailable_failure,
 )
 from app.speech.service import SpeechService
+from tests.conftest import authenticate_without_database
 
 TAMIL_LINE = "வணக்கம், உங்கள் பயிர் காப்பீட்டு விண்ணப்பத்தின் நிலையைச் சரிபார்க்கிறேன்."
 
@@ -63,6 +64,7 @@ def speech_settings() -> Settings:
 
 def _app(settings: Settings, provider: FakeSynthesisProvider) -> FastAPI:
     app = create_app(settings=settings)
+    authenticate_without_database(app)
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_database_probe] = lambda: lambda: (True, "ok")
     app.dependency_overrides[get_speech_service_factory] = lambda: (

@@ -16,6 +16,11 @@ from tests.auth_helpers import Team, make_team, make_user
 API = "/api/v1"
 
 
+@pytest.fixture(autouse=True)
+def _no_default_credential(anonymous: TestClient) -> None:
+    """These tests present their own credentials, or deliberately none."""
+
+
 @pytest.fixture
 def team(db_session: Session, settings: Settings, api_client: TestClient) -> Team:
     return make_team(db_session, settings, api_client)

@@ -108,10 +108,13 @@ call per scenario, and each call records an ordered sequence of turns.
 
 ### `test_suites`
 
+Since Phase 14 every suite belongs to a project (`project_id`, `ON DELETE
+RESTRICT`), and names are unique within a project rather than globally. It is
+the tenancy anchor: scenarios, runs, conversations, turns and evaluations all
+reach their workspace through it.
+
 A named collection of scenarios that are run together.
 
-`name` is unique globally. There is no tenant or owner concept yet; when one
-arrives this becomes a composite constraint rather than a new column.
 
 ### `scenarios`
 
@@ -355,6 +358,7 @@ target whatever the application itself would connect to.
 | `1c40c48f72cf` | Add `run_evaluations` and `transcript_references` (Phase 11) — two new tables, nothing existing touched |
 | `6c64d84df105` | Index `test_runs.created_at` and GIN-index `test_runs.run_metadata` for the Phase 12 reporting queries |
 | `05f303520380` | Add `users`, `auth_sessions`, `workspaces`, `workspace_memberships` and `projects` (Phase 14) — five new tables, nothing existing touched |
+| `b588560f044d` | Add `test_suites.project_id` (NOT NULL, `ON DELETE RESTRICT`) and make suite names unique per project. Existing suites move to a member-less `legacy` workspace; downgrade refuses if two projects share a suite name |
 
 All four are reversible. The initial migration's `downgrade()` drops everything in
 reverse dependency order and is exercised on every test run, so it is
@@ -372,7 +376,8 @@ orchestration — Phase 9. Adding a `transcripts` table now would mean guessing
 its foreign keys before anything writes to it, and a table written by nothing
 is schema guesswork that a later phase has to undo.
 
-Two consequences worth knowing. The transcription endpoints open no session,
-so they keep working with PostgreSQL down. And `TestRun`, `CallSession` and
+Two consequences worth knowing. The transcription endpoints opened no
+session, so they kept working with PostgreSQL down (until Phase 14, when
+authentication made every private route read one). And `TestRun`, `CallSession` and
 `ConversationTurn` remain foundational schema with nothing writing to them —
 exactly as after Phase 2.

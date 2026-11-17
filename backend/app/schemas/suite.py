@@ -39,7 +39,14 @@ class SuiteCreate(BaseModel):
         },
     )
 
-    name: SuiteName = Field(description="Human-readable suite name. Must be unique.")
+    name: SuiteName = Field(description="Human-readable suite name. Unique within its project.")
+    project_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "The project to create it in; you need the member role or above there. "
+            "May be omitted only when you can edit exactly one project (422 otherwise)."
+        ),
+    )
     description: str | None = Field(
         default=None, max_length=2000, description="What this suite covers."
     )
@@ -53,6 +60,7 @@ class SuiteRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    project_id: uuid.UUID
     name: str
     description: str | None
     created_at: datetime
@@ -66,6 +74,7 @@ class SuiteSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    project_id: uuid.UUID
     name: str
     description: str | None
     created_at: datetime

@@ -85,8 +85,8 @@ Phase 14 (part 1), in progress. Design and rules: `docs/AUTH.md`.
 |------|--------|----|
 | Identity schema, scrypt, tokens, role matrix (migration `05f303520380`) | `daa9cde` | ✅ 44091545141 |
 | Login, logout, sessions, CSRF origin check, `users create` | `7a7c365` | ✅ 44093406640 |
-| Workspaces, projects, members API and the authorisation service | — | — |
-| `project_id` on suites (migration, legacy backfill) and every route scoped; isolation tests | — | — |
+| Workspaces, projects, members API and the authorisation service | `e11727b` | ✅ 44130395203 |
+| `project_id` on suites (migration `b588560f044d`, legacy backfill) and every route scoped; OpenAPI-driven isolation sweep | this commit | pending |
 
 Then the frontend sign-in (Phase 13 integration), then the execution order above.
 

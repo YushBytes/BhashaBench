@@ -246,8 +246,9 @@ all: it interleaves receiving client audio with forwarding provider events.
 
 **Nothing is persisted.** Deciding which conversation turn a transcript
 belongs to is orchestration (Phase 9). A table written by nothing would be
-schema guesswork, so the subsystem is a pure function of its input and the
-endpoints work with PostgreSQL down.
+schema guesswork, so the subsystem is a pure function of its input. (Its
+endpoints worked with PostgreSQL down until Phase 14, which made every
+private route read the caller's session.)
 
 ### 3.2c The speech subsystem (Phase 5)
 

@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.auth.permissions import Permission, can_assign
 from app.models.identity import Project, Role, User, Workspace, WorkspaceMembership
 from app.repositories import identity as repo
+from app.repositories import suites as suite_repo
 from app.services import access_service
 from app.services.auth_service import DEFAULT_PROJECT_NAME, Principal, normalise_email, slugify
 from app.services.errors import ConflictError, NotFoundError, PermissionDeniedError
@@ -209,11 +210,27 @@ def update_project(
     return project
 
 
+def delete_project(session: Session, principal: Principal, project_id: uuid.UUID) -> None:
+    """Delete an empty project. One holding suites is refused, never cascaded:
+    the suites carry recorded runs, and the database's RESTRICT agrees."""
+    project, _ = access_service.require_project(
+        session, principal, project_id, Permission.MANAGE_PROJECTS
+    )
+    suites = suite_repo.count_in_project(session, project_id)
+    if suites:
+        raise ConflictError(
+            f"project '{project.name}' still holds {suites} suite(s); delete them first"
+        )
+    session.delete(project)
+    session.commit()
+
+
 __all__ = [
     "add_member",
     "change_role",
     "create_project",
     "create_workspace",
+    "delete_project",
     "get_project",
     "list_members",
     "list_projects",

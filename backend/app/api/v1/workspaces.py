@@ -212,4 +212,18 @@ def update_project(
     )
 
 
+@router.delete(
+    "/projects/{project_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete an empty project (admin or owner)",
+    description="409 while the project holds any suite: deletion never cascades into runs.",
+    responses=_ERRORS,
+)
+def delete_project(
+    project_id: uuid.UUID, principal: CurrentPrincipal, session: DbSession
+) -> Response:
+    workspace_service.delete_project(session, principal, project_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 __all__ = ["router"]

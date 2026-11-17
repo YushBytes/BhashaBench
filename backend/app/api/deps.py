@@ -6,8 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, Query, Request
+from fastapi import Depends, Query, Request, WebSocket, WebSocketException
 from sqlalchemy.orm import Session
+from starlette.requests import HTTPConnection
 
 from app.core.config import Settings, get_settings
 from app.db.session import check_database_connection, get_db
@@ -84,11 +85,11 @@ SESSION_COOKIE = "bb_session"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
-def _same_origin(request: Request, origin: str) -> bool:
+def _same_origin(request: HTTPConnection, origin: str) -> bool:
     return origin.rstrip("/") == str(request.base_url).rstrip("/")
 
 
-def _check_cookie_origin(request: Request, settings: Settings) -> None:
+def _check_cookie_origin(request: HTTPConnection, settings: Settings) -> None:
     """Refuse a cookie-authenticated write from a foreign origin.
 
     The cookie is `SameSite=Strict`, so a modern browser does not send it on
@@ -105,7 +106,7 @@ def _check_cookie_origin(request: Request, settings: Settings) -> None:
     raise PermissionDeniedError(f"cross-origin request from {origin!r} refused")
 
 
-def credential_of(request: Request) -> tuple[str, str] | None:
+def credential_of(request: HTTPConnection) -> tuple[str, str] | None:
     """`(token, source)` from the Authorization header or the cookie."""
     header = request.headers.get("authorization")
     if header is not None:
@@ -132,3 +133,32 @@ def get_principal(request: Request, session: DbSession, settings: SettingsDep) -
 
 CurrentPrincipal = Annotated[Principal, Depends(get_principal)]
 """The authenticated caller. Declaring it on a route is what makes it private."""
+
+
+WS_POLICY_VIOLATION = 1008
+
+
+def get_websocket_principal(
+    websocket: WebSocket, session: DbSession, settings: SettingsDep
+) -> Principal:
+    """Authenticate a WebSocket handshake, or close it with 1008.
+
+    Browsers send cookies on the handshake and cannot set headers, so the
+    cookie is the browser path and `Authorization: Bearer` the scripted one.
+    The Origin check applies to every cookie handshake, not only to "unsafe"
+    methods: a cross-site page opening a socket with the victim's cookie is
+    the WebSocket form of CSRF.
+    """
+    try:
+        credential = credential_of(websocket)
+        if credential is None:
+            raise UnauthenticatedError(auth_service.SESSION_INVALID)
+        token, source = credential
+        if source == "cookie":
+            _check_cookie_origin(websocket, settings)
+        return auth_service.resolve(session, settings, token)
+    except (UnauthenticatedError, PermissionDeniedError) as exc:
+        raise WebSocketException(code=WS_POLICY_VIOLATION, reason=str(exc)[:120]) from exc
+
+
+WebSocketPrincipal = Annotated[Principal, Depends(get_websocket_principal)]

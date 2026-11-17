@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -13,18 +14,23 @@ from app.repositories import suites as suite_repo
 from app.services.errors import ConflictError, NotFoundError, SuiteNotEmptyError
 
 
-def create_suite(session: Session, *, name: str, description: str | None) -> TestSuite:
-    """Create a suite, rejecting a duplicate name.
+def create_suite(
+    session: Session, *, name: str, description: str | None, project_id: uuid.UUID
+) -> TestSuite:
+    """Create a suite in a project, rejecting a name already used there.
+
+    Access to the project is the caller's to check (`access_service`); the CLI
+    is trusted and the API checks before calling.
 
     The name is checked first so the common case returns a clear 409, and the
     `IntegrityError` is still caught because that check and the insert are not
     atomic - two concurrent requests can both pass the check, and the database
     constraint is what actually guarantees uniqueness.
     """
-    if suite_repo.get_by_name(session, name) is not None:
+    if suite_repo.get_by_name(session, name, project_id) is not None:
         raise ConflictError(f"a suite named '{name}' already exists")
 
-    suite = TestSuite(name=name, description=description)
+    suite = TestSuite(name=name, description=description, project_id=project_id)
     try:
         suite_repo.add(session, suite)
     except IntegrityError as exc:
@@ -54,11 +60,17 @@ def count_scenarios(session: Session, suite_id: uuid.UUID) -> int:
     return scenario_repo.count_for_suite(session, suite_id)
 
 
-def list_suites(session: Session, *, limit: int, offset: int) -> tuple[list[TestSuite], int]:
-    """Return a page of suites and the total count."""
+def list_suites(
+    session: Session,
+    *,
+    limit: int,
+    offset: int,
+    project_ids: Sequence[uuid.UUID] | None = None,
+) -> tuple[list[TestSuite], int]:
+    """Return a page of suites and the total count, within `project_ids`."""
     return (
-        suite_repo.list_suites(session, limit=limit, offset=offset),
-        suite_repo.count_suites(session),
+        suite_repo.list_suites(session, limit=limit, offset=offset, project_ids=project_ids),
+        suite_repo.count_suites(session, project_ids),
     )
 
 
@@ -86,7 +98,7 @@ def update_suite(
     suite = get_suite(session, suite_id)
 
     if name is not None and name != suite.name:
-        clash = suite_repo.get_by_name(session, name)
+        clash = suite_repo.get_by_name(session, name, suite.project_id)
         if clash is not None and clash.id != suite.id:
             raise ConflictError(f"a suite named '{name}' already exists")
         suite.name = name

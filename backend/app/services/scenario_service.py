@@ -139,6 +139,7 @@ def search_scenarios(
     language: str | None = None,
     name_contains: str | None = None,
     tags: Sequence[str] | None = None,
+    project_ids: Sequence[uuid.UUID] | None = None,
     limit: int,
     offset: int,
 ) -> tuple[list[Scenario], int]:
@@ -166,6 +167,7 @@ def search_scenarios(
             language=language,
             name_contains=name_contains,
             tags=normalised_tags,
+            project_ids=project_ids,
             limit=limit,
             offset=offset,
         ),
@@ -175,6 +177,7 @@ def search_scenarios(
             language=language,
             name_contains=name_contains,
             tags=normalised_tags,
+            project_ids=project_ids,
         ),
     )
 
