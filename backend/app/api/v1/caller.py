@@ -93,7 +93,7 @@ def get_orchestrator_factory(
                 caller=caller,
                 settings=settings,
                 transcription=transcription,
-                artefacts=AudioArtefactStore(settings.caller_audio_root),
+                artefacts=AudioArtefactStore(blobs=settings.artefact_store_blobs()),
             )
         finally:
             # Synchronous teardown of asynchronous closers is not possible

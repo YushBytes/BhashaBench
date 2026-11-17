@@ -150,6 +150,9 @@ caller/llm/clients/
                may appear. Sarvam today, offline-tested only
 evaluation/    the evaluation engine (Phase 11): normalisation, error
                rates, the metric registry. Deterministic; calls nothing
+storage/       blob storage (Phase 10): the BlobStore contract, key
+               validation, the local filesystem adapter. `local` is the
+               only backend; anything else is refused at startup
 pipeline/      the end-to-end voice pipeline (Phase 7): run engine, audio
                degradation, execution modes, artefact records
 pipeline/bots/ one bot adapter per module. Only `http` opens a socket, it
@@ -557,7 +560,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2831 collected; 2790 pass, 41 live ones skipped
+pytest                                  # 2862 collected; 2821 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```
@@ -655,6 +658,7 @@ ruff check . && ruff format --check .   # from the repository root
 | `docs/PIPELINE.md` | an execution mode, degradation profile, bot adapter, artefact rule or run endpoint changes |
 | `docs/EVALUATION.md` | a metric, normalisation step, criterion or the evaluator version changes |
 | `docs/AUTH.md` | a credential, session, cookie, role, permission or tenancy rule changes |
+| `docs/STORAGE.md` | a storage backend, key rule, retention or deletion behaviour changes |
 | `docs/REPORTING.md` | an aggregate, statistical rule, export format or analytics endpoint changes |
 | `docs/SECURITY.md` | a security control, known gap or incident changes |
 | `docs/BOT_PROTOCOL.md` | the bot protocol changes |

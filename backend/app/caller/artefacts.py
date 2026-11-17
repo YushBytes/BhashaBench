@@ -17,6 +17,12 @@ reaches a path: a filename is built solely from the conversation UUID, the turn
 index and the speaker, all of which are generated or validated upstream. The
 resolved path is then checked to be inside the root before anything is written,
 which catches a misconfigured root as well as a hypothetical injection.
+
+**Phase 10.** The bytes now go through a `BlobStore` (`app/storage/`); this
+class keeps what is specific to audio - the naming rules, the container and
+variant whitelists, the size cap - and the store keeps containment and atomic
+writes. Constructed from a root, it uses the local filesystem adapter, so
+every existing caller is unchanged.
 """
 
 from __future__ import annotations
@@ -28,6 +34,7 @@ from pathlib import Path
 
 from app.caller.errors import CallerError
 from app.caller.schemas import Speaker
+from app.storage import BlobStore, LocalFilesystemStore, StorageError
 
 logger = logging.getLogger("bhashabench.caller.artefacts")
 
@@ -82,13 +89,22 @@ class StoredArtefact:
 class AudioArtefactStore:
     """Writes and reads conversation audio under one root directory."""
 
-    def __init__(self, root: Path | str) -> None:
-        self._root = Path(root).expanduser().resolve()
+    def __init__(self, root: Path | str | None = None, *, blobs: BlobStore | None = None) -> None:
+        if (root is None) == (blobs is None):
+            raise ValueError("give exactly one of a root directory or a blob store")
+        self._blobs: BlobStore = blobs if blobs is not None else LocalFilesystemStore(root)  # type: ignore[arg-type]
+
+    @property
+    def blobs(self) -> BlobStore:
+        return self._blobs
 
     @property
     def root(self) -> Path:
-        """The resolved storage root."""
-        return self._root
+        """The local root, for the filesystem adapter only."""
+        root = getattr(self._blobs, "root", None)
+        if root is None:
+            raise CallerError("this artefact store is not backed by a local directory")
+        return Path(root)
 
     def _relative_for(
         self,
@@ -122,23 +138,6 @@ class AudioArtefactStore:
         suffix = "" if variant is None else f"-{variant}"
         return Path(str(conversation_id)) / f"{turn_index:04d}-{speaker.value}{suffix}.{container}"
 
-    def _absolute(self, relative: Path) -> Path:
-        """Resolve a reference under the root, refusing anything that escapes.
-
-        The containment check is the point. `Path.resolve` collapses `..`, so
-        comparing the resolved result against the resolved root catches a
-        traversal regardless of how it was spelled - and `is_relative_to` is an
-        exact ancestor test rather than a string prefix, so a sibling directory
-        whose name merely starts with the root's name cannot pass.
-        """
-        candidate = (self._root / relative).resolve()
-        if not candidate.is_relative_to(self._root):
-            raise CallerError(
-                "the resolved audio path escapes the storage root; refusing to "
-                "read or write outside it"
-            )
-        return candidate
-
     def write(
         self,
         audio: bytes,
@@ -169,9 +168,10 @@ class AudioArtefactStore:
             )
 
         relative = self._relative_for(conversation_id, turn_index, speaker, container, variant)
-        target = self._absolute(relative)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(audio)
+        try:
+            self._blobs.put(relative.as_posix(), audio)
+        except StorageError as exc:
+            raise CallerError(f"the audio artefact could not be stored: {exc}") from exc
 
         logger.info(
             "caller.artefact_written",
@@ -201,17 +201,18 @@ class AudioArtefactStore:
         Raises:
             CallerError: the reference escapes the root or names nothing.
         """
-        target = self._absolute(Path(reference))
-        if not target.is_file():
-            raise CallerError(f"no stored audio artefact at '{reference}'")
-        return target.read_bytes()
+        try:
+            return self._blobs.get(reference)
+        except StorageError as exc:
+            raise CallerError(f"no stored audio artefact at '{reference}'") from exc
 
     def exists(self, reference: str) -> bool:
         """Whether a reference names a readable file."""
-        try:
-            return self._absolute(Path(reference)).is_file()
-        except CallerError:
-            return False
+        return self._blobs.exists(reference)
+
+    def delete_conversation(self, conversation_id: uuid.UUID) -> int:
+        """Remove every artefact of one conversation. Returns how many files."""
+        return self._blobs.delete_prefix(str(conversation_id))
 
 
 __all__ = [

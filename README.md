@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2831 tests across 58 modules
+│   ├── tests/                 2862 tests across 59 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -751,10 +751,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2831 tests** across fifty-eight modules.
-**2790 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2862 tests** across fifty-nine modules.
+**2821 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2831) exceeds the number that run (2790):
+why the collected total (2862) exceeds the number that run (2821):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -767,6 +767,7 @@ why the collected total (2831) exceeds the number that run (2790):
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
+| `test_storage.py` | 31 | Phase 10 blob storage: key validation (absolute, `..`, empty segments, backslash, NUL, length), the local adapter's round trip, overwrite, idempotent delete, prefix deletion that touches nothing else, atomic writes that leave neither a partial object nor a temporary file, a symlink out of the root refused (skipped on Windows, which needs elevation to create one; runs in CI), the registry and settings refusing a backend that does not exist, and the artefact store writing, reading and deleting a conversation through it
 | `test_access_control.py` | 26 | Phase 14 authorisation swept across the generated OpenAPI document: every operation outside the public allowlist 401 without a credential; on real suites, scenarios, runs, conversations and evaluations, every resource route 404 to an outsider (identical to a missing id), a viewer's reads matching the owner's and every write 403, members unable to delete; listings, aggregates and CSV export empty for an outsider and a foreign `suite_id` filter 404; runs and conversations unable to borrow another tenant's scenario; project inference for new suites; per-project suite names; project deletion refused while non-empty; the WebSocket handshake refused with 1008 without a credential or from a foreign origin; and the migration moving pre-tenancy suites into a member-less `legacy` workspace and rolling back without losing them
 | `test_workspaces_api.py` | 26 | Phase 14 workspaces, members and projects through the real routes: authentication on every route, the creator owning a new workspace and its `Default` project, only the caller's workspaces listed, a foreign workspace or project 404 rather than 403, the full add-member matrix by role, admins unable to touch owners or other admins or promote to admin, the last owner kept, leaving, project creation by role, unique names, and rename/describe
 | `test_auth_api.py` | 41 | Phase 14 authentication through the real routes and PostgreSQL: bearer and cookie login (HttpOnly, SameSite=Strict, no token in the body, Secure when deployed), every login failure the same 401, lockout refusing even the right password, hash upgrade on login, digest-only storage, logout, absolute/idle/revoked expiry, deactivation, throttled activity writes, cross-origin cookie writes refused, password change revoking other sessions, sign-up off by default, no password echoed in a 422 or written to a log, and the `users create` CLI with its exit codes and no password argument
@@ -843,7 +844,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2790 passed, 41 skipped ================
+================ 2821 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

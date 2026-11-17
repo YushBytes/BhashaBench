@@ -135,7 +135,7 @@ def get_engine_factory(
             settings=settings.model_copy(update={"caller_synthesise_audio": True}),
             speech=speech,
         )
-        artefacts = AudioArtefactStore(settings.caller_audio_root)
+        artefacts = AudioArtefactStore(blobs=settings.artefact_store_blobs())
         # A scripted run started through the API used to have no replies at
         # all, so it failed on turn 0 and `audio_fixture_test` was unusable
         # outside the tests, which inject their own adapter. An operator

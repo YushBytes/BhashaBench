@@ -20,12 +20,16 @@ from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # `backend/app/core/config.py` -> repository root is four levels up.
+
+if TYPE_CHECKING:
+    from app.storage.base import BlobStore
+
 REPO_ROOT: Path = Path(__file__).resolve().parents[3]
 
 PLACEHOLDER_SECRET = "replace-with-a-generated-secret"
@@ -592,6 +596,14 @@ class Settings(BaseSettings):
             "own audio profile takes precedence."
         ),
     )
+    storage_backend: str = Field(
+        default="local",
+        description=(
+            "Where artefacts are kept. Only `local` exists: files under "
+            "CALLER_AUDIO_STORAGE_DIR. No cloud adapter is implemented, and an "
+            "unknown value fails at startup rather than silently writing locally."
+        ),
+    )
     pipeline_serve_artefacts: bool = Field(
         default=False,
         description=(
@@ -720,6 +732,25 @@ class Settings(BaseSettings):
                 'python -c "import secrets; print(secrets.token_urlsafe(48))"'
             )
         return self
+
+    @field_validator("storage_backend", mode="before")
+    @classmethod
+    def _known_storage_backend(cls, value: object) -> object:
+        from app.storage.registry import SUPPORTED_BACKENDS, build_blob_store
+
+        name = value.strip().lower() if isinstance(value, str) else value
+        if name not in SUPPORTED_BACKENDS:
+            try:
+                build_blob_store(str(name), ".")
+            except Exception as exc:  # the registry's own explanation
+                raise ValueError(str(exc)) from exc
+        return name
+
+    def artefact_store_blobs(self) -> BlobStore:
+        """The configured blob store for artefacts."""
+        from app.storage.registry import build_blob_store
+
+        return build_blob_store(self.storage_backend, self.caller_audio_root)
 
     @model_validator(mode="after")
     def _require_full_password_cost_when_deployed(self) -> Settings:
