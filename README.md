@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2738 tests across 55 modules
+│   ├── tests/                 2779 tests across 56 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -750,10 +750,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2738 tests** across fifty-five modules.
-**2697 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2779 tests** across fifty-six modules.
+**2738 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2738) exceeds the number that run (2697):
+why the collected total (2779) exceeds the number that run (2738):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -766,6 +766,7 @@ why the collected total (2738) exceeds the number that run (2697):
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
+| `test_auth_api.py` | 41 | Phase 14 authentication through the real routes and PostgreSQL: bearer and cookie login (HttpOnly, SameSite=Strict, no token in the body, Secure when deployed), every login failure the same 401, lockout refusing even the right password, hash upgrade on login, digest-only storage, logout, absolute/idle/revoked expiry, deactivation, throttled activity writes, cross-origin cookie writes refused, password change revoking other sessions, sign-up off by default, no password echoed in a 422 or written to a log, and the `users create` CLI with its exit codes and no password argument
 | `test_auth_primitives.py` | 41 | Phase 14 identity primitives: scrypt hashing round-trip, salting, an independent recomputation against `hashlib.scrypt`, malformed and oversized input verifying false, rehash detection and the length-based password policy; token shape and uniqueness; the role matrix monotone by rank and assignment never above the actor; and against PostgreSQL the lower-case unique email, digest-only session tokens, the role CHECK, slug format, per-workspace project names, cascades from a user and RESTRICT from a workspace |
 | `test_outbound.py` | 36 | The outbound-request guard: scheme and userinfo rules, the host allowlist and its wildcards, metadata/link-local/private/loopback address rules including IPv4-mapped IPv6 and decimal literals, and plain http only to loopback |
 | `test_reference_bot.py` | 28 | The reference text bot over a real localhost socket: the full session lifecycle, bearer authentication, the error envelope, idempotent retries, correlation echo, session capacity and expiry, and reply-script validation |
@@ -839,7 +840,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2697 passed, 41 skipped ================
+================ 2738 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -902,8 +903,8 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 
 ## API endpoints
 
-The API exposes **46 paths and 56 HTTP operations**, plus one WebSocket route
-that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 47
+The API exposes **51 paths and 61 HTTP operations**, plus one WebSocket route
+that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 52
 documented paths in total.
 
 Those figures come from the generated OpenAPI document, never from a hand
@@ -924,6 +925,18 @@ python scripts/api_surface.py --json   # same, machine-readable
 | `GET` | `/health` | `{"status": "ok", "version": "0.1.0"}` — cheap liveness probe |
 | `GET` | `/api/v1/health` | Per-subsystem health, uptime and a UTC timestamp |
 | `GET` | `/api/v1/languages` | The 13 supported languages with endonym, script and locale |
+
+### Authentication
+
+See [docs/AUTH.md](docs/AUTH.md).
+
+| Method | Path | Returns |
+|--------|------|---------|
+| `POST` | `/api/v1/auth/signup` | 201 with the new user and their own workspace. 403 unless `AUTH_ALLOW_SIGNUP=true` |
+| `POST` | `/api/v1/auth/login` | Signs in. `session_type=cookie` (default) sets an HttpOnly, SameSite=Strict cookie and returns no token; `bearer` returns the token once. Every failure is the same 401 |
+| `POST` | `/api/v1/auth/logout` | 204; revokes the session and clears the cookie |
+| `GET` | `/api/v1/auth/me` | The signed-in user, their workspaces and roles, and the session's expiry |
+| `POST` | `/api/v1/auth/password` | Changes the password and revokes every other session |
 
 ### Test suites
 

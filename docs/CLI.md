@@ -329,6 +329,27 @@ There is deliberately no automatic sweeper: deciding a run is dead rather
 than slow is a judgement, made explicitly and dry-run first. `--json` reports
 `applied`, the threshold and the runs.
 
+## Users
+
+### `users create`
+
+```bash
+bhashabench users create --email you@example.com --workspace my-team
+printf '%s' "$PASSWORD" | bhashabench users create --email ci@example.com     --workspace my-team --role member --password-stdin --json
+```
+
+Creates an account and gives it a role (`owner` by default; `admin`,
+`member`, `viewer`) in the workspace with that slug, creating the workspace
+and a `Default` project if it does not exist. This is how the first account
+on a deployment is made, because sign-up is off by default.
+
+The password is prompted for with confirmation and never echoed, or read
+from stdin with `--password-stdin`; there is no `--password` option, so it
+cannot reach shell history or a process listing. Exit 2 for a password that
+fails the policy (12 to 1024 characters, not the email), 1 for an email that
+already has an account. `--json` reports the user id, email, workspace and
+role.
+
 ## Worked example: a Tamil-English suite from scratch
 
 ```bash

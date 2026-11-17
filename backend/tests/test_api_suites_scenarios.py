@@ -694,6 +694,12 @@ class TestOpenApiSurface:
             "/api/v1/analytics/trend",
             "/api/v1/analytics/runs.csv",
             "/api/v1/test-runs/{run_id}/export",
+            # Phase 14: authentication.
+            "/api/v1/auth/signup",
+            "/api/v1/auth/login",
+            "/api/v1/auth/logout",
+            "/api/v1/auth/me",
+            "/api/v1/auth/password",
         }
 
     def test_scenario_spec_schema_is_published(self, client: TestClient) -> None:

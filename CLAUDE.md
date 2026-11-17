@@ -462,7 +462,7 @@ The generated OpenAPI document is the authority, and `scripts/api_surface.py`
 is the single place the documented figures come from:
 
 ```bash
-python scripts/api_surface.py          # 46 paths, 56 operations
+python scripts/api_surface.py          # 51 paths, 61 operations
 python scripts/api_surface.py --json   # machine-readable
 ```
 
@@ -516,7 +516,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2738 collected; 2697 pass, 41 live ones skipped
+pytest                                  # 2779 collected; 2738 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```
@@ -613,6 +613,7 @@ ruff check . && ruff format --check .   # from the repository root
 | `docs/CALLER.md` | a caller state, rule, validation check, limit, endpoint, LLM control or evidence field changes |
 | `docs/PIPELINE.md` | an execution mode, degradation profile, bot adapter, artefact rule or run endpoint changes |
 | `docs/EVALUATION.md` | a metric, normalisation step, criterion or the evaluator version changes |
+| `docs/AUTH.md` | a credential, session, cookie, role, permission or tenancy rule changes |
 | `docs/REPORTING.md` | an aggregate, statistical rule, export format or analytics endpoint changes |
 | `docs/SECURITY.md` | a security control, known gap or incident changes |
 | `docs/BOT_PROTOCOL.md` | the bot protocol changes |

@@ -196,6 +196,9 @@ def settings() -> Settings:
         app_version="0.1.0",
         secret_key="test-secret-key-not-used-for-anything",
         database_url="postgresql+psycopg://test:test@localhost:5432/test",
+        # scrypt at N=2^10 instead of 2^17, so each login costs milliseconds;
+        # Settings refuses this value in staging and production.
+        auth_password_hash_log2_n=10,
         _env_file=None,
     )
 

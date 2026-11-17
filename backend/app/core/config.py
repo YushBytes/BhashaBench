@@ -80,6 +80,48 @@ class Settings(BaseSettings):
         description="Signing key. Must be overridden outside development.",
     )
 
+    # -- Authentication (Phase 14) -------------------------------------------
+    auth_password_hash_log2_n: int = Field(
+        default=17,
+        ge=10,
+        le=20,
+        description=(
+            "scrypt cost as log2 N. 17 is OWASP's minimum and is enforced in "
+            "staging and production; tests lower it to stay fast."
+        ),
+    )
+    auth_session_ttl_hours: float = Field(
+        default=12.0,
+        gt=0,
+        le=720,
+        description="Absolute session lifetime. Activity never extends it.",
+    )
+    auth_session_idle_minutes: float = Field(
+        default=60.0,
+        gt=0,
+        le=10080,
+        description="A session unused for this long is refused.",
+    )
+    auth_max_failed_logins: int = Field(
+        default=10,
+        ge=1,
+        le=1000,
+        description="Consecutive failed logins before the account is locked.",
+    )
+    auth_lockout_minutes: float = Field(
+        default=15.0,
+        gt=0,
+        le=1440,
+        description="How long a locked account refuses every login, right or wrong.",
+    )
+    auth_allow_signup: bool = Field(
+        default=False,
+        description=(
+            "Whether POST /auth/signup is open. Off by default: the first user "
+            "is created with `bhashabench users create`, and owners invite the rest."
+        ),
+    )
+
     # -- Persistence ----------------------------------------------------------
     # Phase 1 does not open a connection; the URL is validated and surfaced so
     # that the Compose wiring can be verified before Phase 2 adds a session.
@@ -679,6 +721,22 @@ class Settings(BaseSettings):
                 'python -c "import secrets; print(secrets.token_urlsafe(48))"'
             )
         return self
+
+    @model_validator(mode="after")
+    def _require_full_password_cost_when_deployed(self) -> Settings:
+        """A lowered scrypt cost is for tests; a deployment must not inherit it."""
+        deployed = (AppEnv.PRODUCTION, AppEnv.STAGING)
+        if self.app_env in deployed and self.auth_password_hash_log2_n < 17:
+            raise ValueError(
+                f"AUTH_PASSWORD_HASH_LOG2_N={self.auth_password_hash_log2_n} is below 17 "
+                f"while APP_ENV={self.app_env}; 17 is the minimum for a deployment."
+            )
+        return self
+
+    @property
+    def auth_cookie_secure(self) -> bool:
+        """`Secure` on the session cookie everywhere but a local http:// setup."""
+        return self.app_env not in (AppEnv.DEVELOPMENT, AppEnv.TEST)
 
     @property
     def is_production(self) -> bool:

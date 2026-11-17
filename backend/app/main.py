@@ -7,8 +7,10 @@ Run locally with:
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
+import re
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -46,7 +48,13 @@ from app.pipeline.errors import (
     RunNotActiveError,
 )
 from app.schemas.common import ErrorDetail, ErrorResponse, HealthResponse, ServiceIdentity
-from app.services.errors import ConflictError, NotFoundError
+from app.services.errors import (
+    ConflictError,
+    InvalidRequestError,
+    NotFoundError,
+    PermissionDeniedError,
+    UnauthenticatedError,
+)
 from app.services.health import uptime_seconds
 from app.services.scenario_loader import (
     ScenarioSyntaxError,
@@ -233,6 +241,26 @@ _CALLER_STATUS: dict[type[CallerError], int] = {
 """Caller error type -> HTTP status. Exact types, defaulting to 422."""
 
 
+_CREDENTIAL_FIELD = re.compile(r"password|token|secret", re.IGNORECASE)
+
+
+def _without_credential_inputs(errors: Sequence[Any]) -> list[Any]:
+    """Validation errors minus the rejected value of any credential field.
+
+    Pydantic reports the offending input with each error; for a password that
+    is too long or of the wrong type, echoing it would put the credential into
+    the response body and any log that records it.
+    """
+    cleaned = []
+    for error in errors:
+        if isinstance(error, dict) and any(
+            _CREDENTIAL_FIELD.search(str(part)) for part in error.get("loc", ())
+        ):
+            error = {k: v for k, v in error.items() if k not in ("input", "ctx")}
+        cleaned.append(error)
+    return cleaned
+
+
 def _error_response(status_code: int, error_type: str, message: str) -> JSONResponse:
     """Build a JSON response using the uniform error envelope."""
     payload = ErrorResponse(
@@ -260,7 +288,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return _error_response(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "validation_error",
-            f"Request validation failed: {exc.errors()}",
+            f"Request validation failed: {_without_credential_inputs(exc.errors())}",
         )
 
     # -- Phase 2 domain errors ------------------------------------------------
@@ -270,6 +298,20 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(NotFoundError)
     async def handle_not_found(_request: Request, exc: NotFoundError) -> JSONResponse:
         return _error_response(status.HTTP_404_NOT_FOUND, "not_found", str(exc))
+
+    @app.exception_handler(UnauthenticatedError)
+    async def handle_unauthenticated(_request: Request, exc: UnauthenticatedError) -> JSONResponse:
+        response = _error_response(status.HTTP_401_UNAUTHORIZED, "unauthenticated", str(exc))
+        response.headers["WWW-Authenticate"] = "Bearer"
+        return response
+
+    @app.exception_handler(InvalidRequestError)
+    async def handle_invalid_request(_request: Request, exc: InvalidRequestError) -> JSONResponse:
+        return _error_response(status.HTTP_422_UNPROCESSABLE_CONTENT, "validation_error", str(exc))
+
+    @app.exception_handler(PermissionDeniedError)
+    async def handle_forbidden(_request: Request, exc: PermissionDeniedError) -> JSONResponse:
+        return _error_response(status.HTTP_403_FORBIDDEN, "forbidden", str(exc))
 
     @app.exception_handler(ConflictError)
     async def handle_conflict(_request: Request, exc: ConflictError) -> JSONResponse:

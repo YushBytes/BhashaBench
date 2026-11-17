@@ -35,11 +35,12 @@ from app.cli.output import (
 from app.core import languages
 from app.core.config import get_settings
 from app.db.session import session_scope
+from app.models.identity import Role
 from app.pipeline import recovery
 from app.schemas.scenario_spec import SPEC_VERSION, ScenarioSpec
-from app.services import scenario_service, suite_service
+from app.services import auth_service, scenario_service, suite_service
 from app.services.bundle import BUNDLE_FORMAT, parse_bundle
-from app.services.errors import ConflictError, NotFoundError
+from app.services.errors import ConflictError, InvalidRequestError, NotFoundError
 from app.services.scenario_loader import ScenarioLoadError, spec_from_yaml, spec_to_yaml
 from app.utils.timing import utc_now
 
@@ -63,7 +64,7 @@ class DomainErrorGroup(TyperGroup):
             return super().invoke(ctx)
         except (NotFoundError, ConflictError) as exc:
             fail(str(exc), ExitCode.FAILED)
-        except ScenarioLoadError as exc:
+        except (ScenarioLoadError, InvalidRequestError) as exc:
             fail(str(exc), ExitCode.INVALID_INPUT)
 
 
@@ -85,6 +86,8 @@ runs_app = typer.Typer(help="Inspect and maintain test runs.", no_args_is_help=T
 app.add_typer(suite_app, name="suite")
 app.add_typer(scenario_app, name="scenario")
 app.add_typer(runs_app, name="runs")
+users_app = typer.Typer(help="Manage user accounts (Phase 14).", no_args_is_help=True)
+app.add_typer(users_app, name="users")
 
 JsonFlag = Annotated[bool, typer.Option("--json", help="Emit machine-readable JSON.")]
 
@@ -101,7 +104,7 @@ def _session() -> Iterator[Session]:
     try:
         with session_scope() as session:
             yield session
-    except (NotFoundError, ConflictError, ScenarioLoadError, typer.Exit):
+    except (NotFoundError, ConflictError, InvalidRequestError, ScenarioLoadError, typer.Exit):
         raise
     except SQLAlchemyError as exc:
         fail(
@@ -718,6 +721,62 @@ def runs_recover_stale(
         typer.echo(
             f"DRY RUN: {len(rows)} run(s) would be closed. "
             "Nothing was changed; re-run with --apply."
+        )
+
+
+@users_app.command("create")
+def users_create(
+    email: Annotated[str, typer.Option(help="Sign-in email; stored lower-cased.")],
+    workspace: Annotated[
+        str,
+        typer.Option(
+            help=("Workspace slug. Joined if it exists; otherwise created, with a Default project.")
+        ),
+    ],
+    display_name: Annotated[str, typer.Option(help="Name shown in the interface.")] = "",
+    role: Annotated[Role, typer.Option(help="Role in the workspace.")] = Role.OWNER,
+    password_stdin: Annotated[
+        bool,
+        typer.Option(
+            "--password-stdin",
+            help="Read the password from standard input instead of prompting.",
+        ),
+    ] = False,
+    as_json: JsonFlag = False,
+) -> None:
+    """Create a user and give them a role in a workspace.
+
+    This is how the first account on a deployment is made: sign-up is off by
+    default. The password is never an argument, so it cannot land in shell
+    history or a process listing.
+    """
+    if password_stdin:
+        password = stdin_text().removesuffix("\n").removesuffix("\r")
+    else:
+        password = typer.prompt("Password", hide_input=True, confirmation_prompt=True)
+    with _session() as session:
+        user, ws = auth_service.create_user(
+            session,
+            get_settings(),
+            email=email,
+            display_name=display_name or email,
+            password=password,
+            workspace_name=workspace,
+            workspace_slug=auth_service.slugify(workspace),
+            role=role,
+        )
+        row = {
+            "id": str(user.id),
+            "email": user.email,
+            "workspace_id": str(ws.id),
+            "workspace_slug": ws.slug,
+            "role": role.value,
+        }
+    if as_json:
+        emit_json(row)
+    else:
+        typer.echo(
+            f"created user {row['id']}  {row['email']}  {row['role']} of {row['workspace_slug']}"
         )
 
 

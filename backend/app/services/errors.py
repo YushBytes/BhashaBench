@@ -22,6 +22,22 @@ class NotFoundError(DomainError):
         self.identifier = identifier
 
 
+class UnauthenticatedError(DomainError):
+    """No valid credential was presented. Always 401, and the message never
+    says which part was wrong: "no such account" and "wrong password" must be
+    indistinguishable, or the login form enumerates users."""
+
+
+class InvalidRequestError(DomainError):
+    """Well-formed input that a business rule refuses, e.g. a weak password. 422."""
+
+
+class PermissionDeniedError(DomainError):
+    """The caller is authenticated, can see the resource, and lacks the role
+    for this action. A resource in a workspace they do not belong to is a
+    `NotFoundError` instead, so its existence is not disclosed."""
+
+
 class ConflictError(DomainError):
     """The request conflicts with existing state, e.g. a duplicate name."""
 
