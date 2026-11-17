@@ -823,3 +823,10 @@ What Phase 8 has to add: a media-streaming bridge, the `ALLOWED_BOT_NUMBERS`
 allow-list enforcement, barge-in handling, and the per-run cost caps
 (`MAX_CALLS_PER_RUN`, `MAX_MINUTES_PER_DAY`, `MAX_CONCURRENT_CALLS`) that
 `.env.example` already declares.
+
+## The conversation recording (Phase 10)
+
+Every terminal run gets a `recording` entry in its pipeline metadata: a
+stored `conversation.wav` assembled from the turn artefacts with a segment
+map, `failed` with a reason, or `not_applicable` when no audio moved. See
+[STORAGE.md](STORAGE.md#the-full-conversation-recording).

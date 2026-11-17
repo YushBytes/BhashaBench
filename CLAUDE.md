@@ -506,7 +506,7 @@ The generated OpenAPI document is the authority, and `scripts/api_surface.py`
 is the single place the documented figures come from:
 
 ```bash
-python scripts/api_surface.py          # 57 paths, 73 operations
+python scripts/api_surface.py          # 59 paths, 75 operations
 python scripts/api_surface.py --json   # machine-readable
 ```
 
@@ -560,7 +560,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2862 collected; 2821 pass, 41 live ones skipped
+pytest                                  # 2870 collected; 2829 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

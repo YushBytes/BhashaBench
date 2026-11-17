@@ -121,6 +121,9 @@ class TestOpenApiDocument:
             "/api/v1/workspaces/{workspace_id}/members/{user_id}",
             "/api/v1/workspaces/{workspace_id}/projects",
             "/api/v1/projects/{project_id}",
+            # Phase 10: the full-conversation recording.
+            "/api/v1/test-runs/{run_id}/recording",
+            "/api/v1/test-runs/{run_id}/recording/audio",
         }
 
     def test_info_block_matches_settings(self, client: TestClient, settings: Settings) -> None:

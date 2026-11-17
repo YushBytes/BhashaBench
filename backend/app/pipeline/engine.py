@@ -81,6 +81,7 @@ from app.pipeline.modes import (
     is_terminal,
     to_run_status,
 )
+from app.pipeline.recording import assemble
 from app.repositories import caller_conversations as caller_repo
 from app.repositories import pipeline_runs as repo
 from app.schemas.scenario import ScenarioSpec
@@ -1805,6 +1806,7 @@ class RunEngine:
         """Record a run's terminal status and outcome."""
         meta["status"] = status.value
         meta["outcome"] = None if outcome is None else outcome.value
+        meta["recording"] = self._record_conversation(run, meta)
         repo.finish_run(
             self._session,
             run,
@@ -1821,6 +1823,51 @@ class RunEngine:
                 "mode": meta.get("mode"),
             },
         )
+
+    def _record_conversation(self, run: TestRun, meta: dict[str, Any]) -> dict[str, Any]:
+        """Assemble and store the full-conversation recording, or say why not.
+
+        Never raises: a run's verdict must not depend on whether its turns
+        could be stitched together afterwards.
+        """
+        artefacts = list(meta.get("artefacts", []))
+        if not artefacts:
+            return {"status": "not_applicable", "reason": "no audio was exchanged in this run"}
+        conversation = repo.conversation_of(self._session, run.id)
+        if conversation is None:  # pragma: no cover - every pipeline run has one
+            return {"status": "failed", "reason": "the run has no conversation"}
+        try:
+            recording = assemble(artefacts, self._artefacts.read)
+            if recording.audio is None:
+                return {
+                    "status": "failed",
+                    "reason": "no turn's audio could be decoded",
+                    "excluded": recording.excluded,
+                }
+            stored = self._artefacts.write_recording(
+                recording.audio, conversation_id=conversation.id
+            )
+        except Exception as exc:  # recorded on the run, never fatal to it
+            logger.warning(
+                "pipeline.recording_failed",
+                extra={"run_id": str(run.id), "error": type(exc).__name__},
+            )
+            return {"status": "failed", "reason": redact(f"{type(exc).__name__}: {exc}")[:300]}
+        return {
+            "status": "stored",
+            "reference": stored.reference,
+            "size_bytes": stored.size_bytes,
+            "content_type": stored.content_type,
+            "sample_rate_hz": recording.sample_rate_hz,
+            "channels": 1,
+            "duration_seconds": recording.duration_seconds,
+            "segments": recording.segments,
+            "excluded": recording.excluded,
+            "assembly": (
+                "turns concatenated in order after the run; no silence inserted, so "
+                "inter-turn timing is not represented"
+            ),
+        }
 
     def cancel(self, run_id: uuid.UUID) -> TestRun:
         """Stop a run from outside.

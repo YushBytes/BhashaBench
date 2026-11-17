@@ -706,6 +706,9 @@ class TestOpenApiSurface:
             "/api/v1/workspaces/{workspace_id}/members/{user_id}",
             "/api/v1/workspaces/{workspace_id}/projects",
             "/api/v1/projects/{project_id}",
+            # Phase 10: the full-conversation recording.
+            "/api/v1/test-runs/{run_id}/recording",
+            "/api/v1/test-runs/{run_id}/recording/audio",
         }
 
     def test_scenario_spec_schema_is_published(self, client: TestClient) -> None:

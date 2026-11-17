@@ -31,3 +31,29 @@ whitelisted container; a 25 MB cap per object - and delegates the bytes. It
 is constructed either from a root (the local adapter, which every existing
 caller uses) or from any `BlobStore`. `delete_conversation` removes every
 file of one conversation and reports how many.
+
+## The full-conversation recording
+
+When a pipeline run reaches any terminal state, `RunEngine._finish`
+assembles `{conversation_id}/conversation.wav` from the turn artefacts and
+records a manifest in the run's metadata (`app/pipeline/recording.py`):
+
+- **Assembled, not captured.** Turns are concatenated in order after the
+  run, 16-bit mono at 16 kHz. No silence is inserted between them, so
+  inter-turn timing is not represented - inventing gaps would look like a
+  latency measurement.
+- **What was on the line.** A caller turn contributes its degraded variant
+  when one exists (what the bot heard), otherwise the original.
+- **Linked.** Each segment names its turn, speaker, variant, start, duration
+  and `source_reference`, the per-turn artefact it came from, which remains
+  the evidence.
+- **Excluded, never filled.** A turn that is not 16-bit PCM WAV, or is gone
+  from storage, is listed in `excluded` with its reason.
+- **Never fatal.** A run's outcome does not depend on assembly: a failure is
+  recorded as `status: failed` with a redacted reason. A run that exchanged
+  no audio records `not_applicable`.
+
+`GET /test-runs/{id}/recording` returns the manifest (404 until the run
+finishes); `GET /test-runs/{id}/recording/audio` streams it, with the same
+access and environment rules as per-turn audio. It lives under the
+conversation's prefix, so deleting the conversation's artefacts deletes it.

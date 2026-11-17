@@ -37,10 +37,11 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Iterator
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Header, Path, Query, UploadFile, status
 from fastapi.responses import Response
+from sqlalchemy.orm import Session
 
 from app.api.access import Authenticated, RunAccess
 from app.api.deps import CurrentPrincipal, DbSession, PaginationParams, SettingsDep
@@ -51,7 +52,7 @@ from app.caller.orchestrator import ConversationOrchestrator
 from app.caller.registry import build_provider as build_caller_provider
 from app.caller.schemas import Speaker
 from app.caller.service import CallerService
-from app.core.config import AppEnv
+from app.core.config import AppEnv, Settings
 from app.models.test_run import RunStatus, TestRun
 from app.pipeline.bots.registry import (
     HTTP_ADAPTER,
@@ -823,15 +824,7 @@ def read_artefact_audio(
     range_header: Annotated[str | None, Header(alias="Range")] = None,
 ) -> Response:
     """Stream one artefact's bytes, resolved from the run's own record."""
-    if settings.app_env in (AppEnv.STAGING, AppEnv.PRODUCTION) and not (
-        settings.pipeline_serve_artefacts
-    ):
-        raise ArtefactAccessDisabledError(
-            "this environment does not stream stored conversation audio "
-            "unless PIPELINE_SERVE_ARTEFACTS is set",
-            run_id=str(run_id),
-            stage="artefact_access",
-        )
+    _refuse_audio_where_disabled(settings, run_id)
 
     report = engine.report(run_id)
     record = next(
@@ -855,6 +848,80 @@ def read_artefact_audio(
         raise NotFoundError(f"a readable recording for turn {turn_index} of run", run_id) from exc
 
     return _audio_response(payload, record.content_type, range_header)
+
+
+def _refuse_audio_where_disabled(settings: Settings, run_id: uuid.UUID) -> None:
+    if settings.app_env in (AppEnv.STAGING, AppEnv.PRODUCTION) and not (
+        settings.pipeline_serve_artefacts
+    ):
+        raise ArtefactAccessDisabledError(
+            "this environment does not stream stored conversation audio "
+            "unless PIPELINE_SERVE_ARTEFACTS is set",
+            run_id=str(run_id),
+            stage="artefact_access",
+        )
+
+
+@router.get(
+    "/{run_id}/recording",
+    summary="The full-conversation recording's manifest",
+    description=(
+        "Whether a recording was stored and, if so, its duration and the segment map: "
+        "each span's turn, speaker, variant and the per-turn artefact it came from. "
+        "`status` is `stored`, `failed` (with a reason), or `not_applicable` (no audio "
+        "was exchanged). A run that has not finished has no recording yet (404). "
+        "**Assembled after the run, not captured live:** turns are concatenated in "
+        "order with no silence inserted, so inter-turn timing is not represented. A "
+        "turn that could not be decoded is listed in `excluded`, never filled in."
+    ),
+    responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse}},
+    dependencies=[RunAccess.VIEW],
+)
+def read_recording(run_id: uuid.UUID, session: DbSession) -> dict[str, Any]:
+    return _recording_of(session, run_id)
+
+
+def _recording_of(session: Session, run_id: uuid.UUID) -> dict[str, Any]:
+    run = pipeline_repo.get_run(session, run_id)
+    if run is None:
+        raise NotFoundError("TestRun", run_id)
+    recording = pipeline_repo.pipeline_metadata_of(run).get("recording")
+    if recording is None:
+        raise NotFoundError("a recording (the run has not finished) for run", run_id)
+    return dict(recording)
+
+
+@router.get(
+    "/{run_id}/recording/audio",
+    summary="Stream the full-conversation recording",
+    description=(
+        "16-bit mono WAV. Same access and environment rules as per-turn artefact audio; "
+        "supports a single `Range` header."
+    ),
+    response_class=Response,
+    responses={
+        200: {"content": {"audio/wav": {}}},
+        status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+    },
+    dependencies=[RunAccess.VIEW],
+)
+def read_recording_audio(
+    run_id: uuid.UUID,
+    session: DbSession,
+    engine: ReadingEngineDep,
+    settings: SettingsDep,
+    range_header: Annotated[str | None, Header(alias="Range")] = None,
+) -> Response:
+    _refuse_audio_where_disabled(settings, run_id)
+    recording = _recording_of(session, run_id)
+    if recording.get("status") != "stored":
+        raise NotFoundError("a stored recording for run", run_id)
+    try:
+        payload = engine.artefact_store.read(str(recording["reference"]))
+    except CallerError as exc:
+        raise NotFoundError("a readable recording for run", run_id) from exc
+    return _audio_response(payload, "audio/wav", range_header)
 
 
 @router.get(

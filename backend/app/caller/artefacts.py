@@ -210,6 +210,24 @@ class AudioArtefactStore:
         """Whether a reference names a readable file."""
         return self._blobs.exists(reference)
 
+    def write_recording(self, audio: bytes, *, conversation_id: uuid.UUID) -> StoredArtefact:
+        """Store a conversation's assembled recording beside its turn files.
+
+        The name is fixed, so a re-assembly replaces the previous one, and it
+        lives under the conversation's prefix, so `delete_conversation`
+        removes it with the turns.
+        """
+        if not audio:
+            raise CallerError("refusing to store an empty recording")
+        reference = f"{conversation_id}/conversation.wav"
+        try:
+            self._blobs.put(reference, audio)
+        except StorageError as exc:
+            raise CallerError(f"the recording could not be stored: {exc}") from exc
+        return StoredArtefact(
+            reference=reference, size_bytes=len(audio), content_type="audio/wav", container="wav"
+        )
+
     def delete_conversation(self, conversation_id: uuid.UUID) -> int:
         """Remove every artefact of one conversation. Returns how many files."""
         return self._blobs.delete_prefix(str(conversation_id))

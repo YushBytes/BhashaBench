@@ -1019,13 +1019,25 @@ def degrade(audio: bytes, config: DegradationConfig) -> DegradationResult:
     )
 
 
+# Public names for the PCM helpers, so another module (the conversation
+# recording) reuses these rather than growing a second WAV decoder.
+decode_pcm16_wav = _decode
+encode_pcm16_wav = _encode
+to_mono = _to_mono
+resample = _resample
+
+
 __all__ = [
     "MAX_INPUT_BYTES",
     "DegradationConfig",
     "DegradationResult",
     "NoiseProfile",
     "Transformation",
+    "decode_pcm16_wav",
     "degrade",
+    "encode_pcm16_wav",
     "profile_config",
+    "resample",
+    "to_mono",
     "with_conditions",
 ]
