@@ -29,7 +29,7 @@ work. Current progress and the next task are in
 | 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & transcription | 🟡 Partial — per-turn artefacts only |
 | 11 | Evaluation & judge engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
-| 12 | Reporting & analytics backend | 🟡 Partial — run list and per-run report only |
+| 12 | Reporting & analytics backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend dashboard | 🟡 Partial — operator workspace, no analytics |
 | 14 | CI/CD & safety | ⬜ Not started |
 | 15 | Production readiness & competition demo | 🟡 Partial — competition demo only |

@@ -63,7 +63,7 @@ keep the numbering they were written in. Use this table to translate.
 | 9 | Real-Time Conversation Engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & Transcription | 🟡 Partial — per-turn artefacts only |
 | 11 | Evaluation & Judge Engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
-| 12 | Reporting & Analytics Backend | 🟡 Partial — run list and per-run report only |
+| 12 | Reporting & Analytics Backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend Dashboard | 🟡 Partial — operator workspace, no analytics |
 | 14 | CI/CD & Safety | ⬜ Not started |
 | 15 | Production Readiness & Competition Demo | 🟡 Partial — competition demo only |
@@ -744,7 +744,8 @@ Delivered: per-turn original and degraded audio with provenance, per-turn
 transcripts, and the three failure modes kept distinct (Part A).
 
 Remaining: full-conversation recording, retention periods and deletion,
-transcript export.
+and artefacts served with signed, expiring URLs (moved from Phase 12).
+Transcript export shipped with Phase 12 (`GET /test-runs/{id}/export`).
 
 **Exit criteria.** Full-conversation and per-turn audio stored and linked;
 a retention period enforced and deletion tested.
@@ -780,13 +781,20 @@ per-criterion reasoning, and WER is computed against reviewed references.
 
 ---
 
-## Phase 12 — Reporting & Analytics Backend 🟡
+## Phase 12 — Reporting & Analytics Backend ✅
 
-Delivered: the run list and per-run report endpoints.
+**Complete on 2026-11-17** against its exit criteria: two evaluated runs are
+diffed by `GET /analytics/compare` (verdict change, per-metric deltas,
+comparability warnings), and a regression between two groups of runs is
+identified by `GET /analytics/regressions` (Fisher's exact test, p < 0.05 and
+at least five decided runs a side, otherwise `insufficient_evidence`). Also
+delivered: aggregates grouped by language, scenario, adapter, mode, outcome
+or suite with Wilson intervals, day/week trends, and CSV/JSON export with
+formula-injection neutralisation. Contract: `docs/REPORTING.md`.
 
-Remaining: aggregates per run, scenario and language over time; run
-comparison and regression detection against a baseline; JSON and CSV export;
-artefacts served with signed, expiring URLs.
+**Not delivered, and not claimed:** artefacts served with signed, expiring
+URLs — moved to Phase 10, because signing belongs to the storage abstraction
+that phase introduces; and PDF export, which needs a rendering dependency.
 
 **Exit criteria.** Two runs can be diffed and a regression identified.
 

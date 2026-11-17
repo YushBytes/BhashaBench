@@ -70,12 +70,20 @@ reference bot on localhost.
 **Phase 11: complete** (deterministic; judge offline-only, not validated
 against human labels).
 
+| Phase 12 unit | Commit | CI |
+|------|--------|----|
+| Index test runs for reporting (migration `6c64d84df105`) | `32e66f2` | ✅ 44056197928 (pushed with the next unit) |
+| Aggregates, comparison, regression, trend, export | `37e8ec9` | ✅ 44056197928 |
+
+**Phase 12: complete** (signed artefact URLs moved to Phase 10; no PDF).
+
 ## Next task
 
-Phase 12: SQL-side aggregation over runs and their latest evaluations
-(by language, scenario, adapter, mode), pass rate with a Wilson interval,
-run-to-run comparison with comparability warnings, regression detection
-between two groups of runs with an exact test, trends, and JSON/CSV export.
+Phase 14 (part 1): users, sessions, workspaces, projects and authorisation —
+password hashing with a vetted library, server-side sessions, workspace and
+project ownership on suites and runs (a migration), and every existing
+route scoped and authorised, with tests that one workspace cannot read
+another's runs, reports or exports.
 
 ## Outstanding issues
 
