@@ -19,6 +19,7 @@ from app.api.v1 import (
     scenarios,
     speech,
     suites,
+    telephony,
     test_runs,
     transcription,
     workspaces,
@@ -58,3 +59,5 @@ api_router.include_router(evaluation.run_router)
 # `/test-runs/{id}/export` is disjoint from every pipeline and evaluation path.
 api_router.include_router(analytics.router)
 api_router.include_router(analytics.run_router)
+# Phase 8. The provider webhook (signature, not session) and a run's calls.
+api_router.include_router(telephony.router)

@@ -125,6 +125,9 @@ class TestOpenApiDocument:
             "/api/v1/test-runs/{run_id}/recording",
             "/api/v1/test-runs/{run_id}/recording/audio",
             "/api/v1/test-runs/{run_id}/audio-links",
+            # Phase 8: telephony (mocked provider only).
+            "/api/v1/telephony/events/{provider}",
+            "/api/v1/test-runs/{run_id}/telephony/calls",
         }
 
     def test_info_block_matches_settings(self, client: TestClient, settings: Settings) -> None:

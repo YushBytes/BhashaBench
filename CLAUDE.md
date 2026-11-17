@@ -25,7 +25,7 @@ work. Current progress and the next task are in
 | 5 | Text to speech (Gnani Timbre) | ✅ Complete (batch; streaming not implemented) |
 | 6 | AI caller simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
 | 7 | Audio degradation engine | ✅ Complete (synthetic noise; no recorded noise beds) |
-| 8 | Telephony integration | ⬜ Not started |
+| 8 | Telephony integration | 🟡 Partial — provider abstraction, guardrails, signed webhooks and a mocked provider; no real call placed or authorised |
 | 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & transcription | ✅ Complete (local filesystem storage; recordings assembled from turn audio, not captured live) |
 | 11 | Evaluation & judge engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
@@ -75,7 +75,9 @@ black-and-white system with electric-blue accents. Every control must call a
 real endpoint, and the API-client rules below still hold.
 
 **Telephony (Phase 8) is built against a provider abstraction and a mocked
-provider only.** Do not set `CallSession`'s `DIALING`, `NO_ANSWER` or `BUSY`
+provider only** (`app/telephony/`, `docs/TELEPHONY.md`). No route places a
+call, the bot's number is stored masked, and the webhook's credential is
+the signature over the raw body. Do not set `CallSession`'s `DIALING`, `NO_ANSWER` or `BUSY`
 from an offline simulation: only a telephony provider's own event may set
 them, so a mocked call is labelled mocked in its evidence.
 
@@ -509,7 +511,7 @@ The generated OpenAPI document is the authority, and `scripts/api_surface.py`
 is the single place the documented figures come from:
 
 ```bash
-python scripts/api_surface.py          # 60 paths, 77 operations
+python scripts/api_surface.py          # 62 paths, 79 operations
 python scripts/api_surface.py --json   # machine-readable
 ```
 
@@ -563,7 +565,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2944 collected; 2903 pass, 41 live ones skipped
+pytest                                  # 2960 collected; 2919 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

@@ -596,6 +596,26 @@ class Settings(BaseSettings):
             "own audio profile takes precedence."
         ),
     )
+    # -- Telephony (Phase 8): a mocked provider only ---------------------------
+    telephony_provider: str = Field(
+        default="",
+        description=(
+            "Empty (telephony off) or `mock`. No vendor adapter exists; any other "
+            "value is refused when a call is attempted, with the reason."
+        ),
+    )
+    telephony_webhook_secret: SecretStr = Field(
+        default=SecretStr(""),
+        description="Signs provider events. Fewer than 32 characters verifies nothing.",
+    )
+    telephony_allowed_numbers: str = Field(
+        default="",
+        description="Comma-separated E.164 bot numbers. Empty allows no call at all.",
+    )
+    telephony_max_calls_per_run: int = Field(default=3, ge=1, le=100)
+    telephony_max_concurrent_calls: int = Field(default=1, ge=1, le=100)
+    telephony_max_minutes_per_day: float = Field(default=30.0, gt=0, le=1440)
+
     retention_days: int | None = Field(
         default=None,
         ge=1,
@@ -732,6 +752,19 @@ class Settings(BaseSettings):
                 'python -c "import secrets; print(secrets.token_urlsafe(48))"'
             )
         return self
+
+    @field_validator("telephony_allowed_numbers")
+    @classmethod
+    def _valid_allowlist(cls, value: str) -> str:
+        from app.telephony.guardrails import parse_allowlist
+
+        parse_allowlist(value)  # one malformed entry fails startup
+        return value
+
+    @field_validator("telephony_provider", mode="before")
+    @classmethod
+    def _normalise_telephony_provider(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
 
     @field_validator("retention_days", mode="before")
     @classmethod

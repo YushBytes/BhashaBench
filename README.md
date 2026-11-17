@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2944 tests across 63 modules
+│   ├── tests/                 2960 tests across 64 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -751,10 +751,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2944 tests** across sixty-three modules.
-**2903 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2960 tests** across sixty-four modules.
+**2919 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2944) exceeds the number that run (2903):
+why the collected total (2960) exceeds the number that run (2919):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -767,6 +767,7 @@ why the collected total (2944) exceeds the number that run (2903):
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
+| `test_telephony_calls.py` | 16 | Phase 8 telephony with the mock provider against PostgreSQL and the real webhook: a placed call stored masked and labelled mocked with the caller namespace untouched, placing alone setting no status, an off-list number refused before the provider is contacted, concurrent, per-run and per-day limits, signed events driving each of four outcomes through the call and its conversation (`DIALING` first, `BUSY`/`NO_ANSWER` only from events), unsigned, wrong-secret and tampered events changing nothing, duplicates and stale events recorded but not applied, unknown providers and calls 404, the webhook absent with telephony off, oversized events refused, calls deleted with their run, and an invalid allowlist failing at startup
 | `test_telephony_core.py` | 44 | Phase 8 telephony core, offline: E.164 normalisation and refusal, masking, every guardrail refusing before dialling and never naming the full number, an empty allowlist allowing nothing, webhook signatures refusing edits, missing headers, bad timestamps, replays and an unconfigured secret, every provider status mapped and calls only moving forward, `telephony_test` still unimplemented, the mock labelled mocked with four scripted outcomes and strict event parsing, and the registry refusing the mock in production and any provider that does not exist
 | `test_signed_links.py` | 18 | Phase 10 signed audio links: the HMAC primitive verifying a fresh link and refusing any edit to variant, expiry, user or signature, another path, expiry, a rotated secret, an over-long lifetime and malformed values; and through the API, a link opening one turn's audio or the recording with no session, refusing to be pointed at another turn or tampered with, revoked when its minter leaves the workspace, unmintable by an outsider or for audio that does not exist, and capped at fifteen minutes
 | `test_retention.py` | 14 | Phase 10 deletion and retention: deleting a finished run through the API removes its row, conversation, turns, evaluations and every audio file including the recording while the suite and scenario survive; a run in flight is 409; a member is 403 and an outsider 404; the protected historical runs are never deleted; and `runs purge` through the real CLI lists without changing anything by default, deletes only expired finished runs with `--apply`, falls back to `RETENTION_DAYS`, refuses to run without a period, accepts whole days only, and never lists the protected runs
@@ -848,7 +849,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2903 passed, 41 skipped ================
+================ 2919 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -911,8 +912,8 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 
 ## API endpoints
 
-The API exposes **60 paths and 77 HTTP operations**, plus one WebSocket route
-that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 61
+The API exposes **62 paths and 79 HTTP operations**, plus one WebSocket route
+that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 63
 documented paths in total.
 
 Those figures come from the generated OpenAPI document, never from a hand
@@ -958,6 +959,15 @@ A workspace the caller is not a member of answers 404. Roles and rules: [docs/AU
 | `PATCH` / `DELETE` | `/api/v1/workspaces/{id}/members/{user_id}` | Change a role / remove a member or leave. The last owner is kept (409) |
 | `GET` / `POST` | `/api/v1/workspaces/{id}/projects` | Projects / create one (admin or owner) |
 | `GET` / `PATCH` / `DELETE` | `/api/v1/projects/{id}` | One project / rename or describe it / delete it while empty (admin or owner) |
+
+### Telephony (mocked provider only)
+
+No route places a call: no run mode can use one. See [docs/TELEPHONY.md](docs/TELEPHONY.md).
+
+| Method | Path | Returns |
+|--------|------|---------|
+| `POST` | `/api/v1/telephony/events/{provider}` | A signed call-status event from the configured provider (no session; the signature is the credential). 401 unsigned or tampered, 404 unknown provider or call, `applied: false` for duplicates and stale events |
+| `GET` | `/api/v1/test-runs/{id}/telephony/calls` | A run's calls with provider, `mocked`, masked number, status and every event as received |
 
 ### Test suites
 
@@ -1098,7 +1108,7 @@ documentation. Full detail in
 | 5 | Text to speech (Gnani Timbre) | ✅ Complete (batch; streaming not implemented) |
 | 6 | AI caller simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
 | 7 | Audio degradation engine | ✅ Complete (synthetic noise; no recorded noise beds) |
-| 8 | Telephony integration | ⬜ Not started |
+| 8 | Telephony integration | 🟡 Partial — provider abstraction, guardrails, signed webhooks and a mocked provider; no real call placed or authorised |
 | 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & transcription | ✅ Complete (local filesystem storage; recordings assembled from turn audio, not captured live) |
 | 11 | Evaluation & judge engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |

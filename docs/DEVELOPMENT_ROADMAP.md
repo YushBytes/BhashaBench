@@ -59,7 +59,7 @@ keep the numbering they were written in. Use this table to translate.
 | 5 | Gnani Timbre — Text to Speech | ✅ Complete (batch; streaming not implemented) |
 | 6 | AI Caller Simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
 | 7 | Audio Degradation Engine | ✅ Complete (synthetic noise; no recorded noise beds) |
-| 8 | Telephony Integration | ⬜ Not started |
+| 8 | Telephony Integration | 🟡 Partial — provider abstraction, guardrails, signed webhooks and a mocked provider; no real call placed or authorised |
 | 9 | Real-Time Conversation Engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
 | 10 | Recording & Transcription | ✅ Complete (local filesystem storage; recordings assembled from turn audio, not captured live) |
 | 11 | Evaluation & Judge Engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
@@ -697,7 +697,19 @@ asserted in tests.
 
 ---
 
-## Phase 8 — Telephony Integration ⬜
+## Phase 8 — Telephony Integration 🟡
+
+**Partial, 2026-11-18.** Delivered against a provider abstraction and a
+mocked provider only (`docs/TELEPHONY.md`): E.164 numbers, every guardrail
+checked before dialling, signed webhooks with replay protection, provider
+statuses that can only move a call forward and are the only route to
+`DIALING`, `NO_ANSWER` and `BUSY`, the `telephony_calls` table (migration
+`bcf146f6c696`), and the mock labelled mocked in every record.
+
+**Not delivered, and not claimed:** any real call, a Twilio (or other
+vendor) adapter, media streaming, and `TELEPHONY_TEST` as a run mode. The
+exit criterion below needs a real call and a paid number, neither
+authorised, so the phase stays partial.
 
 The first phase that can place a real call, and therefore spend real money.
 It follows the documented HTTP/WebSocket bot protocol and the reference

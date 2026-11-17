@@ -13,6 +13,7 @@ from app.models.evaluation import RunEvaluation, TranscriptReference, Verdict
 from app.models.identity import AuthSession, Project, Role, User, Workspace, WorkspaceMembership
 from app.models.scenario import Scenario
 from app.models.suite import TestSuite
+from app.models.telephony import TelephonyCall
 from app.models.test_run import RunStatus, TestRun
 
 __all__ = [
@@ -27,6 +28,7 @@ __all__ = [
     "RunStatus",
     "Scenario",
     "Speaker",
+    "TelephonyCall",
     "TestRun",
     "TestSuite",
     "TranscriptReference",

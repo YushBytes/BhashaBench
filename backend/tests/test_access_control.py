@@ -46,9 +46,12 @@ PUBLIC = {
     ("get", "/api/v1/evaluation/metrics"),
     ("post", "/api/v1/auth/login"),
     ("post", "/api/v1/auth/signup"),
+    ("post", "/api/v1/telephony/events/{provider}"),
 }
 """Public on purpose: liveness, the language and metric catalogues (static
-reference data), and the two routes that exist to obtain a credential."""
+reference data), the two routes that exist to obtain a credential, and the
+telephony webhook, whose credential is the provider's signature over the
+body rather than a session (tested in test_telephony_calls.py)."""
 
 
 READ_ONLY_POSTS = {("post", "/api/v1/test-runs/{run_id}/audio-links")}
@@ -98,6 +101,7 @@ class TestEveryPrivateRouteNeedsACredential:
                          "workspace_id", "user_id", "project_id")
         }  # fmt: skip
         ids["turn_index"] = 0
+        ids["provider"] = "mock"
         refused = []
         for method, path in _operations(anonymous):
             if (method, path) in PUBLIC:
@@ -174,6 +178,7 @@ def world(
             "project_id": project.id,
             "user_id": owner.id,
             "turn_index": 1,
+            "provider": "mock",
         },
         "viewer": viewer,
         "member": member,
@@ -197,7 +202,7 @@ def _bodies(ids: dict[str, Any]) -> dict[tuple[str, str], Any]:
 
 def _addressed(operations: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """Operations whose path names a tenant resource."""
-    return [(m, p) for m, p in operations if "{" in p]
+    return [(m, p) for m, p in operations if "{" in p and (m, p) not in PUBLIC]
 
 
 class TestTenantIsolation:

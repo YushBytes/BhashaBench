@@ -82,19 +82,24 @@ against human labels).
 | Blob storage contract and local adapter; `.gitignore` anchored | `b32f5bf` | ✅ |
 | Full-conversation recording linked to turn artefacts | `519e40e` | ✅ |
 | Run deletion and the retention sweep | `a56b132` | ✅ |
-| Signed expiring audio links; `PIPELINE_SERVE_ARTEFACTS` retired; Phase 10 closed | this commit | see log |
+| Signed expiring audio links; `PIPELINE_SERVE_ARTEFACTS` retired; Phase 10 closed | `1541ab2` | see log |
 
 **Phase 10: complete** (local filesystem only; recordings assembled, not
 captured live; the sweep is not scheduled).
 
+| Phase 8 unit | Commit | CI |
+|------|--------|----|
+| Provider contract, guardrails, signed webhooks, mock provider | `6f5bf8c` | see log |
+| `telephony_calls` (migration `bcf146f6c696`), event handling, webhook and call listing | this commit | see log |
+
+**Phase 8: partial by rule** (no real call is authorised).
+
 ## Next task
 
-Phase 8: a telephony provider abstraction with a mocked provider only, and
-signed webhooks. Rules in CLAUDE.md: no real call and no paid number; only a
-provider's own event may set `DIALING`, `NO_ANSWER` or `BUSY`;
-`TELEPHONY_TEST` stays out of `IMPLEMENTED_MODES` unless telephony genuinely
-exists, so a mocked call is labelled mocked in its evidence. Phase 8 stays
-🟡 however much is built, because its exit criterion needs a real call.
+Phase 9: background execution of runs (a run started over HTTP keeps going
+when the request ends; today it executes inside the request), per-turn
+latency evidence measured rather than inferred, and recovery integrated
+with the background worker. In-process worker only; no paid queue.
 
 Deferred to Phase 14 part 2: rate limiting, security headers,
 dependency/secret scanning (dev-only `minimatch` and `picomatch` advisories

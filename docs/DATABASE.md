@@ -150,6 +150,16 @@ outlives the evidence it describes. Rows are stamped with `clock_timestamp()`
 rather than `now()`, which is fixed per transaction and would make two rows
 written together tie on "latest".
 
+### `telephony_calls` (Phase 8)
+
+One row per call attempt, cascading from its conversation (`call_sessions`).
+`(provider, provider_call_id)` is unique; `to_number_masked` must contain a
+`*` (the full number is never stored); `mocked` is fixed when the call is
+placed; `status` is the last provider status that advanced the call, and
+`events` keeps every event as received with whether it was applied. A table
+rather than JSONB on the conversation because the guardrails count calls in
+progress and sum today's minutes across all runs.
+
 ### `users`, `auth_sessions`, `workspaces`, `workspace_memberships`, `projects` (Phase 14)
 
 Identity and tenancy. `users.email` is unique and CHECK-constrained to lower
@@ -359,6 +369,7 @@ target whatever the application itself would connect to.
 | `6c64d84df105` | Index `test_runs.created_at` and GIN-index `test_runs.run_metadata` for the Phase 12 reporting queries |
 | `05f303520380` | Add `users`, `auth_sessions`, `workspaces`, `workspace_memberships` and `projects` (Phase 14) — five new tables, nothing existing touched |
 | `b588560f044d` | Add `test_suites.project_id` (NOT NULL, `ON DELETE RESTRICT`) and make suite names unique per project. Existing suites move to a member-less `legacy` workspace; downgrade refuses if two projects share a suite name |
+| `bcf146f6c696` | Add `telephony_calls` (Phase 8): one row per call attempt and its provider events; number stored masked (CHECK), cascades from its conversation |
 
 All four are reversible. The initial migration's `downgrade()` drops everything in
 reverse dependency order and is exercised on every test run, so it is

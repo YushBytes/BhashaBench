@@ -1080,9 +1080,9 @@ class TestNoNewTables:
         """Phase 7 reuses the Phase 2 schema, so there is no migration."""
         from sqlalchemy import inspect
 
-        # Phases 11 and 14 are the only phases since 2 to add tables, and they
-        # name them; anything else appearing would be an unannounced change.
-        announced = {"run_evaluations", "transcript_references"} | {
+        # Phases 8, 11 and 14 are the only phases since 2 to add tables, and
+        # they name them; anything else appearing would be an unannounced change.
+        announced = {"run_evaluations", "transcript_references", "telephony_calls"} | {
             "users",
             "auth_sessions",
             "workspaces",
