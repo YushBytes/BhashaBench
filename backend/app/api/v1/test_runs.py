@@ -100,7 +100,7 @@ from app.schemas.pipeline import (
     StageEventResponse,
 )
 from app.schemas.suite import Page
-from app.services import access_service
+from app.services import access_service, retention_service
 from app.services.errors import NotFoundError
 from app.services.transcription_service import TranscriptionService
 from app.speech.registry import build_provider as build_speech_provider
@@ -860,6 +860,30 @@ def _refuse_audio_where_disabled(settings: Settings, run_id: uuid.UUID) -> None:
             run_id=str(run_id),
             stage="artefact_access",
         )
+
+
+@router.delete(
+    "/{run_id}",
+    summary="Delete a finished run, its evidence and its audio (admin or owner)",
+    description=(
+        "Removes the run, its conversation, turns, evaluations and reviewed references, "
+        "then every stored audio file of the conversation, the full recording included. "
+        "The suite and scenario are untouched. 409 for a run still in flight (close it "
+        "with `bhashabench runs recover-stale`) and for the protected historical runs. "
+        "Not reversible. Files that could not be removed are listed, never hidden."
+    ),
+    responses={
+        status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
+        status.HTTP_409_CONFLICT: {"model": ErrorResponse},
+    },
+    dependencies=[RunAccess.DELETE],
+)
+def delete_run(run_id: uuid.UUID, session: DbSession, engine: ReadingEngineDep) -> dict[str, Any]:
+    # The engine's own store: the one the run's audio was written through. A
+    # second store built from settings could point elsewhere and report
+    # "0 files deleted" while the recordings stayed on disk.
+    return retention_service.delete_run(session, engine.artefact_store, run_id).as_dict()
 
 
 @router.get(

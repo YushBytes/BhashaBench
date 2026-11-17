@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2870 tests across 60 modules
+│   ├── tests/                 2884 tests across 61 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -751,10 +751,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2870 tests** across sixty modules.
-**2829 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2884 tests** across sixty-one modules.
+**2843 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2870) exceeds the number that run (2829):
+why the collected total (2884) exceeds the number that run (2843):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -767,6 +767,7 @@ why the collected total (2870) exceeds the number that run (2829):
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
+| `test_retention.py` | 14 | Phase 10 deletion and retention: deleting a finished run through the API removes its row, conversation, turns, evaluations and every audio file including the recording while the suite and scenario survive; a run in flight is 409; a member is 403 and an outsider 404; the protected historical runs are never deleted; and `runs purge` through the real CLI lists without changing anything by default, deletes only expired finished runs with `--apply`, falls back to `RETENTION_DAYS`, refuses to run without a period, accepts whole days only, and never lists the protected runs
 | `test_recording.py` | 8 | Phase 10 full-conversation recordings: turns concatenated in order with correct offsets across sample rates and channel counts, the degraded caller variant chosen as what was on the line, undecodable or missing turns excluded with a reason rather than filled with silence, no audio when nothing decodes; and through the API, a finished audio run storing a recording whose segments link to its turn artefacts and whose WAV duration matches the manifest, `not_applicable` for a run with no audio, 404 before a run finishes, and the recording removed with its conversation's artefacts
 | `test_storage.py` | 31 | Phase 10 blob storage: key validation (absolute, `..`, empty segments, backslash, NUL, length), the local adapter's round trip, overwrite, idempotent delete, prefix deletion that touches nothing else, atomic writes that leave neither a partial object nor a temporary file, a symlink out of the root refused (skipped on Windows, which needs elevation to create one; runs in CI), the registry and settings refusing a backend that does not exist, and the artefact store writing, reading and deleting a conversation through it
 | `test_access_control.py` | 26 | Phase 14 authorisation swept across the generated OpenAPI document: every operation outside the public allowlist 401 without a credential; on real suites, scenarios, runs, conversations and evaluations, every resource route 404 to an outsider (identical to a missing id), a viewer's reads matching the owner's and every write 403, members unable to delete; listings, aggregates and CSV export empty for an outsider and a foreign `suite_id` filter 404; runs and conversations unable to borrow another tenant's scenario; project inference for new suites; per-project suite names; project deletion refused while non-empty; the WebSocket handshake refused with 1008 without a credential or from a foreign origin; and the migration moving pre-tenancy suites into a member-less `legacy` workspace and rolling back without losing them
@@ -845,7 +846,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2829 passed, 41 skipped ================
+================ 2843 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -908,7 +909,7 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 
 ## API endpoints
 
-The API exposes **59 paths and 75 HTTP operations**, plus one WebSocket route
+The API exposes **59 paths and 76 HTTP operations**, plus one WebSocket route
 that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 60
 documented paths in total.
 
@@ -1004,6 +1005,7 @@ Every route below needs a session; a suite in a workspace you are not in is
 | `GET` | `/api/v1/test-runs/{id}/turns` | Every utterance of the run's conversation |
 | `GET` | `/api/v1/test-runs/{id}/artifacts` | Audio references and measured metadata. A degraded artefact names the original it came from |
 | `GET` | `/api/v1/test-runs/{id}/artifacts/{turn_index}/audio` | The stored audio for one turn (`?variant=original\|processed`), with single-range `bytes=` support so a player can seek. Staging and production refuse with **403** unless `PIPELINE_SERVE_ARTEFACTS` is set - 403 and not 404, because the recording exists and the environment declines. It claims no authorisation: a run id is an identifier, not a credential |
+| `DELETE` | `/api/v1/test-runs/{id}` | Deletes a finished run, its evidence and every stored audio file (admin or owner). 409 while in flight or for a protected historical run. Not reversible |
 | `GET` | `/api/v1/test-runs/{id}/recording` | The full-conversation recording's manifest: status, duration, and each segment linked to its turn artefact. Assembled after the run, no silence inserted. See [docs/STORAGE.md](docs/STORAGE.md) |
 | `GET` | `/api/v1/test-runs/{id}/recording/audio` | The recording itself, 16-bit mono WAV, with `Range` support. Same access rules as turn audio |
 | `GET` | `/api/v1/test-runs/{id}/report` | Full evidence: state, artefacts, caller state transitions and every stage with its measured duration. Measurements, not scores |

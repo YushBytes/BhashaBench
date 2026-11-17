@@ -57,3 +57,31 @@ records a manifest in the run's metadata (`app/pipeline/recording.py`):
 finishes); `GET /test-runs/{id}/recording/audio` streams it, with the same
 access and environment rules as per-turn audio. It lives under the
 conversation's prefix, so deleting the conversation's artefacts deletes it.
+
+## Deletion and retention
+
+`app/services/retention_service.py`. Deleting a run removes the run row and,
+by `ON DELETE CASCADE`, its conversations, turns, evaluations and reviewed
+references; then every stored audio file of its conversations, the recording
+included. The suite and its scenarios are untouched.
+
+- **Only finished runs.** A run still in flight is refused (409); close a
+  stuck one with `bhashabench runs recover-stale` first.
+- **Never the protected historical runs**, by request or by retention.
+- **Rows first, then files.** The database delete commits before any file
+  is removed, so a failure leaves orphaned audio (removed by a re-run)
+  rather than a run whose evidence is gone. Files that could not be removed
+  are listed in the response, never hidden.
+- **The engine's own store.** The API deletes through the store the run's
+  audio was written through.
+
+| How | Who | What |
+|-----|-----|------|
+| `DELETE /api/v1/test-runs/{id}` | `admin` or `owner` of the run's workspace | One run. Not reversible |
+| `bhashabench runs purge [--older-than 30d] [--apply]` | Whoever holds database credentials | Every finished run that finished longer ago than the period. Dry run unless `--apply` |
+
+**Retention is off by default.** `RETENTION_DAYS` unset keeps everything;
+the sweep needs a period (the setting or `--older-than`, whole days) *and*
+`--apply` before it deletes anything. There is no timer: scheduling the
+sweep (cron, a platform job) is a deployment decision, documented in the
+deployment plan.

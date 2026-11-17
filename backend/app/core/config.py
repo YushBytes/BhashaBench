@@ -596,6 +596,17 @@ class Settings(BaseSettings):
             "own audio profile takes precedence."
         ),
     )
+    retention_days: int | None = Field(
+        default=None,
+        ge=1,
+        le=36500,
+        description=(
+            "Delete finished runs, their evidence and their audio this many days "
+            "after they finished, when `bhashabench runs purge --apply` runs. "
+            "Unset keeps everything: no deletion happens without both this and "
+            "an explicit --apply."
+        ),
+    )
     storage_backend: str = Field(
         default="local",
         description=(
@@ -732,6 +743,11 @@ class Settings(BaseSettings):
                 'python -c "import secrets; print(secrets.token_urlsafe(48))"'
             )
         return self
+
+    @field_validator("retention_days", mode="before")
+    @classmethod
+    def _blank_retention_is_unset(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
 
     @field_validator("storage_backend", mode="before")
     @classmethod

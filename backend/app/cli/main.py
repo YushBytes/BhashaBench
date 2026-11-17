@@ -21,6 +21,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from typer.core import TyperGroup
 
+from app.caller.artefacts import AudioArtefactStore
 from app.cli.output import (
     ExitCode,
     configure_streams,
@@ -38,7 +39,7 @@ from app.db.session import session_scope
 from app.models.identity import Role
 from app.pipeline import recovery
 from app.schemas.scenario_spec import SPEC_VERSION, ScenarioSpec
-from app.services import auth_service, scenario_service, suite_service
+from app.services import auth_service, retention_service, scenario_service, suite_service
 from app.services.bundle import BUNDLE_FORMAT, parse_bundle
 from app.services.errors import ConflictError, InvalidRequestError, NotFoundError
 from app.services.scenario_loader import ScenarioLoadError, spec_from_yaml, spec_to_yaml
@@ -671,6 +672,90 @@ def _parse_duration(value: str) -> timedelta:
         )
         raise AssertionError("unreachable")  # pragma: no cover
     return timedelta(seconds=int(match.group(1)) * _UNIT_SECONDS[match.group(2)])
+
+
+@runs_app.command("purge")
+def runs_purge(
+    older_than: Annotated[
+        str | None,
+        typer.Option(
+            "--older-than",
+            help="Delete runs finished longer ago than this, e.g. 30d. "
+            "Defaults to RETENTION_DAYS; whole days only.",
+        ),
+    ] = None,
+    apply: Annotated[
+        bool,
+        typer.Option("--apply", help="Delete the runs listed. Without it nothing changes."),
+    ] = False,
+    as_json: JsonFlag = False,
+) -> None:
+    """List finished runs past the retention period; delete them with --apply.
+
+    A dry run by default. With --apply each listed run is deleted with its
+    conversation, turns, evaluations, references and every stored audio file.
+    Runs still in flight are never listed, nor are the two protected
+    historical runs. Not reversible.
+    """
+    settings = get_settings()
+    if older_than is not None:
+        threshold = _parse_duration(older_than)
+        days = threshold.days
+        if days < 1 or threshold != timedelta(days=days):
+            fail("--older-than must be a whole number of days, at least 1d", ExitCode.INVALID_INPUT)
+    elif settings.retention_days is not None:
+        days = settings.retention_days
+    else:
+        fail(
+            "no retention period: set RETENTION_DAYS or pass --older-than. "
+            "Nothing is deleted without one.",
+            ExitCode.INVALID_INPUT,
+        )
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    now = utc_now()
+    store = AudioArtefactStore(blobs=settings.artefact_store_blobs())
+    with _session() as session:
+        expired, deleted = retention_service.purge(
+            session, store, retention_days=days, now=now, apply=apply
+        )
+        if not apply and (session.new or session.dirty or session.deleted):
+            raise RuntimeError("purge dry run attempted to modify the database")
+
+    rows = [
+        {
+            "run_id": str(e.run_id),
+            "suite_id": str(e.suite_id),
+            "finished_at": e.finished_at.isoformat(),
+        }
+        for e in expired
+    ]
+    if as_json:
+        emit_json(
+            {
+                "applied": apply,
+                "retention_days": days,
+                "runs": rows,
+                "deleted": [d.as_dict() for d in deleted],
+            }
+        )
+        return
+    if not rows:
+        typer.echo(f"no finished run is older than {days} day(s)")
+        return
+    for row in rows:
+        typer.echo(f"{row['run_id']}  finished {row['finished_at']}")
+    if apply:
+        files = sum(d.files_deleted for d in deleted)
+        stuck = sum(len(d.files_not_deleted) for d in deleted)
+        typer.echo(f"deleted {len(deleted)} run(s) and {files} audio file(s)")
+        if stuck:
+            typer.echo(f"WARNING: audio for {stuck} conversation(s) could not be removed", err=True)
+    else:
+        typer.echo(
+            f"DRY RUN: {len(rows)} run(s) would be deleted. "
+            "Nothing was changed; re-run with --apply."
+        )
 
 
 @runs_app.command("recover-stale")

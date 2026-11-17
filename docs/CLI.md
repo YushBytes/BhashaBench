@@ -336,6 +336,22 @@ There is deliberately no automatic sweeper: deciding a run is dead rather
 than slow is a judgement, made explicitly and dry-run first. `--json` reports
 `applied`, the threshold and the runs.
 
+### `runs purge`
+
+```bash
+bhashabench runs purge --older-than 30d          # dry run: list only
+bhashabench runs purge --older-than 30d --apply  # delete them
+bhashabench runs purge --apply                   # uses RETENTION_DAYS
+```
+
+Lists finished runs that finished longer ago than the period; with
+`--apply` deletes each with its conversation, turns, evaluations, references
+and every stored audio file. Runs in flight and the two protected historical
+runs are never listed. The period is whole days; without `--older-than` it
+is `RETENTION_DAYS`, and with neither the command exits 2 and deletes
+nothing. `--json` reports `applied`, `retention_days`, the runs, and per
+deleted run the files removed and any that could not be. Not reversible.
+
 ## Users
 
 ### `users create`
