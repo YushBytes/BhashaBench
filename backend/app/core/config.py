@@ -615,17 +615,6 @@ class Settings(BaseSettings):
             "unknown value fails at startup rather than silently writing locally."
         ),
     )
-    pipeline_serve_artefacts: bool = Field(
-        default=False,
-        description=(
-            "Whether a deployed environment may stream stored conversation "
-            "audio over the API. Development always may; staging and "
-            "production refuse unless this is turned on. The route requires "
-            "the viewer role in the run's workspace; this flag is a second "
-            "layer until signed, expiring URLs and retention exist (Phase 10), "
-            "so serving recordings from a reachable host stays a deliberate act."
-        ),
-    )
 
     @field_validator("caller_provider", mode="before")
     @classmethod

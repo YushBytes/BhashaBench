@@ -709,6 +709,7 @@ class TestOpenApiSurface:
             # Phase 10: the full-conversation recording.
             "/api/v1/test-runs/{run_id}/recording",
             "/api/v1/test-runs/{run_id}/recording/audio",
+            "/api/v1/test-runs/{run_id}/audio-links",
         }
 
     def test_scenario_spec_schema_is_published(self, client: TestClient) -> None:

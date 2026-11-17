@@ -85,3 +85,23 @@ the sweep needs a period (the setting or `--older-than`, whole days) *and*
 `--apply` before it deletes anything. There is no timer: scheduling the
 sweep (cron, a platform job) is a deployment decision, documented in the
 deployment plan.
+
+## Signed, expiring links
+
+`POST /test-runs/{id}/audio-links` (viewer or above) returns a URL that opens
+exactly one file - one turn's audio in one variant, or the recording - with
+no session, for 1 second to 15 minutes (default 5). `app/auth/signing.py`:
+
+- HMAC-SHA256 over `v1 | path | variant | expires | user`, keyed by a value
+  derived from `SECRET_KEY` with a fixed label. Changing any part - the
+  turn, the variant, the expiry, the user - breaks it.
+- The link names its minter, and their access to the run is checked again
+  on every use: removing them from the workspace, or deactivating them,
+  revokes their links. Rotating `SECRET_KEY` revokes all links.
+- A link claiming a lifetime longer than 15 minutes is refused even with a
+  valid signature.
+
+With authorisation and links in place, `PIPELINE_SERVE_ARTEFACTS` - the
+switch that kept audio off in staging and production while the API had no
+authorisation - is retired. Audio is served to whoever may see the run, in
+every environment, and to nobody else.

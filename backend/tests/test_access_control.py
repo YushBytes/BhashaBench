@@ -51,6 +51,11 @@ PUBLIC = {
 reference data), and the two routes that exist to obtain a credential."""
 
 
+READ_ONLY_POSTS = {("post", "/api/v1/test-runs/{run_id}/audio-links")}
+"""POSTs that need only `view` and change nothing: minting a signed link to
+audio the caller can already play. Compared against the owner like a GET."""
+
+
 def _operations(client: TestClient) -> list[tuple[str, str]]:
     schema = client.app.openapi()  # type: ignore[attr-defined]
     methods = {"get", "post", "put", "patch", "delete"}
@@ -226,7 +231,7 @@ class TestTenantIsolation:
         for method, path in _addressed(_operations(client)):
             url, body = _fill(path, ids), bodies.get((method, path), {})
             status = _call(client, method, url, viewer.headers, body)
-            if method == "get":
+            if method == "get" or (method, path) in READ_ONLY_POSTS:
                 owner_status = _call(client, method, url, {}, body)
                 if status != owner_status:
                     wrong.append((method, path, status, owner_status))

@@ -434,10 +434,11 @@ under three constraints:
   two-value enum. The stored reference is looked up in the run's own record,
   and the store refuses anything resolving outside its root besides. There is
   no request field a path could travel in.
-- **The route is off where it would be reachable.** Staging and production
-  refuse with 403 unless `PIPELINE_SERVE_ARTEFACTS=true`, because this payload
-  is a recording rather than a status field. Development serves it: the
-  operator is the only listener.
+- **It is authorised (Phase 14), and the environment switch is retired
+  (Phase 10).** The route needs the viewer role in the run's workspace or a
+  signed expiring link (STORAGE.md). `PIPELINE_SERVE_ARTEFACTS`, which kept
+  it off in staging and production while there was no authorisation, no
+  longer exists.
 - **It claims no authorisation.** A run id is an identifier, not a credential,
   and this route is exactly as open as every other one. Real access control
   arrives with authentication in Phase 15. A 403 here says *this environment
@@ -709,7 +710,7 @@ curl -s     $B/$RUN/report      | python -m json.tool
 
 | Code | When |
 |------|------|
-| 403 | This environment does not stream stored audio (see `PIPELINE_SERVE_ARTEFACTS`) |
+| 401 / 403 / 404 | No session or valid link / a role too low / not visible to the caller |
 | 404 | No such run or scenario, or no artefact for that turn and variant |
 | 409 | The run has already finished, or is not ready for this request |
 | 503 | Every concurrent-run slot is in use. The run is untouched; retry it |
@@ -727,7 +728,6 @@ curl -s     $B/$RUN/report      | python -m json.tool
 | `PIPELINE_BOT_ADAPTER` | `scripted` | Default adapter. Both options send audio nowhere |
 | `PIPELINE_FIXTURE_BOT_TEXT_PATH` | _unset_ | UTF-8 file of bot replies, one per line, that the `scripted` adapter uses in `offline_simulation`, in order and repeated. Unset, an offline scripted run fails on its first bot turn with an error naming the setting |
 | `PIPELINE_FIXTURE_AUDIO_PATH` | _unset_ | WAV the `scripted` adapter replays per turn. Unset keeps the turn-0 failure; set, it is what lets `audio_fixture_test` complete. The reply is still not claimed as bot audio |
-| `PIPELINE_SERVE_ARTEFACTS` | `false` | Lets a *deployed* environment stream stored audio. Development always does |
 | `PIPELINE_RUN_TIMEOUT_SECONDS` | `600.0` | Wall-clock ceiling on one run |
 | `PIPELINE_MAX_CONCURRENT_RUNS` | `2` | Bounds provider spend and memory. Enforced: `POST /start` answers 503 beyond it |
 | `PIPELINE_NOISE_SEED` | `42` | Fixed so a run is reproducible by default |

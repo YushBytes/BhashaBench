@@ -37,14 +37,17 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Iterator
+from datetime import timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Header, Path, Query, UploadFile, status
 from fastapi.responses import Response
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from app.api.access import Authenticated, RunAccess
+from app.api.access import Authenticated, RunAccess, RunAudioAccess
 from app.api.deps import CurrentPrincipal, DbSession, PaginationParams, SettingsDep
+from app.auth import signing
 from app.auth.permissions import Permission
 from app.caller.artefacts import AudioArtefactStore
 from app.caller.errors import CallerError
@@ -52,7 +55,6 @@ from app.caller.orchestrator import ConversationOrchestrator
 from app.caller.registry import build_provider as build_caller_provider
 from app.caller.schemas import Speaker
 from app.caller.service import CallerService
-from app.core.config import AppEnv, Settings
 from app.models.test_run import RunStatus, TestRun
 from app.pipeline.bots.registry import (
     HTTP_ADAPTER,
@@ -73,7 +75,7 @@ from app.pipeline.engine import (
     RunEngine,
     RunReport,
 )
-from app.pipeline.errors import ArtefactAccessDisabledError, PipelineConfigurationError
+from app.pipeline.errors import PipelineConfigurationError
 from app.pipeline.modes import (
     IMPLEMENTED_MODES,
     ExecutionMode,
@@ -107,6 +109,7 @@ from app.speech.registry import build_provider as build_speech_provider
 from app.speech.service import SpeechService
 from app.transcription.errors import AudioTooLargeError
 from app.transcription.registry import build_provider as build_transcription_provider
+from app.utils.timing import utc_now
 
 router = APIRouter(prefix="/test-runs", tags=["test-runs"])
 
@@ -806,7 +809,7 @@ def read_artefacts(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunArtefactsR
             "description": "The requested range lies outside the file."
         },
     },
-    dependencies=[RunAccess.VIEW],
+    dependencies=[RunAudioAccess],
 )
 def read_artefact_audio(
     run_id: uuid.UUID,
@@ -824,7 +827,6 @@ def read_artefact_audio(
     range_header: Annotated[str | None, Header(alias="Range")] = None,
 ) -> Response:
     """Stream one artefact's bytes, resolved from the run's own record."""
-    _refuse_audio_where_disabled(settings, run_id)
 
     report = engine.report(run_id)
     record = next(
@@ -850,18 +852,6 @@ def read_artefact_audio(
     return _audio_response(payload, record.content_type, range_header)
 
 
-def _refuse_audio_where_disabled(settings: Settings, run_id: uuid.UUID) -> None:
-    if settings.app_env in (AppEnv.STAGING, AppEnv.PRODUCTION) and not (
-        settings.pipeline_serve_artefacts
-    ):
-        raise ArtefactAccessDisabledError(
-            "this environment does not stream stored conversation audio "
-            "unless PIPELINE_SERVE_ARTEFACTS is set",
-            run_id=str(run_id),
-            stage="artefact_access",
-        )
-
-
 @router.delete(
     "/{run_id}",
     summary="Delete a finished run, its evidence and its audio (admin or owner)",
@@ -884,6 +874,60 @@ def delete_run(run_id: uuid.UUID, session: DbSession, engine: ReadingEngineDep) 
     # second store built from settings could point elsewhere and report
     # "0 files deleted" while the recordings stayed on disk.
     return retention_service.delete_run(session, engine.artefact_store, run_id).as_dict()
+
+
+class AudioLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    turn_index: int | None = Field(
+        default=None, ge=0, description="The turn whose audio to open; omit for the recording."
+    )
+    variant: Literal["original", "degraded"] | None = None
+    ttl_seconds: int = Field(default=300, ge=1, le=900)
+
+
+@router.post(
+    "/{run_id}/audio-links",
+    summary="Mint a signed, expiring link to one stored recording",
+    description=(
+        "Returns a URL that opens exactly one audio file - one turn's (and variant's) or "
+        "the full recording - without a session, for at most 15 minutes. The link names "
+        "its minter, whose access is checked again on every use, so removing them from "
+        "the workspace revokes it; rotating SECRET_KEY revokes every link. 404 when the "
+        "run has no such audio."
+    ),
+    responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse}},
+    dependencies=[RunAccess.VIEW],
+)
+def mint_audio_link(
+    run_id: uuid.UUID,
+    body: AudioLinkRequest,
+    principal: CurrentPrincipal,
+    session: DbSession,
+    engine: ReadingEngineDep,
+    settings: SettingsDep,
+) -> dict[str, Any]:
+    prefix = f"{settings.api_v1_prefix}/test-runs/{run_id}"
+    if body.turn_index is None:
+        if _recording_of(session, run_id).get("status") != "stored":
+            raise NotFoundError("a stored recording for run", run_id)
+        path, variant = f"{prefix}/recording/audio", None
+    else:
+        report = engine.report(run_id)
+        if not any(
+            a.turn_index == body.turn_index and a.variant == body.variant for a in report.artefacts
+        ):
+            raise NotFoundError(f"stored audio for turn {body.turn_index} of run", run_id)
+        path, variant = f"{prefix}/artifacts/{body.turn_index}/audio", body.variant
+    query, expires_at = signing.mint(
+        settings.secret_key,
+        path=path,
+        variant=variant,
+        user_id=principal.user_id,
+        now=utc_now(),
+        ttl=timedelta(seconds=body.ttl_seconds),
+    )
+    return {"url": f"{path}?{query}", "expires_at": expires_at.isoformat()}
 
 
 @router.get(
@@ -928,7 +972,7 @@ def _recording_of(session: Session, run_id: uuid.UUID) -> dict[str, Any]:
         status.HTTP_403_FORBIDDEN: {"model": ErrorResponse},
         status.HTTP_404_NOT_FOUND: {"model": ErrorResponse},
     },
-    dependencies=[RunAccess.VIEW],
+    dependencies=[RunAudioAccess],
 )
 def read_recording_audio(
     run_id: uuid.UUID,
@@ -937,7 +981,6 @@ def read_recording_audio(
     settings: SettingsDep,
     range_header: Annotated[str | None, Header(alias="Range")] = None,
 ) -> Response:
-    _refuse_audio_where_disabled(settings, run_id)
     recording = _recording_of(session, run_id)
     if recording.get("status") != "stored":
         raise NotFoundError("a stored recording for run", run_id)

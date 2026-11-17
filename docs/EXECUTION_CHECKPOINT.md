@@ -77,33 +77,28 @@ against human labels).
 
 **Phase 12: complete** (signed artefact URLs moved to Phase 10; no PDF).
 
-## Next task
-
-Phase 14 (part 1), in progress. Design and rules: `docs/AUTH.md`.
-
-| Phase 14.1 unit | Commit | CI |
+| Phase 10 unit | Commit | CI |
 |------|--------|----|
-| Identity schema, scrypt, tokens, role matrix (migration `05f303520380`) | `daa9cde` | ✅ 44091545141 |
-| Login, logout, sessions, CSRF origin check, `users create` | `7a7c365` | ✅ 44093406640 |
-| Workspaces, projects, members API and the authorisation service | `e11727b` | ✅ 44130395203 |
-| `project_id` on suites (migration `b588560f044d`, legacy backfill) and every route scoped; OpenAPI-driven isolation sweep | `6bdc373` | ✅ 44139339659 |
-| Next.js 16.4.3 -> 16.4.6 (GHSA-mfr8-8qww-v76h, GHSA-vc7v-qv4w-wrv8) | `3d25f7e` | ✅ |
-| Frontend sign-in through a same-origin proxy; Compose `BACKEND_URL` fix | `6a75a4f` | see log |
+| Blob storage contract and local adapter; `.gitignore` anchored | `b32f5bf` | ✅ |
+| Full-conversation recording linked to turn artefacts | `519e40e` | ✅ |
+| Run deletion and the retention sweep | `a56b132` | ✅ |
+| Signed expiring audio links; `PIPELINE_SERVE_ARTEFACTS` retired; Phase 10 closed | this commit | see log |
 
-**Phase 14 part 1: complete.** Verified end to end through the frontend proxy
-against the running backend.
+**Phase 10: complete** (local filesystem only; recordings assembled, not
+captured live; the sweep is not scheduled).
 
 ## Next task
 
-Phase 10: a storage abstraction for artefacts (local filesystem adapter
-first; no paid bucket), full-conversation recordings linked to the per-turn
-artefacts, a retention period enforced by a dry-run-first sweep, tested
-deletion, and signed, expiring artefact URLs (moved here from Phase 12) so
-`PIPELINE_SERVE_ARTEFACTS` can be retired.
+Phase 8: a telephony provider abstraction with a mocked provider only, and
+signed webhooks. Rules in CLAUDE.md: no real call and no paid number; only a
+provider's own event may set `DIALING`, `NO_ANSWER` or `BUSY`;
+`TELEPHONY_TEST` stays out of `IMPLEMENTED_MODES` unless telephony genuinely
+exists, so a mocked call is labelled mocked in its evidence. Phase 8 stays
+🟡 however much is built, because its exit criterion needs a real call.
 
-Deferred to Phase 14 part 2: per-client rate limiting, security headers,
+Deferred to Phase 14 part 2: rate limiting, security headers,
 dependency/secret scanning (dev-only `minimatch` and `picomatch` advisories
-are open), and the regression gate.
+open), and the regression gate.
 
 ## Outstanding issues
 

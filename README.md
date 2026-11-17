@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2884 tests across 61 modules
+│   ├── tests/                 2900 tests across 62 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -751,10 +751,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2884 tests** across sixty-one modules.
-**2843 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2900 tests** across sixty-two modules.
+**2859 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2884) exceeds the number that run (2843):
+why the collected total (2900) exceeds the number that run (2859):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -767,6 +767,7 @@ why the collected total (2884) exceeds the number that run (2843):
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
+| `test_signed_links.py` | 18 | Phase 10 signed audio links: the HMAC primitive verifying a fresh link and refusing any edit to variant, expiry, user or signature, another path, expiry, a rotated secret, an over-long lifetime and malformed values; and through the API, a link opening one turn's audio or the recording with no session, refusing to be pointed at another turn or tampered with, revoked when its minter leaves the workspace, unmintable by an outsider or for audio that does not exist, and capped at fifteen minutes
 | `test_retention.py` | 14 | Phase 10 deletion and retention: deleting a finished run through the API removes its row, conversation, turns, evaluations and every audio file including the recording while the suite and scenario survive; a run in flight is 409; a member is 403 and an outsider 404; the protected historical runs are never deleted; and `runs purge` through the real CLI lists without changing anything by default, deletes only expired finished runs with `--apply`, falls back to `RETENTION_DAYS`, refuses to run without a period, accepts whole days only, and never lists the protected runs
 | `test_recording.py` | 8 | Phase 10 full-conversation recordings: turns concatenated in order with correct offsets across sample rates and channel counts, the degraded caller variant chosen as what was on the line, undecodable or missing turns excluded with a reason rather than filled with silence, no audio when nothing decodes; and through the API, a finished audio run storing a recording whose segments link to its turn artefacts and whose WAV duration matches the manifest, `not_applicable` for a run with no audio, 404 before a run finishes, and the recording removed with its conversation's artefacts
 | `test_storage.py` | 31 | Phase 10 blob storage: key validation (absolute, `..`, empty segments, backslash, NUL, length), the local adapter's round trip, overwrite, idempotent delete, prefix deletion that touches nothing else, atomic writes that leave neither a partial object nor a temporary file, a symlink out of the root refused (skipped on Windows, which needs elevation to create one; runs in CI), the registry and settings refusing a backend that does not exist, and the artefact store writing, reading and deleting a conversation through it
@@ -808,7 +809,7 @@ why the collected total (2884) exceeds the number that run (2843):
 | `test_pipeline_http_bot.py` | 31 | The HTTP text bot adapter over real localhost sockets: a whole conversation with the reference bot, wrong credentials, concurrent sessions, bounded and idempotent retries, malformed and oversized replies, timeouts, redirects not followed, path-segment escaping, unreachable and disallowed hosts, SSRF and rebinding refusals, and that the token reaches no log or error |
 | `test_pipeline_text_bot.py` | 12 | `text_bot_test` end to end against real PostgreSQL and the reference bot on a real socket: a goal-achieving conversation, per-turn provenance, unreachable and credential-refused bots, a bot that hangs up early, mode/adapter mismatches refused, and the same run through the real API with no engine override |
 | `test_pipeline_engine.py` | 72 | Multi-turn audio runs against real PostgreSQL: the full workflow, every failure path, cancellation, the manual flow, reproducibility, declared scenario audio measured from the stored bytes (achieved SNR, realised packet loss, operator precedence), and settings declared but not enforced |
-| `test_pipeline_api.py` | 113 | The twelve test-run operations, plus the run's recorded bot adapter honoured on every route and offline simulation reaching a terminal state (text fixture, manual `/bot-text`): creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, the 503 at the concurrency limit, OpenAPI, plus the Phase 8 run listing (filters, pagination window, ILIKE wildcard escape, caller-only exclusion) and artefact audio (range handling, traversal through the turn index, per-environment access) |
+| `test_pipeline_api.py` | 111 | The test-run operations, plus the run's recorded bot adapter honoured on every route and offline simulation reaching a terminal state (text fixture, manual `/bot-text`): creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, the 503 at the concurrency limit, OpenAPI, plus the Phase 8 run listing (filters, pagination window, ILIKE wildcard escape, caller-only exclusion) and artefact audio (range handling, traversal through the turn index, served to an authorised viewer in every environment and refused without a credential) |
 | `test_pipeline_fixture_audio.py` | 9 | The fixture audio an API-started scripted run replays: the file read and repeated per turn, a missing/empty/directory path refused, the real engine factory wiring it to the scripted adapter, the reply still marked as not received from a bot, and the unset setting leaving the turn-0 failure intact |
 | `test_pipeline_concurrency.py` | 41 | The admission limiter: the configured maximum is never exceeded, capacity frees up for the next run, and exceptions, cancellation and timeouts all release it |
 | `test_pipeline_conditions.py` | 33 | Jitter, dropouts, truncation, silence padding and measured gain, each alone and combined: achieved values measured from the bytes, shortfalls noted, seeded reproducibility, range validation, fixed order, and the original never modified |
@@ -846,7 +847,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2843 passed, 41 skipped ================
+================ 2859 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -909,8 +910,8 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 
 ## API endpoints
 
-The API exposes **59 paths and 76 HTTP operations**, plus one WebSocket route
-that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 60
+The API exposes **60 paths and 77 HTTP operations**, plus one WebSocket route
+that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 61
 documented paths in total.
 
 Those figures come from the generated OpenAPI document, never from a hand
@@ -1004,7 +1005,8 @@ Every route below needs a session; a suite in a workspace you are not in is
 | `GET` | `/api/v1/test-runs/{id}` | State, counters and outcome |
 | `GET` | `/api/v1/test-runs/{id}/turns` | Every utterance of the run's conversation |
 | `GET` | `/api/v1/test-runs/{id}/artifacts` | Audio references and measured metadata. A degraded artefact names the original it came from |
-| `GET` | `/api/v1/test-runs/{id}/artifacts/{turn_index}/audio` | The stored audio for one turn (`?variant=original\|processed`), with single-range `bytes=` support so a player can seek. Staging and production refuse with **403** unless `PIPELINE_SERVE_ARTEFACTS` is set - 403 and not 404, because the recording exists and the environment declines. It claims no authorisation: a run id is an identifier, not a credential |
+| `GET` | `/api/v1/test-runs/{id}/artifacts/{turn_index}/audio` | The stored audio for one turn (`?variant=original\|processed`), with single-range `bytes=` support so a player can seek. Needs the viewer role in the run's workspace, or a signed link from `POST .../audio-links` |
+| `POST` | `/api/v1/test-runs/{id}/audio-links` | A signed link, valid at most 15 minutes, that opens one turn's audio (or the recording) without a session. Bound to that file and to its minter, whose access is re-checked on every use. See [docs/STORAGE.md](docs/STORAGE.md) |
 | `DELETE` | `/api/v1/test-runs/{id}` | Deletes a finished run, its evidence and every stored audio file (admin or owner). 409 while in flight or for a protected historical run. Not reversible |
 | `GET` | `/api/v1/test-runs/{id}/recording` | The full-conversation recording's manifest: status, duration, and each segment linked to its turn artefact. Assembled after the run, no silence inserted. See [docs/STORAGE.md](docs/STORAGE.md) |
 | `GET` | `/api/v1/test-runs/{id}/recording/audio` | The recording itself, 16-bit mono WAV, with `Range` support. Same access rules as turn audio |
@@ -1097,7 +1099,7 @@ documentation. Full detail in
 | 7 | Audio degradation engine | ✅ Complete (synthetic noise; no recorded noise beds) |
 | 8 | Telephony integration | ⬜ Not started |
 | 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
-| 10 | Recording & transcription | 🟡 Partial — per-turn artefacts only |
+| 10 | Recording & transcription | ✅ Complete (local filesystem storage; recordings assembled from turn audio, not captured live) |
 | 11 | Evaluation & judge engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & analytics backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend dashboard | 🟡 Partial — operator workspace with sign-in, no analytics |

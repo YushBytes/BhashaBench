@@ -61,7 +61,7 @@ keep the numbering they were written in. Use this table to translate.
 | 7 | Audio Degradation Engine | ✅ Complete (synthetic noise; no recorded noise beds) |
 | 8 | Telephony Integration | ⬜ Not started |
 | 9 | Real-Time Conversation Engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
-| 10 | Recording & Transcription | 🟡 Partial — per-turn artefacts only |
+| 10 | Recording & Transcription | ✅ Complete (local filesystem storage; recordings assembled from turn audio, not captured live) |
 | 11 | Evaluation & Judge Engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & Analytics Backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend Dashboard | 🟡 Partial — operator workspace with sign-in, no analytics |
@@ -738,14 +738,24 @@ crashed or cancelled run reaches a terminal state on its own.
 
 ---
 
-## Phase 10 — Recording & Transcription 🟡
+## Phase 10 — Recording & Transcription ✅
 
-Delivered: per-turn original and degraded audio with provenance, per-turn
-transcripts, and the three failure modes kept distinct (Part A).
+**Complete on 2026-11-17** against its exit criteria: every terminal run
+stores a full-conversation recording whose segments link to the per-turn
+artefacts (`GET /test-runs/{id}/recording`), and a retention period is
+enforced by `bhashabench runs purge`, with deletion of runs, evidence and
+audio tested through the API and the CLI. Also delivered: a `BlobStore`
+contract with a local filesystem adapter, signed expiring audio links
+(moved here from Phase 12), and the retirement of `PIPELINE_SERVE_ARTEFACTS`.
+Earlier parts: per-turn original and degraded audio with provenance,
+per-turn transcripts, the three failure modes kept distinct; transcript
+export shipped with Phase 12. Design: `docs/STORAGE.md`.
 
-Remaining: full-conversation recording, retention periods and deletion,
-and artefacts served with signed, expiring URLs (moved from Phase 12).
-Transcript export shipped with Phase 12 (`GET /test-runs/{id}/export`).
+**Not delivered, and not claimed:** object storage (no paid bucket is
+authorised; `STORAGE_BACKEND` accepts `local` only), a recording captured
+live off a line (the recording is assembled after the run, without the
+inter-turn gaps), and a scheduled retention sweep (the sweep runs when
+invoked; scheduling it belongs to the deployment).
 
 **Exit criteria.** Full-conversation and per-turn audio stored and linked;
 a retention period enforced and deletion tested.

@@ -1296,13 +1296,13 @@ class TestArtefactAudio:
         assert root not in response.text
 
 
-class TestArtefactAccessGuard:
-    """Where the artefact route is switched off, and why.
+class TestArtefactAccessInDeployedEnvironments:
+    """Phase 10 retired `PIPELINE_SERVE_ARTEFACTS`.
 
-    The route is authorised (viewer role in the run's workspace); this gate
-    is the second layer for deployed environments until Phase 10's signed,
-    expiring URLs and retention exist. Development serves it; a deployed
-    environment has to say so deliberately.
+    The gate existed because the route had no authorisation. It has one now -
+    the viewer role in the run's workspace, or a signed expiring link - so a
+    deployed environment serves audio to whoever may see the run, and to
+    nobody else, without a separate switch.
     """
 
     @pytest.fixture
@@ -1325,59 +1325,26 @@ class TestArtefactAccessGuard:
         updated = base.model_copy(update=updates)
         test_app.dependency_overrides[get_settings] = lambda: updated
 
-    def test_development_serves_audio(
-        self, pipeline_client: TestClient, test_app: FastAPI, executed: str
-    ) -> None:
-        self._with_env(test_app, app_env=AppEnv.DEVELOPMENT)
-        response = pipeline_client.get(
-            f"{BASE}/{executed}/artifacts/0/audio", params={"variant": "original"}
-        )
-        assert response.status_code == 200
-
-    @pytest.mark.parametrize("env", [AppEnv.PRODUCTION, AppEnv.STAGING])
-    def test_a_deployed_environment_refuses_by_default(
+    @pytest.mark.parametrize("env", [AppEnv.DEVELOPMENT, AppEnv.STAGING, AppEnv.PRODUCTION])
+    def test_an_authorised_viewer_is_served_everywhere(
         self, pipeline_client: TestClient, test_app: FastAPI, executed: str, env: AppEnv
     ) -> None:
-        self._with_env(test_app, app_env=env, pipeline_serve_artefacts=False)
-        response = pipeline_client.get(
-            f"{BASE}/{executed}/artifacts/0/audio", params={"variant": "original"}
-        )
-        assert response.status_code == 403
-
-    def test_the_refusal_explains_itself(
-        self, pipeline_client: TestClient, test_app: FastAPI, executed: str
-    ) -> None:
-        self._with_env(test_app, app_env=AppEnv.PRODUCTION, pipeline_serve_artefacts=False)
-        body = pipeline_client.get(
-            f"{BASE}/{executed}/artifacts/0/audio", params={"variant": "original"}
-        ).json()
-        assert "PIPELINE_SERVE_ARTEFACTS" in body["error"]["message"]
-
-    def test_a_deployed_environment_may_opt_in(
-        self, pipeline_client: TestClient, test_app: FastAPI, executed: str
-    ) -> None:
-        self._with_env(test_app, app_env=AppEnv.PRODUCTION, pipeline_serve_artefacts=True)
+        self._with_env(test_app, app_env=env)
         response = pipeline_client.get(
             f"{BASE}/{executed}/artifacts/0/audio", params={"variant": "original"}
         )
         assert response.status_code == 200
 
-    def test_the_refusal_does_not_claim_the_artefact_is_missing(
+    def test_without_a_credential_it_is_401_not_served(
         self, pipeline_client: TestClient, test_app: FastAPI, executed: str
     ) -> None:
-        """403, not 404. The recording exists; this environment declines to
-        serve it, and saying "no such artefact" would be a lie about disk."""
-        self._with_env(test_app, app_env=AppEnv.PRODUCTION, pipeline_serve_artefacts=False)
-        refused = pipeline_client.get(
-            f"{BASE}/{executed}/artifacts/0/audio", params={"variant": "original"}
+        self._with_env(test_app, app_env=AppEnv.PRODUCTION)
+        response = pipeline_client.get(
+            f"{BASE}/{executed}/artifacts/0/audio",
+            params={"variant": "original"},
+            headers={"Authorization": ""},
         )
-        assert refused.status_code == 403
-        assert refused.status_code != 404
-
-
-# ---------------------------------------------------------------------------
-# The run's recorded bot adapter is the one that executes it
-# ---------------------------------------------------------------------------
+        assert response.status_code == 401
 
 
 class TestRoutesRequestTheRecordedAdapter:

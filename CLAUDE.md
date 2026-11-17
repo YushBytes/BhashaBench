@@ -27,7 +27,7 @@ work. Current progress and the next task are in
 | 7 | Audio degradation engine | ✅ Complete (synthetic noise; no recorded noise beds) |
 | 8 | Telephony integration | ⬜ Not started |
 | 9 | Real-time conversation engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
-| 10 | Recording & transcription | 🟡 Partial — per-turn artefacts only |
+| 10 | Recording & transcription | ✅ Complete (local filesystem storage; recordings assembled from turn audio, not captured live) |
 | 11 | Evaluation & judge engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & analytics backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend dashboard | 🟡 Partial — operator workspace with sign-in, no analytics |
@@ -506,7 +506,7 @@ The generated OpenAPI document is the authority, and `scripts/api_surface.py`
 is the single place the documented figures come from:
 
 ```bash
-python scripts/api_surface.py          # 59 paths, 76 operations
+python scripts/api_surface.py          # 60 paths, 77 operations
 python scripts/api_surface.py --json   # machine-readable
 ```
 
@@ -560,7 +560,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2884 collected; 2843 pass, 41 live ones skipped
+pytest                                  # 2900 collected; 2859 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```

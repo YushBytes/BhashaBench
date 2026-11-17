@@ -124,6 +124,7 @@ class TestOpenApiDocument:
             # Phase 10: the full-conversation recording.
             "/api/v1/test-runs/{run_id}/recording",
             "/api/v1/test-runs/{run_id}/recording/audio",
+            "/api/v1/test-runs/{run_id}/audio-links",
         }
 
     def test_info_block_matches_settings(self, client: TestClient, settings: Settings) -> None:
