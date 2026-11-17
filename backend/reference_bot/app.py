@@ -37,6 +37,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from reference_bot.responder import DEFAULT_SCRIPT, Script
+from reference_bot.voice import DEFAULT_VOICE_SCRIPT, VoiceTurn, register_voice
 
 PROTOCOL_VERSION = "bhashabench-text-bot/1"
 CORRELATION_HEADER = "X-Correlation-ID"
@@ -52,6 +53,8 @@ class BotConfig:
     max_sessions: int = 1000
     session_ttl_seconds: float = 1800.0
     max_turns_per_session: int = 100
+    voice_script: tuple[VoiceTurn, ...] = DEFAULT_VOICE_SCRIPT
+    """Per-turn behaviour of the `/v1/voice` endpoint (Phase 9)."""
 
     def __post_init__(self) -> None:
         if len(self.token) < 16:
@@ -211,6 +214,8 @@ def create_app(config: BotConfig) -> FastAPI:
         if key is not None and not (0 < len(key) <= 200):
             raise _ProtocolError(422, "invalid_request", "Idempotency-Key must be 1-200 characters")
         return store.turn(session_id, body, key)
+
+    register_voice(app, token=config.token, script=config.voice_script)
 
     @app.delete("/v1/sessions/{session_id}", status_code=204)
     def end_session(session_id: str) -> Response:

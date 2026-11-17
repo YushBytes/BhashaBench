@@ -57,7 +57,7 @@ def _send(adapter: BotAdapter, audio: bytes = b"RIFF....", *, turn: int = 0) -> 
 
 class TestRegistry:
     def test_both_adapters_are_registered(self) -> None:
-        assert available_adapters() == ("http", MANUAL, SCRIPTED)
+        assert available_adapters() == ("http", MANUAL, SCRIPTED, "ws_voice")
 
     def test_the_default_sends_audio_nowhere(self) -> None:
         """§7 requires the default configuration to be safe, and the way to be
@@ -65,13 +65,16 @@ class TestRegistry:
         assert DEFAULT_ADAPTER == SCRIPTED
         assert build_adapter(DEFAULT_ADAPTER).capabilities.contacts_external_system is False
 
-    def test_only_the_http_adapter_contacts_an_external_system(self) -> None:
+    def test_only_the_protocol_adapters_contact_an_external_system(self) -> None:
         external = {c.name for c in describe_adapters() if c.contacts_external_system}
-        assert external == {"http"}
+        assert external == {"http", "ws_voice"}  # the two protocol adapters
         assert DEFAULT_ADAPTER not in external
 
-    def test_only_the_http_adapter_requires_a_credential(self) -> None:
-        assert {c.name for c in describe_adapters() if c.requires_credentials} == {"http"}
+    def test_only_the_protocol_adapters_require_a_credential(self) -> None:
+        assert {c.name for c in describe_adapters() if c.requires_credentials} == {
+            "http",
+            "ws_voice",
+        }
 
     def test_the_http_adapter_carries_no_audio(self) -> None:
         http = next(c for c in describe_adapters() if c.name == "http")

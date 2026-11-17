@@ -701,21 +701,31 @@ class TestCancellation:
 class TestAdapterListing:
     def test_both_adapters_are_listed(self, pipeline_client: TestClient) -> None:
         body = pipeline_client.get(f"{BASE}/bot-adapters/available").json()
-        assert sorted(a["name"] for a in body["adapters"]) == ["http", "manual", "scripted"]
+        assert sorted(a["name"] for a in body["adapters"]) == [
+            "http",
+            "manual",
+            "scripted",
+            "ws_voice",
+        ]
 
-    def test_only_the_http_adapter_contacts_an_external_system(
+    def test_only_the_protocol_adapters_contact_an_external_system(
         self, pipeline_client: TestClient
     ) -> None:
         """And it is not the default, so the default configuration contacts
         nothing."""
         body = pipeline_client.get(f"{BASE}/bot-adapters/available").json()
         external = {a["name"] for a in body["adapters"] if a["contacts_external_system"]}
-        assert external == {"http"}
+        assert external == {"http", "ws_voice"}  # the two protocol adapters
         assert body["selected"] not in external
 
-    def test_only_the_http_adapter_needs_a_credential(self, pipeline_client: TestClient) -> None:
+    def test_only_the_protocol_adapters_need_a_credential(
+        self, pipeline_client: TestClient
+    ) -> None:
         body = pipeline_client.get(f"{BASE}/bot-adapters/available").json()
-        assert {a["name"] for a in body["adapters"] if a["requires_credentials"]} == {"http"}
+        assert {a["name"] for a in body["adapters"] if a["requires_credentials"]} == {
+            "http",
+            "ws_voice",
+        }
 
     def test_an_unconfigured_http_adapter_says_which_setting_is_missing(
         self, pipeline_client: TestClient

@@ -168,14 +168,46 @@ def _build_http(replies: Sequence[bytes] | None, settings: Settings | None) -> B
     return HttpTextBotAdapter(config)  # type: ignore[return-value] - a TextBotAdapter
 
 
+def _build_ws_voice(replies: Sequence[bytes] | None, settings: Settings | None) -> BotAdapter:
+    from app.pipeline.bots.ws_voice import VoiceBotConfig, WebSocketVoiceBotAdapter
+
+    if replies:
+        raise PipelineConfigurationError("the ws_voice adapter takes no scripted replies")
+    if settings is None or not settings.bot_ws_url.strip():
+        raise PipelineConfigurationError(
+            "the ws_voice bot adapter is not configured: BOT_WS_URL is not set"
+        )
+    reason = http_unavailable_reason(
+        settings.model_copy(update={"bot_http_base_url": settings.bot_ws_url})
+    )
+    if reason is not None:
+        raise PipelineConfigurationError(f"the ws_voice bot adapter is not configured: {reason}")
+    policy = OutboundPolicy.from_setting(
+        settings.bot_http_allowed_hosts,
+        allow_loopback=settings.bot_http_allow_loopback,
+        allow_private=settings.bot_http_allow_private,
+    )
+    return WebSocketVoiceBotAdapter(  # type: ignore[return-value]
+        VoiceBotConfig(
+            url=settings.bot_ws_url.strip(),
+            token=SecretStr(settings.bot_http_token.get_secret_value()),
+            policy=policy,
+        )
+    )
+
+
+WS_VOICE_ADAPTER = "ws_voice"
+
 _FACTORIES: dict[str, Callable[[Sequence[bytes] | None, Settings | None], BotAdapter]] = {
     SCRIPTED_ADAPTER: _build_scripted,
     MANUAL_ADAPTER: _build_manual,
     HTTP_ADAPTER: _build_http,
+    WS_VOICE_ADAPTER: _build_ws_voice,
 }
-"""`http` is the only adapter that contacts anything, and it speaks the
-project's own documented protocol (docs/BOT_PROTOCOL.md) rather than any
-vendor's. A vendor bot gets an adapter written against its documentation."""
+"""`http` and `ws_voice` are the only adapters that contact anything, and both
+speak the project's own documented protocols (docs/BOT_PROTOCOL.md) rather
+than any vendor's. A vendor bot gets an adapter written against its
+documentation."""
 
 
 def available_adapters() -> tuple[str, ...]:
@@ -212,8 +244,11 @@ def describe_adapters() -> tuple[BotCapabilities, ...]:
     The http adapter's capabilities are static, so listing it neither needs
     its settings nor opens a client.
     """
+    from app.pipeline.bots.ws_voice import CAPABILITIES as WS_VOICE_CAPABILITIES
+
+    static = {HTTP_ADAPTER: HTTP_CAPABILITIES, WS_VOICE_ADAPTER: WS_VOICE_CAPABILITIES}
     return tuple(
-        HTTP_CAPABILITIES if name == HTTP_ADAPTER else build_adapter(name).capabilities
+        static[name] if name in static else build_adapter(name).capabilities
         for name in available_adapters()
     )
 
@@ -223,6 +258,7 @@ __all__ = [
     "HTTP_ADAPTER",
     "MANUAL_ADAPTER",
     "SCRIPTED_ADAPTER",
+    "WS_VOICE_ADAPTER",
     "available_adapters",
     "build_adapter",
     "describe_adapters",

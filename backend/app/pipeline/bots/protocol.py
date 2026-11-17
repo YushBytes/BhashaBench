@@ -47,6 +47,10 @@ class BotReply:
     """Measured, not estimated. `None` when the adapter did not time anything."""
     metadata: dict[str, str] = field(default_factory=dict)
     """Adapter-specific detail. Must never carry a credential."""
+    stream: dict[str, Any] | None = None
+    """Turn-taking evidence from a streaming adapter (Phase 9): how the turn
+    ended, measured latency, barge-in, the voice-activity policy. `None` for
+    adapters that exchange whole utterances."""
 
     @property
     def size_bytes(self) -> int:

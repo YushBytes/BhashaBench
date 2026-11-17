@@ -516,6 +516,14 @@ class Settings(BaseSettings):
     # Everything the `http` adapter needs. Nothing is reachable until
     # BOT_HTTP_ALLOWED_HOSTS names the bot's host: the allowlist is empty by
     # default, so an unconfigured deployment can contact no bot at all.
+    bot_ws_url: str = Field(
+        default="",
+        description=(
+            "The ws:// or wss:// URL of a bot speaking bhashabench-voice-bot/1, for the "
+            "`ws_voice` adapter. Authenticated with BOT_HTTP_TOKEN and checked against "
+            "BOT_HTTP_ALLOWED_HOSTS like the text adapter."
+        ),
+    )
     bot_http_base_url: str = Field(
         default="",
         description=(

@@ -60,7 +60,7 @@ keep the numbering they were written in. Use this table to translate.
 | 6 | AI Caller Simulation — Evon | 🟡 Partial — rule engine delivered; Sarvam LLM caller implemented and tested offline, live calls not authorised or verified; Evon blocked |
 | 7 | Audio Degradation Engine | ✅ Complete (synthetic noise; no recorded noise beds) |
 | 8 | Telephony Integration | 🟡 Partial — provider abstraction, guardrails, signed webhooks and a mocked provider; no real call placed or authorised |
-| 9 | Real-Time Conversation Engine | 🟡 Partial — sequential turn loop; HTTP text bot protocol, reference bot and adapter |
+| 9 | Real-Time Conversation Engine | ✅ Complete (streaming turn-taking and recovery verified against the reference bot; STT/TTS still per utterance; energy VAD) |
 | 10 | Recording & Transcription | ✅ Complete (local filesystem storage; recordings assembled from turn audio, not captured live) |
 | 11 | Evaluation & Judge Engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & Analytics Backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
@@ -727,7 +727,7 @@ a call to any other number is refused before dialling, and `DIALING`,
 
 ---
 
-## Phase 9 — Real-Time Conversation Engine 🟡
+## Phase 9 — Real-Time Conversation Engine ✅
 
 Delivered: a sequential, request-driven turn loop with a process-wide
 concurrency limit (Part A, competition Phases 7 and 7.1).
@@ -739,10 +739,20 @@ the `http` adapter behind a new `text_bot_test` mode. Verified over real
 localhost sockets against the reference bot only; no third-party bot has been
 tested, and the exchange is text, never audio.
 
-Remaining: a WebSocket/audio protocol for external voice bots; a background worker model so a run does not
-live inside a request; streaming STT and TTS in the loop; voice-activity
-detection, end-pointing, barge-in, silence timeouts and per-turn deadlines;
-measured bot response latency.
+**Complete on 2026-11-18** against its exit criteria: a streaming
+conversation with the reference bot over `bhashabench-voice-bot/1` handles
+barge-in (the caller yields), silence timeouts (an empty bot turn) and
+per-turn deadlines, records each turn's measured bot latency on the
+`bot_exchange` event, and a crashed run is closed by the background worker
+while a run whose process died is closed by the automatic recovery sweep.
+Delivered: background execution (`start?background=true`), the
+`RecoveryLoop`, the streaming turn-taking module, the `ws_voice` adapter and
+the reference bot's voice endpoint.
+
+**Not delivered, and not claimed:** streaming speech-to-text and
+text-to-speech inside the loop (both still run per utterance), a learned
+voice-activity detector (energy only, threshold recorded), and any
+third-party voice bot (only the reference bot has been driven).
 
 **Exit criteria.** A streaming conversation with the reference bot handles
 barge-in, silence timeouts and deadlines, records per-turn bot latency, and a

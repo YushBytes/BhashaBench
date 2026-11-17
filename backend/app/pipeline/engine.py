@@ -287,15 +287,20 @@ class StageEvent:
     duration_ms: float | None = None
     detail: str | None = None
     """Redacted before it gets here. Never carries a credential."""
+    evidence: dict[str, Any] | None = None
+    """Structured detail, e.g. a streaming turn's timing. Omitted when absent."""
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "turn_index": self.turn_index,
             "stage": self.stage,
             "status": self.status,
             "duration_ms": self.duration_ms,
             "detail": self.detail,
         }
+        if self.evidence is not None:
+            out["evidence"] = self.evidence
+        return out
 
 
 @dataclass(frozen=True, slots=True)
@@ -662,6 +667,11 @@ class RunEngine:
         if mode not in TEXT_MODES and not caps.accepts_containers:
             raise PipelineConfigurationError(
                 f"mode '{mode.value}' moves audio, and the '{caps.name}' adapter carries none"
+            )
+        if mode is ExecutionMode.AUDIO_FIXTURE_TEST and caps.contacts_external_system:
+            raise PipelineConfigurationError(
+                f"audio_fixture_test stubs the bot, but the '{caps.name}' adapter talks to an "
+                "external one; use the external_bot_test mode for it"
             )
 
     def _resolve_profile(self, config: RunConfig, spec: ScenarioSpec) -> NoiseProfile:
@@ -1204,12 +1214,25 @@ class RunEngine:
                 status="ok",
                 duration_ms=reply.latency_ms if reply.latency_ms is not None else bot_latency,
                 detail=f"adapter '{self._bot.capabilities.name}'",
+                evidence=reply.stream,
             ).as_dict()
         )
 
         meta["events"] = events
         meta["artefacts"] = artefacts
         meta["state_transitions"] = transitions
+        if not reply.audio and reply.stream is not None:
+            # A streaming bot that never spoke: the turn is the bot saying
+            # nothing - an empty bot turn, a finding about the bot - not audio
+            # we failed to validate, and no silence is fabricated for it.
+            conversation_id = self._conversation(run_id).id
+            self._orchestrator.submit_bot_text(
+                conversation_id,
+                "",
+                metadata={"source": "streaming_bot_silence", "stream": reply.stream},
+            )
+            repo.update_pipeline_metadata(self._session, run, meta)
+            return True
         measured = self._validate_bot_audio(
             run=run, meta=meta, conversation=conversation, reply=reply, events=events
         )
@@ -1963,6 +1986,7 @@ class RunEngine:
                     status=str(event.get("status", "")),
                     duration_ms=event.get("duration_ms"),
                     detail=event.get("detail"),
+                    evidence=event.get("evidence"),
                 )
                 for event in meta.get("events", [])
             ),

@@ -91,6 +91,13 @@ class StageEventResponse(BaseModel):
         default=None, description="Measured, not estimated. `null` if not timed."
     )
     detail: str | None = Field(default=None, description="Redacted; never carries a credential.")
+    evidence: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Structured detail where a stage has it - a streaming bot turn's `ended_by`, "
+            "`bot_latency_ms`, `barge_in`, `caller_truncated` and voice-activity policy."
+        ),
+    )
 
 
 class ArtefactResponse(BaseModel):

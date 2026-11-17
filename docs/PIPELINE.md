@@ -853,3 +853,14 @@ run executes on the server with its own database session and engine
 - **In-process.** No queue or broker. A run's background task lives in the
   process that accepted it; if that process dies, the recovery sweep closes
   the run. Shutdown waits for background runs to finish.
+
+## The streaming voice adapter (Phase 9)
+
+`ws_voice` drives a bot over `bhashabench-voice-bot/1`
+([BOT_PROTOCOL.md](BOT_PROTOCOL.md#bhashabench-voice-bot1--streaming-voice-phase-9)):
+one WebSocket per run, caller audio streamed in real time, the bot's audio
+end-pointed by an energy voice-activity detector, with barge-in, silence
+timeouts and a per-turn deadline. It contacts an external system, so it is
+accepted by `external_bot_test` and refused by `offline_simulation` and
+`audio_fixture_test`. Configure it with `BOT_WS_URL`; it shares
+`BOT_HTTP_TOKEN` and `BOT_HTTP_ALLOWED_HOSTS` with the text adapter.

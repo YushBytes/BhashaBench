@@ -85,3 +85,70 @@ response: reported as a bot defect, never repaired.
 | Reply text | 4000 characters | — |
 | Attempts per turn | 2 | `BOT_HTTP_MAX_ATTEMPTS` |
 | Hosts | none | `BOT_HTTP_ALLOWED_HOSTS` (see `docs/SECURITY.md`) |
+
+---
+
+# `bhashabench-voice-bot/1` — streaming voice (Phase 9)
+
+The audio counterpart of the text protocol: one WebSocket per conversation,
+caller audio streamed in real time, the bot answering whenever it chooses -
+including over the caller. BhashaBench's own protocol, not any vendor's.
+Implemented by `backend/reference_bot/voice.py` and consumed by the
+`ws_voice` adapter (`backend/app/pipeline/bots/ws_voice.py`).
+
+## Connection
+
+`GET /v1/voice` upgraded to a WebSocket, with `Authorization: Bearer
+<token>` on the handshake. A missing or wrong token is refused before the
+handshake completes (close code 1008). The URL passes the same outbound
+guard as the text adapter (`BOT_HTTP_ALLOWED_HOSTS`).
+
+## Messages
+
+Text frames are JSON control messages; binary frames are audio.
+
+| Direction | Message | Meaning |
+|-----------|---------|---------|
+| BhashaBench → bot | `{"type":"start","protocol":"bhashabench-voice-bot/1","language":"hi-IN","sample_rate_hz":16000,"encoding":"pcm_s16le","frame_ms":20,"run_id":"..."}` | First message. A bot that cannot serve the format answers `error` and closes |
+| bot → BhashaBench | `{"type":"ready","protocol":"bhashabench-voice-bot/1"}` | Accepts the session |
+| BhashaBench → bot | binary, 640 bytes | 20 ms of the caller's speech: 16 kHz mono signed 16-bit little-endian PCM, sent in real time |
+| BhashaBench → bot | `{"type":"caller_turn_end","turn_index":n}` | The caller has finished (or yielded) |
+| bot → BhashaBench | binary, at most 2560 bytes | The bot's speech, same format, at any time |
+| bot → BhashaBench | `{"type":"turn_end","turn_index":n}` | Optional: the bot has finished its turn |
+| either | `{"type":"hangup","reason":"..."}` | Ends the conversation |
+
+## Turn-taking, as BhashaBench measures it
+
+Per turn the adapter applies `TurnPolicy` (`app/pipeline/streaming.py`) and
+records which rule ended the turn:
+
+| `ended_by` | When |
+|------------|------|
+| `bot_signal` | The bot spoke and sent `turn_end` after the caller finished |
+| `end_of_turn_silence` | The bot spoke, then stayed below the voice threshold for 700 ms |
+| `silence_timeout` | The bot never spoke within 5 s of the caller finishing. Recorded as the bot saying nothing - an empty bot turn - and no silence is fabricated |
+| `deadline` | The bot was still speaking 30 s after it started: cut off |
+| `bot_hangup` | The bot hung up |
+
+- **Latency** is from the caller's last frame being sent to the first
+  *voiced* bot frame arriving, on BhashaBench's monotonic clock. Negative
+  means the bot started before the caller finished.
+- **Barge-in**: a voiced bot frame before `caller_turn_end`. The caller then
+  yields - its remaining frames are not sent - and the turn records
+  `barge_in: true` and `caller_truncated: true`.
+- **Voice activity is energy-based** (RMS ≥ -45 dBFS by default). A loud
+  non-speech noise counts as speech; the threshold is recorded with every
+  turn so a reader can tell a silent bot from a deaf detector.
+- **Real time.** Frames are paced at 20 ms. Nothing is accelerated, in tests
+  either: faster-than-real-time streaming would make the latencies fiction.
+
+Every bot turn's evidence is on its `bot_exchange` stage event in
+`GET /test-runs/{id}/report`: `ended_by`, `bot_latency_ms`, `barge_in`,
+`caller_truncated`, `bot_audio_seconds`, `bot_speaking_wall_seconds` and the
+policy.
+
+## What is not claimed
+
+Only the reference bot has been driven over this protocol; no third-party
+bot has been tested. Transcription of the bot's audio and synthesis of the
+caller's are still per utterance, not streamed.

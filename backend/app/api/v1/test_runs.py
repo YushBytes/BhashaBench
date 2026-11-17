@@ -1091,6 +1091,7 @@ def read_report(run_id: uuid.UUID, engine: ReadingEngineDep) -> RunReportRespons
                 status=event.status,
                 duration_ms=event.duration_ms,
                 detail=event.detail,
+                evidence=event.evidence,
             )
             for event in report.events
         ],

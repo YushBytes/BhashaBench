@@ -96,15 +96,17 @@ captured live; the sweep is not scheduled).
 
 | Phase 9 unit | Commit | CI |
 |------|--------|----|
-| Background execution, crash finishing, automatic recovery; `bbs_` token redaction | this commit | see log |
+| Background execution, crash finishing, automatic recovery; `bbs_` token redaction | `b3ea14a` | see log |
+| Streaming voice protocol, `ws_voice` adapter, reference bot voice endpoint; Phase 9 closed | this commit | see log |
+
+**Phase 9: complete** (STT/TTS per utterance; energy VAD; reference bot only).
 
 ## Next task
 
-Phase 9 (continued): the streaming voice protocol and its engine loop, after
-the background unit. Original brief: background execution of runs (a run started over HTTP keeps going
-when the request ends; today it executes inside the request), per-turn
-latency evidence measured rather than inferred, and recovery integrated
-with the background worker. In-process worker only; no paid queue.
+Phase 13: the frontend against the real API - metric and comparison views
+built only from the Phase 12 analytics endpoints, run auto-refresh (now that
+runs execute in the background), scenario and suite management, workspace
+and member views, recording playback, and a frontend test suite.
 
 Deferred to Phase 14 part 2: rate limiting, security headers,
 dependency/secret scanning (dev-only `minimatch` and `picomatch` advisories
