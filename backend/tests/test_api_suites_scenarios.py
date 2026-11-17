@@ -700,6 +700,12 @@ class TestOpenApiSurface:
             "/api/v1/auth/logout",
             "/api/v1/auth/me",
             "/api/v1/auth/password",
+            "/api/v1/workspaces",
+            "/api/v1/workspaces/{workspace_id}",
+            "/api/v1/workspaces/{workspace_id}/members",
+            "/api/v1/workspaces/{workspace_id}/members/{user_id}",
+            "/api/v1/workspaces/{workspace_id}/projects",
+            "/api/v1/projects/{project_id}",
         }
 
     def test_scenario_spec_schema_is_published(self, client: TestClient) -> None:

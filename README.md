@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2779 tests across 56 modules
+│   ├── tests/                 2805 tests across 57 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -750,10 +750,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2779 tests** across fifty-six modules.
-**2738 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2805 tests** across fifty-seven modules.
+**2764 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2779) exceeds the number that run (2738):
+why the collected total (2805) exceeds the number that run (2764):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -766,6 +766,7 @@ why the collected total (2779) exceeds the number that run (2738):
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
+| `test_workspaces_api.py` | 26 | Phase 14 workspaces, members and projects through the real routes: authentication on every route, the creator owning a new workspace and its `Default` project, only the caller's workspaces listed, a foreign workspace or project 404 rather than 403, the full add-member matrix by role, admins unable to touch owners or other admins or promote to admin, the last owner kept, leaving, project creation by role, unique names, and rename/describe
 | `test_auth_api.py` | 41 | Phase 14 authentication through the real routes and PostgreSQL: bearer and cookie login (HttpOnly, SameSite=Strict, no token in the body, Secure when deployed), every login failure the same 401, lockout refusing even the right password, hash upgrade on login, digest-only storage, logout, absolute/idle/revoked expiry, deactivation, throttled activity writes, cross-origin cookie writes refused, password change revoking other sessions, sign-up off by default, no password echoed in a 422 or written to a log, and the `users create` CLI with its exit codes and no password argument
 | `test_auth_primitives.py` | 41 | Phase 14 identity primitives: scrypt hashing round-trip, salting, an independent recomputation against `hashlib.scrypt`, malformed and oversized input verifying false, rehash detection and the length-based password policy; token shape and uniqueness; the role matrix monotone by rank and assignment never above the actor; and against PostgreSQL the lower-case unique email, digest-only session tokens, the role CHECK, slug format, per-workspace project names, cascades from a user and RESTRICT from a workspace |
 | `test_outbound.py` | 36 | The outbound-request guard: scheme and userinfo rules, the host allowlist and its wildcards, metadata/link-local/private/loopback address rules including IPv4-mapped IPv6 and decimal literals, and plain http only to loopback |
@@ -840,7 +841,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2738 passed, 41 skipped ================
+================ 2764 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -903,8 +904,8 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 
 ## API endpoints
 
-The API exposes **51 paths and 61 HTTP operations**, plus one WebSocket route
-that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 52
+The API exposes **57 paths and 72 HTTP operations**, plus one WebSocket route
+that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 58
 documented paths in total.
 
 Those figures come from the generated OpenAPI document, never from a hand
@@ -937,6 +938,19 @@ See [docs/AUTH.md](docs/AUTH.md).
 | `POST` | `/api/v1/auth/logout` | 204; revokes the session and clears the cookie |
 | `GET` | `/api/v1/auth/me` | The signed-in user, their workspaces and roles, and the session's expiry |
 | `POST` | `/api/v1/auth/password` | Changes the password and revokes every other session |
+
+### Workspaces, members and projects
+
+A workspace the caller is not a member of answers 404. Roles and rules: [docs/AUTH.md](docs/AUTH.md).
+
+| Method | Path | Returns |
+|--------|------|---------|
+| `GET` / `POST` | `/api/v1/workspaces` | The caller's workspaces with their role / create one (caller becomes owner; a `Default` project is created) |
+| `GET` | `/api/v1/workspaces/{id}` | One workspace |
+| `GET` / `POST` | `/api/v1/workspaces/{id}/members` | Members and roles / add an existing account by email (admin or owner) |
+| `PATCH` / `DELETE` | `/api/v1/workspaces/{id}/members/{user_id}` | Change a role / remove a member or leave. The last owner is kept (409) |
+| `GET` / `POST` | `/api/v1/workspaces/{id}/projects` | Projects / create one (admin or owner) |
+| `GET` / `PATCH` | `/api/v1/projects/{id}` | One project / rename or describe it (admin or owner) |
 
 ### Test suites
 

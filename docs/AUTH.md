@@ -73,6 +73,35 @@ complement.
   name contains `password`, `token` or `secret`, so a 422 never echoes one.
 - Tests assert that neither the password nor the token reaches the logs.
 
+## Workspaces, roles and projects
+
+A **workspace** is the tenancy boundary; a **project** groups suites inside
+it; a user reaches anything only through a **membership** of its workspace.
+There is no global administrator: someone with database access uses the CLI,
+which is a different trust boundary.
+
+| Permission | Least role | Covers |
+|------------|-----------|--------|
+| `view` | viewer | Read suites, scenarios, runs, turns, artefacts, evaluations, reports, members, projects |
+| `edit` | member | Create and change suites and scenarios; create, start, drive and cancel runs and conversations; evaluate; record references |
+| `delete` | admin | Delete suites and scenarios |
+| `manage_projects` | admin | Create, rename and delete projects |
+| `manage_members` | admin | Add, change and remove members — an admin only at `member`/`viewer`; only an owner grants, changes or removes `admin` and `owner` |
+
+Rules enforced by the service, not trusted to a client:
+
+- **Not a member is 404, not 403.** A resource in a workspace the caller does
+  not belong to answers exactly as if it did not exist, so ids from another
+  tenant cannot be probed. A member whose role is too low gets a 403 that
+  names the role and the permission.
+- **A workspace always keeps an owner.** Demoting or removing the last owner
+  is a 409, whoever asks.
+- **Anyone may leave** (delete their own membership), subject to that rule.
+- **Members are added by the email of an existing account.** There is no
+  email invitation, because the application sends no email.
+- Creating a workspace makes the caller its owner and gives it a `Default`
+  project.
+
 ## Endpoints
 
 | Method | Path | |
@@ -82,3 +111,14 @@ complement.
 | `POST` | `/api/v1/auth/logout` | 204; revokes this session |
 | `GET` | `/api/v1/auth/me` | The user, their workspaces and roles, the session's expiry |
 | `POST` | `/api/v1/auth/password` | Changes the password; returns how many other sessions were revoked |
+| `GET` | `/api/v1/workspaces` | The caller's workspaces with their role in each |
+| `POST` | `/api/v1/workspaces` | 201; the caller becomes owner; a `Default` project is created |
+| `GET` | `/api/v1/workspaces/{id}` | One workspace; 404 to a non-member |
+| `GET` | `/api/v1/workspaces/{id}/members` | Members and roles (any member) |
+| `POST` | `/api/v1/workspaces/{id}/members` | Add an existing account by email (admin or owner, within `can_assign`) |
+| `PATCH` | `/api/v1/workspaces/{id}/members/{user_id}` | Change a role; 409 for the last owner |
+| `DELETE` | `/api/v1/workspaces/{id}/members/{user_id}` | Remove a member, or leave with your own id; 409 for the last owner |
+| `GET` | `/api/v1/workspaces/{id}/projects` | Projects (any member) |
+| `POST` | `/api/v1/workspaces/{id}/projects` | 201 (admin or owner); 409 on a duplicate name |
+| `GET` | `/api/v1/projects/{id}` | One project; 404 to a non-member |
+| `PATCH` | `/api/v1/projects/{id}` | Rename or describe (admin or owner) |

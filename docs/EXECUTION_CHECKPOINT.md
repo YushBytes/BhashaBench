@@ -79,11 +79,16 @@ against human labels).
 
 ## Next task
 
-Phase 14 (part 1): users, sessions, workspaces, projects and authorisation —
-password hashing with a vetted library, server-side sessions, workspace and
-project ownership on suites and runs (a migration), and every existing
-route scoped and authorised, with tests that one workspace cannot read
-another's runs, reports or exports.
+Phase 14 (part 1), in progress. Design and rules: `docs/AUTH.md`.
+
+| Phase 14.1 unit | Commit | CI |
+|------|--------|----|
+| Identity schema, scrypt, tokens, role matrix (migration `05f303520380`) | `daa9cde` | ✅ 44091545141 |
+| Login, logout, sessions, CSRF origin check, `users create` | `7a7c365` | ✅ 44093406640 |
+| Workspaces, projects, members API and the authorisation service | — | — |
+| `project_id` on suites (migration, legacy backfill) and every route scoped; isolation tests | — | — |
+
+Then the frontend sign-in (Phase 13 integration), then the execution order above.
 
 ## Outstanding issues
 
