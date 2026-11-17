@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2900 tests across 62 modules
+│   ├── tests/                 2944 tests across 63 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -751,10 +751,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2900 tests** across sixty-two modules.
-**2859 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2944 tests** across sixty-three modules.
+**2903 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2900) exceeds the number that run (2859):
+why the collected total (2944) exceeds the number that run (2903):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -767,6 +767,7 @@ why the collected total (2900) exceeds the number that run (2859):
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
+| `test_telephony_core.py` | 44 | Phase 8 telephony core, offline: E.164 normalisation and refusal, masking, every guardrail refusing before dialling and never naming the full number, an empty allowlist allowing nothing, webhook signatures refusing edits, missing headers, bad timestamps, replays and an unconfigured secret, every provider status mapped and calls only moving forward, `telephony_test` still unimplemented, the mock labelled mocked with four scripted outcomes and strict event parsing, and the registry refusing the mock in production and any provider that does not exist
 | `test_signed_links.py` | 18 | Phase 10 signed audio links: the HMAC primitive verifying a fresh link and refusing any edit to variant, expiry, user or signature, another path, expiry, a rotated secret, an over-long lifetime and malformed values; and through the API, a link opening one turn's audio or the recording with no session, refusing to be pointed at another turn or tampered with, revoked when its minter leaves the workspace, unmintable by an outsider or for audio that does not exist, and capped at fifteen minutes
 | `test_retention.py` | 14 | Phase 10 deletion and retention: deleting a finished run through the API removes its row, conversation, turns, evaluations and every audio file including the recording while the suite and scenario survive; a run in flight is 409; a member is 403 and an outsider 404; the protected historical runs are never deleted; and `runs purge` through the real CLI lists without changing anything by default, deletes only expired finished runs with `--apply`, falls back to `RETENTION_DAYS`, refuses to run without a period, accepts whole days only, and never lists the protected runs
 | `test_recording.py` | 8 | Phase 10 full-conversation recordings: turns concatenated in order with correct offsets across sample rates and channel counts, the degraded caller variant chosen as what was on the line, undecodable or missing turns excluded with a reason rather than filled with silence, no audio when nothing decodes; and through the API, a finished audio run storing a recording whose segments link to its turn artefacts and whose WAV duration matches the manifest, `not_applicable` for a run with no audio, 404 before a run finishes, and the recording removed with its conversation's artefacts
@@ -847,7 +848,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2859 passed, 41 skipped ================
+================ 2903 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

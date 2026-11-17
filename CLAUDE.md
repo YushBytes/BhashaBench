@@ -150,6 +150,9 @@ caller/llm/clients/
                may appear. Sarvam today, offline-tested only
 evaluation/    the evaluation engine (Phase 11): normalisation, error
                rates, the metric registry. Deterministic; calls nothing
+telephony/     telephony (Phase 8): E.164 numbers, guardrails, the
+               provider contract, status rules, our own webhook signature
+               scheme, and a MOCK provider only. No vendor adapter
 storage/       blob storage (Phase 10): the BlobStore contract, key
                validation, the local filesystem adapter. `local` is the
                only backend; anything else is refused at startup
@@ -560,7 +563,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 2900 collected; 2859 pass, 41 live ones skipped
+pytest                                  # 2944 collected; 2903 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 ```
@@ -658,6 +661,7 @@ ruff check . && ruff format --check .   # from the repository root
 | `docs/PIPELINE.md` | an execution mode, degradation profile, bot adapter, artefact rule or run endpoint changes |
 | `docs/EVALUATION.md` | a metric, normalisation step, criterion or the evaluator version changes |
 | `docs/AUTH.md` | a credential, session, cookie, role, permission or tenancy rule changes |
+| `docs/TELEPHONY.md` | a telephony provider, guardrail, status rule or webhook rule changes |
 | `docs/STORAGE.md` | a storage backend, key rule, retention or deletion behaviour changes |
 | `docs/REPORTING.md` | an aggregate, statistical rule, export format or analytics endpoint changes |
 | `docs/SECURITY.md` | a security control, known gap or incident changes |
