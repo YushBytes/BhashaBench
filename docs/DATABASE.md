@@ -147,6 +147,23 @@ outlives the evidence it describes. Rows are stamped with `clock_timestamp()`
 rather than `now()`, which is fixed per transaction and would make two rows
 written together tie on "latest".
 
+### `users`, `auth_sessions`, `workspaces`, `workspace_memberships`, `projects` (Phase 14)
+
+Identity and tenancy. `users.email` is unique and CHECK-constrained to lower
+case, so a write that bypassed the service's normalisation fails instead of
+creating a second account. `password_hash` is a self-describing scrypt string
+(`app/auth/passwords.py`); no password is stored.
+
+`auth_sessions.token_hash` is the SHA-256 of the bearer token, constrained to
+64 hex characters, so a copy of the table is not a set of working
+credentials. Sessions carry an absolute `expires_at`, a `last_seen_at` for the
+idle timeout, and `revoked_at` for logout; they cascade from their user.
+
+`workspace_memberships` holds one CHECK-constrained `role` (`owner`, `admin`,
+`member`, `viewer`) per user per workspace. `projects` reference workspaces
+with `ON DELETE RESTRICT`: there is no workspace deletion, and if one is
+added it must not cascade into recorded runs.
+
 ---
 
 ## Schema decisions
@@ -337,6 +354,7 @@ target whatever the application itself would connect to.
 | `4997650a09c8` | Index `scenarios.spec` with GIN for tag filtering |
 | `1c40c48f72cf` | Add `run_evaluations` and `transcript_references` (Phase 11) — two new tables, nothing existing touched |
 | `6c64d84df105` | Index `test_runs.created_at` and GIN-index `test_runs.run_metadata` for the Phase 12 reporting queries |
+| `05f303520380` | Add `users`, `auth_sessions`, `workspaces`, `workspace_memberships` and `projects` (Phase 14) — five new tables, nothing existing touched |
 
 All four are reversible. The initial migration's `downgrade()` drops everything in
 reverse dependency order and is exercised on every test run, so it is
