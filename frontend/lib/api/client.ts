@@ -18,15 +18,25 @@
  */
 
 import type {
+  AnalyticsSummary,
+  AnalyticsTrend,
   ApiHealth,
   BotAdapters,
   CallerProviders,
   CreateRunBody,
+  EvaluationList,
+  EvaluationRead,
   LanguageCatalogue,
   LoginResult,
   Me,
+  MemberRead,
   Page,
+  ProjectRead,
+  RecordingManifest,
+  RegressionResult,
+  Role,
   Run,
+  RunComparison,
   RunArtefacts,
   RunReport,
   RunSummary,
@@ -36,6 +46,7 @@ import type {
   SpeechProviders,
   SuiteSummary,
   TranscriptionProviders,
+  WorkspaceRead,
 } from "./types";
 
 /** Where the backend lives, from the Next server's point of view. The
@@ -267,6 +278,64 @@ export const api = {
       timeoutMs: o?.timeoutMs ?? 120_000,
     }),
 
+  runEvaluations: (id: string, o?: RequestOptions) =>
+    request<EvaluationList>(`/api/v1/test-runs/${id}/evaluations`, o),
+
+  evaluateRun: (id: string, o?: RequestOptions) =>
+    request<EvaluationRead>(`/api/v1/test-runs/${id}/evaluations`, { ...o, method: "POST" }),
+
+  runRecording: (id: string, o?: RequestOptions) =>
+    request<RecordingManifest>(`/api/v1/test-runs/${id}/recording`, o),
+
+  workspaces: (o?: RequestOptions) => request<WorkspaceRead[]>("/api/v1/workspaces", o),
+
+  members: (workspaceId: string, o?: RequestOptions) =>
+    request<MemberRead[]>(`/api/v1/workspaces/${workspaceId}/members`, o),
+
+  addMember: (workspaceId: string, email: string, role: Role, o?: RequestOptions) =>
+    request<MemberRead>(`/api/v1/workspaces/${workspaceId}/members`, {
+      ...o,
+      method: "POST",
+      body: { email, role },
+    }),
+
+  changeRole: (workspaceId: string, userId: string, role: Role, o?: RequestOptions) =>
+    request<MemberRead>(`/api/v1/workspaces/${workspaceId}/members/${userId}`, {
+      ...o,
+      method: "PATCH",
+      body: { role },
+    }),
+
+  removeMember: (workspaceId: string, userId: string, o?: RequestOptions) =>
+    request<void>(`/api/v1/workspaces/${workspaceId}/members/${userId}`, {
+      ...o,
+      method: "DELETE",
+    }),
+
+  projects: (workspaceId: string, o?: RequestOptions) =>
+    request<ProjectRead[]>(`/api/v1/workspaces/${workspaceId}/projects`, o),
+
+  createProject: (workspaceId: string, name: string, o?: RequestOptions) =>
+    request<ProjectRead>(`/api/v1/workspaces/${workspaceId}/projects`, {
+      ...o,
+      method: "POST",
+      body: { name },
+    }),
+
+  analyticsSummary: (o?: RequestOptions) =>
+    request<AnalyticsSummary>("/api/v1/analytics/summary", o),
+
+  analyticsTrend: (o?: RequestOptions) => request<AnalyticsTrend>("/api/v1/analytics/trend", o),
+
+  compareRuns: (baseline: string, candidate: string, o?: RequestOptions) =>
+    request<RunComparison>("/api/v1/analytics/compare", {
+      ...o,
+      query: { baseline, candidate },
+    }),
+
+  regressions: (o?: RequestOptions) =>
+    request<RegressionResult>("/api/v1/analytics/regressions", o),
+
   cancelRun: (id: string, o?: RequestOptions) =>
     request<Run>(`/api/v1/test-runs/${id}/cancel`, { ...o, method: "POST" }),
 };
@@ -287,4 +356,9 @@ export function artefactAudioUrl(
   // cookie; an absolute backend URL would be a cross-site request without it.
   const path = `/api/v1/test-runs/${runId}/artifacts/${turnIndex}/audio`;
   return variant ? `${path}?variant=${encodeURIComponent(variant)}` : path;
+}
+
+/** The full-conversation recording, relative so the cookie travels with it. */
+export function recordingAudioUrl(runId: string): string {
+  return `/api/v1/test-runs/${runId}/recording/audio`;
 }

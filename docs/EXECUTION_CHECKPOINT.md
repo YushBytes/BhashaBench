@@ -97,13 +97,17 @@ captured live; the sweep is not scheduled).
 | Phase 9 unit | Commit | CI |
 |------|--------|----|
 | Background execution, crash finishing, automatic recovery; `bbs_` token redaction | `b3ea14a` | see log |
-| Streaming voice protocol, `ws_voice` adapter, reference bot voice endpoint; Phase 9 closed | this commit | see log |
+| Streaming voice protocol, `ws_voice` adapter, reference bot voice endpoint; Phase 9 closed | `2660aa1` | see log |
 
 **Phase 9: complete** (STT/TTS per utterance; energy VAD; reference bot only).
 
+| Phase 13 unit | Commit | CI |
+|------|--------|----|
+| Analytics, compare and workspace pages; run page evaluation, recording and auto-refresh | this commit | see log |
+
 ## Next task
 
-Phase 13: the frontend against the real API - metric and comparison views
+Phase 13 (continued): suite and scenario management, a `node --test` suite for `lib/` (Node 24 strips types natively), and `docs/FRONTEND.md` routes for /app/analytics, /app/compare and /app/workspace. Then Phase 14 part 2 and Phase 15. Original brief, Phase 13: the frontend against the real API - metric and comparison views
 built only from the Phase 12 analytics endpoints, run auto-refresh (now that
 runs execute in the background), scenario and suite management, workspace
 and member views, recording playback, and a frontend test suite.

@@ -91,3 +91,29 @@ export function langAttr(tag: string | null | undefined): string | undefined {
   if (!tag) return undefined;
   return /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(tag) ? tag : undefined;
 }
+
+/**
+ * A pass rate as it may honestly be stated: the point estimate with its
+ * Wilson 95% interval and the number of decided runs. `null` when nothing
+ * was decided - an empty denominator is "no data", never 0%.
+ */
+export function formatPassRate(rate: {
+  rate: number | null;
+  ci95_low: number | null;
+  ci95_high: number | null;
+  n: number;
+}): string | null {
+  if (rate.rate === null || rate.n === 0) return null;
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const interval =
+    rate.ci95_low !== null && rate.ci95_high !== null
+      ? ` (${pct(rate.ci95_low)}–${pct(rate.ci95_high)})`
+      : "";
+  return `${pct(rate.rate)}${interval}, n = ${rate.n}`;
+}
+
+/** A word error rate as a percentage with one decimal, or null. */
+export function formatErrorRate(value: number | null | undefined): string | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  return `${(value * 100).toFixed(1)}%`;
+}

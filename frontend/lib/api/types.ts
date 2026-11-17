@@ -463,6 +463,9 @@ export interface StageEvent {
   status: string;
   duration_ms: number | null;
   detail: string | null;
+  /** Structured detail where a stage has it - a streaming bot turn's
+   *  `ended_by`, `bot_latency_ms`, `barge_in` (Phase 9). Null otherwise. */
+  evidence?: Record<string, unknown> | null;
 }
 
 export interface RunReport {
@@ -484,4 +487,161 @@ export interface CreateRunBody {
   max_turns?: number | null;
   degrade_caller_audio?: boolean;
   bot_adapter?: string | null;
+}
+
+// -- Analytics (Phase 12) - transcribed from backend/app/analytics/service.py -
+
+/** A pass rate: pass / (pass + fail), with its Wilson 95% interval. `rate`
+ *  and the bounds are null when no run was decided (n = 0), never zero. */
+export interface PassRate {
+  successes: number;
+  n: number;
+  rate: number | null;
+  ci95_low: number | null;
+  ci95_high: number | null;
+  interval: "wilson";
+}
+
+export interface VerdictTally {
+  runs: number;
+  verdicts: { pass: number; fail: number; undetermined: number; not_evaluated: number };
+  pass_rate: PassRate;
+}
+
+export type AnalyticsDimension =
+  | "language"
+  | "scenario_name"
+  | "bot_adapter"
+  | "mode"
+  | "outcome"
+  | "suite_id";
+
+export interface AnalyticsSummary {
+  filter: Record<string, string>;
+  group_by: AnalyticsDimension | null;
+  overall: VerdictTally;
+  groups: (VerdictTally & { key: string | null })[];
+  metrics: {
+    wer_pooled: {
+      value: number | null;
+      errors: number;
+      reference_words: number;
+      runs_with_references: number;
+    };
+    per_run_median_latency_ms: {
+      p50: number | null;
+      p90: number | null;
+      runs: number;
+      note: string;
+    };
+  };
+  evaluator_versions: string[];
+  warnings: string[];
+}
+
+export interface AnalyticsTrend {
+  filter: Record<string, string>;
+  bucket: "day" | "week";
+  periods: (VerdictTally & { period: string })[];
+  evaluator_versions: string[];
+  warnings: string[];
+}
+
+export interface ComparedRun {
+  run_id: string;
+  scenario_name: string | null;
+  language: string | null;
+  mode: string | null;
+  bot_adapter: string | null;
+  evaluator_version: string;
+  evidence_fingerprint: string;
+  verdict: "pass" | "fail" | "undetermined";
+}
+
+export interface RunComparison {
+  baseline: ComparedRun;
+  candidate: ComparedRun;
+  verdict_change: "regressed" | "improved" | "unchanged" | "not_comparable";
+  metric_deltas: {
+    metric: string;
+    baseline: number | null;
+    candidate: number | null;
+    delta: number | null;
+    change: "better" | "worse" | "unchanged" | "not_comparable";
+  }[];
+  comparable: boolean;
+  warnings: string[];
+  statistical_note: string;
+}
+
+export interface RegressionResult {
+  baseline: VerdictTally & { filter: Record<string, string> };
+  candidate: VerdictTally & { filter: Record<string, string> };
+  pass_rate_difference: number | null;
+  test: "fisher_exact_two_sided";
+  p_value: number | null;
+  alpha: number;
+  min_decided_runs_per_group: number;
+  conclusion: "regression" | "improvement" | "no_significant_difference" | "insufficient_evidence";
+  reason: string;
+  evaluator_versions: string[];
+  warnings: string[];
+}
+
+// -- Workspaces (Phase 14) - transcribed from backend/app/schemas/auth.py ----
+
+export interface WorkspaceRead {
+  id: string;
+  name: string;
+  slug: string;
+  /** The caller's own role here. */
+  role: Role;
+  created_at: string;
+}
+
+export interface MemberRead {
+  user_id: string;
+  email: string;
+  display_name: string;
+  role: Role;
+}
+
+export interface ProjectRead {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+}
+
+// -- Evaluation and recording (Phases 10-11) ---------------------------------
+
+export interface EvaluationRead {
+  evaluation_id: string;
+  run_id: string;
+  evaluator_version: string;
+  verdict: "pass" | "fail" | "undetermined";
+  evidence_fingerprint: string;
+  created_at: string;
+  /** Every criterion has at least these; some carry more detail. */
+  criteria: { name: string; status: string; reason: string }[];
+  metrics: Record<string, unknown>;
+  /** False for text and offline modes: nothing here describes audio. */
+  measures_audio: boolean;
+}
+
+export interface EvaluationList {
+  run_id: string;
+  evaluations: EvaluationRead[];
+}
+
+/** `GET /test-runs/{id}/recording`. Fields beyond `status` are present only
+ *  when the backend set them; `reason` explains a failed or absent one. */
+export interface RecordingManifest {
+  status: "stored" | "failed" | "not_applicable";
+  reason?: string;
+  duration_seconds?: number;
+  segments?: { turn_index: number; speaker: string; variant: string | null; start_seconds: number; duration_seconds: number }[];
+  excluded?: { turn_index: number; speaker: string; reason: string }[];
+  assembly?: string;
 }

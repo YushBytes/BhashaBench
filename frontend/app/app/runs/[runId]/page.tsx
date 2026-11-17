@@ -17,7 +17,8 @@ import {
   Th,
 } from "@/components/ui/primitives";
 import { ModeBadge, OutcomeBadge, RunStatusBadge } from "@/components/ui/status";
-import { ApiError, api } from "@/lib/api/client";
+import { ApiError, api, recordingAudioUrl } from "@/lib/api/client";
+import { EvaluateButton, RunAutoRefresh } from "@/components/domain/run-live";
 import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
 import {
   formatBytes,
@@ -27,7 +28,13 @@ import {
   humanise,
   langAttr,
 } from "@/lib/format";
-import type { DegradationRequested, RunReport, RunTurns } from "@/lib/api/types";
+import type {
+  DegradationRequested,
+  EvaluationList,
+  RecordingManifest,
+  RunReport,
+  RunTurns,
+} from "@/lib/api/types";
 
 
 export async function generateMetadata({
@@ -85,10 +92,18 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
 
   let report: RunReport;
   let turns: RunTurns;
+  let evaluations: EvaluationList | null;
+  let recording: RecordingManifest | null;
   try {
-    [report, turns] = await Promise.all([
+    [report, turns, evaluations, recording] = await Promise.all([
       api.runReport(runId, { cache: "no-store", headers: auth }),
       api.runTurns(runId, { cache: "no-store", headers: auth }),
+      api.runEvaluations(runId, { cache: "no-store", headers: auth }).catch(() => null),
+      // 404 until the run finishes: no recording yet is not an error.
+      api.runRecording(runId, { cache: "no-store", headers: auth }).catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 404) return null;
+        throw error;
+      }),
     ]);
   } catch (error) {
     signInAgainIfExpired(error);
@@ -114,6 +129,12 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
 
   const run = report.run;
   const degraded = report.artefacts.filter((a) => a.variant === "degraded");
+  const inFlight =
+    (run.status === "initializing" || run.status === "running") &&
+    run.awaiting_bot_audio_for_turn === null &&
+    typeof run.awaiting_bot_text_for_turn !== "number";
+  const finished = ["completed", "failed", "cancelled", "timed_out"].includes(run.status);
+  const latest = evaluations?.evaluations[0] ?? null;
 
   return (
     <>
@@ -140,6 +161,75 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
       />
 
       <PageBody>
+        <RunAutoRefresh active={inFlight} />
+
+        <div className="grid min-w-0 gap-5 lg:grid-cols-2">
+          <Panel>
+            <PanelHeader
+              title="Evaluation"
+              description="Read from what this run stored, under the current evaluator. Re-evaluating appends; history is kept."
+              actions={finished ? <EvaluateButton runId={run.run_id} again={latest !== null} /> : null}
+            />
+            {latest === null ? (
+              <p className="p-4 text-[13px] text-text-muted sm:p-5">
+                {finished ? "Not evaluated yet." : "The run has not finished, so there is nothing to evaluate."}
+              </p>
+            ) : (
+              <div className="p-4 sm:p-5">
+                <p className="text-[15px] font-semibold text-text">
+                  Verdict: {latest.verdict}{" "}
+                  <span className="font-mono text-[12px] font-normal text-text-dim">{latest.evaluator_version}</span>
+                </p>
+                <ul className="mt-3 space-y-1.5">
+                  {latest.criteria.map((criterion) => (
+                    <li key={criterion.name} className="text-[13px]">
+                      <span className="font-mono text-text">{criterion.name}</span>{" "}
+                      <span className="text-text-muted">{criterion.status} - {criterion.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+                {!latest.measures_audio ? (
+                  <p className="mt-3 text-[12px] text-text-dim">This mode moved no audio; nothing here describes audio.</p>
+                ) : null}
+              </div>
+            )}
+          </Panel>
+
+          <Panel>
+            <PanelHeader
+              title="Full recording"
+              description="Assembled from the turns after the run, in order. Gaps between turns are not reproduced, so it is not a timing measurement."
+            />
+            <div className="p-4 sm:p-5">
+              {recording === null ? (
+                <p className="text-[13px] text-text-muted">No recording until the run finishes.</p>
+              ) : recording.status === "stored" ? (
+                <>
+                  <audio controls preload="none" src={recordingAudioUrl(run.run_id)} className="w-full">
+                    Your browser cannot play this recording.
+                  </audio>
+                  <p className="mt-2 font-mono text-[12px] text-text-dim">
+                    {recording.duration_seconds?.toFixed(1)} s · {recording.segments?.length ?? 0} segments
+                    {recording.excluded && recording.excluded.length > 0
+                      ? ` · ${recording.excluded.length} turn(s) excluded`
+                      : ""}
+                  </p>
+                  {recording.excluded?.map((e) => (
+                    <p key={`${e.turn_index}-${e.speaker}`} className="mt-1 text-[12px] text-warn">
+                      Turn {e.turn_index} ({e.speaker}) not included: {e.reason}
+                    </p>
+                  ))}
+                </>
+              ) : (
+                <p className="text-[13px] text-text-muted">
+                  {recording.status === "not_applicable" ? "No audio moved in this run." : "The recording could not be assembled"}
+                  {recording.reason ? `: ${recording.reason}` : "."}
+                </p>
+              )}
+            </div>
+          </Panel>
+        </div>
+
         {run.error ? (
           <Panel className="border-bad/40">
             <ErrorState title="This run failed" detail={run.error} />

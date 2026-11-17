@@ -60,6 +60,17 @@ const Icons = {
       <path d="M12.5 3.5V7H16M6 11h8M6 13.5h5" />
     </svg>
   ),
+  analytics: ({ className }: { className?: string }) => (
+    <svg viewBox="0 0 20 20" className={className} aria-hidden="true" {...stroke}>
+      <path d="M3 16.5h14M5.5 13.5v-4M10 13.5v-8M14.5 13.5v-6" />
+    </svg>
+  ),
+  workspace: ({ className }: { className?: string }) => (
+    <svg viewBox="0 0 20 20" className={className} aria-hidden="true" {...stroke}>
+      <circle cx="7.5" cy="7" r="2.75" />
+      <path d="M2.75 16c.6-2.6 2.5-4 4.75-4s4.15 1.4 4.75 4M13 5.5a2.5 2.5 0 0 1 0 4.5M14.5 12c1.5.4 2.5 1.7 2.75 4" />
+    </svg>
+  ),
   providers: ({ className }: { className?: string }) => (
     <svg viewBox="0 0 20 20" className={className} aria-hidden="true" {...stroke}>
       <rect x="2.5" y="3" width="15" height="5.5" rx="1.5" />
@@ -93,6 +104,18 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Scenarios",
     blurb: "The scenario library",
     icon: Icons.scenarios,
+  },
+  {
+    href: "/app/analytics",
+    label: "Analytics",
+    blurb: "Pass rates with intervals, comparisons and regressions",
+    icon: Icons.analytics,
+  },
+  {
+    href: "/app/workspace",
+    label: "Workspace",
+    blurb: "Members, roles and projects",
+    icon: Icons.workspace,
   },
   {
     href: "/app/providers",
