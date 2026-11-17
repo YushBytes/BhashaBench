@@ -43,6 +43,11 @@ Design and rules: [AUTH.md](AUTH.md). In short:
   one; the role matrix decides the rest. A run cannot use another suite's
   scenario.
 
+Session tokens carry a `bbs_` prefix, and the shared redactor
+(`app/transcription/redaction.py`) removes any `bbs_...` token wherever it
+appears - added after the Phase 9 crash test found one surviving in a run's
+stored error.
+
 **Known gaps.** No per-client rate limiting yet (Phase 14 part 2), so the
 lockout is the only brake on guessing and can be used to lock a known
 account. No multi-factor authentication. No email verification or password

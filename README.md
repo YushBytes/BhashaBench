@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2960 tests across 64 modules
+│   ├── tests/                 2972 tests across 65 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -634,6 +634,7 @@ their phase lands.
 | `BOT_HTTP_MAX_ATTEMPTS` | Requests per turn, counting retries | `2` |
 | `PIPELINE_FIXTURE_AUDIO_PATH` | WAV the `scripted` adapter replays as every bot reply. Unset, a scripted audio run fails on turn 0 | _unset_ |
 | `PIPELINE_FIXTURE_BOT_TEXT_PATH` | Bot replies as text, one per line, for `offline_simulation` with the `scripted` adapter. Unset, such a run fails on its first bot turn | _unset_ |
+| `PIPELINE_RECOVERY_INTERVAL_SECONDS` | How often the server closes runs left in flight with nothing executing them; 0 disables | `300` |
 | `PIPELINE_RUN_TIMEOUT_SECONDS` | Wall-clock ceiling on one run | `600.0` |
 | `PIPELINE_MAX_CONCURRENT_RUNS` | Bounds provider spend and memory. Enforced per process: `POST /start` answers 503 beyond it rather than queueing | `2` |
 | `PIPELINE_NOISE_SEED` | Default degradation seed, fixed so a run is reproducible | `42` |
@@ -751,10 +752,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2960 tests** across sixty-four modules.
-**2919 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 2972 tests** across sixty-five modules.
+**2931 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2960) exceeds the number that run (2919):
+why the collected total (2972) exceeds the number that run (2931):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -767,6 +768,7 @@ why the collected total (2960) exceeds the number that run (2919):
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
+| `test_background_runs.py` | 8 | Phase 9 background execution: a run started with `background=true` answers 202 and completes after its request, a crash closes the run as `failed`/`abandoned` by the background worker with a redacted reason, a finished run and a run with no free slot are refused before the 202 with nothing started, the recovery sweep closing runs whose worker died while leaving recent and protected runs alone, a zero interval starting no loop, and the app never sweeping with the global settings
 | `test_telephony_calls.py` | 16 | Phase 8 telephony with the mock provider against PostgreSQL and the real webhook: a placed call stored masked and labelled mocked with the caller namespace untouched, placing alone setting no status, an off-list number refused before the provider is contacted, concurrent, per-run and per-day limits, signed events driving each of four outcomes through the call and its conversation (`DIALING` first, `BUSY`/`NO_ANSWER` only from events), unsigned, wrong-secret and tampered events changing nothing, duplicates and stale events recorded but not applied, unknown providers and calls 404, the webhook absent with telephony off, oversized events refused, calls deleted with their run, and an invalid allowlist failing at startup
 | `test_telephony_core.py` | 44 | Phase 8 telephony core, offline: E.164 normalisation and refusal, masking, every guardrail refusing before dialling and never naming the full number, an empty allowlist allowing nothing, webhook signatures refusing edits, missing headers, bad timestamps, replays and an unconfigured secret, every provider status mapped and calls only moving forward, `telephony_test` still unimplemented, the mock labelled mocked with four scripted outcomes and strict event parsing, and the registry refusing the mock in production and any provider that does not exist
 | `test_signed_links.py` | 18 | Phase 10 signed audio links: the HMAC primitive verifying a fresh link and refusing any edit to variant, expiry, user or signature, another path, expiry, a rotated secret, an over-long lifetime and malformed values; and through the API, a link opening one turn's audio or the recording with no session, refusing to be pointed at another turn or tampered with, revoked when its minter leaves the workspace, unmintable by an outsider or for audio that does not exist, and capped at fifteen minutes
@@ -794,7 +796,7 @@ why the collected total (2960) exceeds the number that run (2919):
 | `test_transcription_core.py` | 112 | Audio format detection from content, WAV header parsing, size/duration/channel limits, filename safety, the retry policy's arithmetic and what it refuses to retry, the provider registry |
 | `test_transcription_prisma.py` | 81 | The Gnani Prisma adapter against its published contract: request shape, every documented status, response normalisation, malformed responses, language and mode mapping |
 | `test_transcription_api.py` | 93 | The service layer and the real FastAPI routes - batch upload, provider capabilities, the WebSocket lifecycle, error-to-status mapping, structured logging |
-| `test_transcription_security.py` | 53 | Credential redaction, no secret in a response/log/stream frame, path traversal, capped uploads, temp-file cleanup, repository hygiene |
+| `test_transcription_security.py` | 57 | Credential redaction (including BhashaBench `bbs_` session tokens anywhere in a message), no secret in a response/log/stream frame, path traversal, capped uploads, temp-file cleanup, repository hygiene |
 | `test_transcription_streaming.py` | 38 | Prisma's WebSocket protocol: 1024-byte framing, event mapping, ordering, malformed frames, cancellation, bounded buffering |
 | `test_audio_fixtures.py` | 19 | The committed fixtures still match their generator byte for byte, and still claim no speech and no expected transcript |
 | `test_transcription_live.py` | 15 | **Opt-in, billable.** Real Gnani Prisma calls. Skipped unless `TRANSCRIPTION_LIVE_TESTS=true` *and* `GNANI_API_KEY` are both set |
@@ -849,7 +851,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2919 passed, 41 skipped ================
+================ 2931 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

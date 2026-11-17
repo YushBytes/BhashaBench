@@ -90,13 +90,18 @@ captured live; the sweep is not scheduled).
 | Phase 8 unit | Commit | CI |
 |------|--------|----|
 | Provider contract, guardrails, signed webhooks, mock provider | `6f5bf8c` | see log |
-| `telephony_calls` (migration `bcf146f6c696`), event handling, webhook and call listing | this commit | see log |
+| `telephony_calls` (migration `bcf146f6c696`), event handling, webhook and call listing | `97a5b0c` | see log |
 
 **Phase 8: partial by rule** (no real call is authorised).
 
+| Phase 9 unit | Commit | CI |
+|------|--------|----|
+| Background execution, crash finishing, automatic recovery; `bbs_` token redaction | this commit | see log |
+
 ## Next task
 
-Phase 9: background execution of runs (a run started over HTTP keeps going
+Phase 9 (continued): the streaming voice protocol and its engine loop, after
+the background unit. Original brief: background execution of runs (a run started over HTTP keeps going
 when the request ends; today it executes inside the request), per-turn
 latency evidence measured rather than inferred, and recovery integrated
 with the background worker. In-process worker only; no paid queue.

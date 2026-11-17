@@ -332,9 +332,12 @@ They meet every criterion above, so they are excluded by exact id
 (`PROTECTED_RUN_IDS` in `app/pipeline/recovery.py`): never listed by a dry
 run, never closed by `--apply`. There is no flag to override this.
 
-There is deliberately no automatic sweeper: deciding a run is dead rather
-than slow is a judgement, made explicitly and dry-run first. `--json` reports
-`applied`, the threshold and the runs.
+Since Phase 9 the server also runs this sweep by itself every
+`PIPELINE_RECOVERY_INTERVAL_SECONDS` (default 300; 0 disables it), with a
+threshold of `PIPELINE_RUN_TIMEOUT_SECONDS` plus a minute, so a run whose
+process died reaches a terminal state without an operator. This command
+remains the explicit, dry-run-first way to do the same by hand.
+`--json` reports `applied`, the threshold and the runs.
 
 ### `runs purge`
 

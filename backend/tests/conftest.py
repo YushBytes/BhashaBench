@@ -209,6 +209,8 @@ def settings() -> Settings:
         # scrypt at N=2^10 instead of 2^17, so each login costs milliseconds;
         # Settings refuses this value in staging and production.
         auth_password_hash_log2_n=10,
+        # No background recovery sweep in tests; it is exercised directly.
+        pipeline_recovery_interval_seconds=0,
         _env_file=None,
     )
 

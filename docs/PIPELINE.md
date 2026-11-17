@@ -830,3 +830,26 @@ Every terminal run gets a `recording` entry in its pipeline metadata: a
 stored `conversation.wav` assembled from the turn artefacts with a segment
 map, `failed` with a reason, or `not_applicable` when no audio moved. See
 [STORAGE.md](STORAGE.md#the-full-conversation-recording).
+
+## Background execution and recovery (Phase 9)
+
+`POST /test-runs/{id}/start?background=true` answers **202** at once and the
+run executes on the server with its own database session and engine
+(`app/pipeline/worker.py`), so it outlives the request; poll
+`GET /test-runs/{id}`. Without the parameter, `/start` behaves as before.
+
+- **Admission before the 202.** A finished or unknown run is refused (409 /
+  404) and, with no concurrency slot free, the answer is 503 and nothing
+  starts - a 202 never promises work the server cannot begin. A run already
+  executing in the background is 409.
+- **A crash finishes the run.** Any exception escaping the engine closes the
+  run as `failed`, outcome `abandoned`, `recovered.by: "background worker"`,
+  with a redacted reason.
+- **Recovery on its own.** Every `PIPELINE_RECOVERY_INTERVAL_SECONDS`
+  (default 300, 0 disables) the server closes runs left in flight with
+  nothing executing them, using `PIPELINE_RUN_TIMEOUT_SECONDS` plus a minute
+  as the threshold; `recovered.by` says `automatic recovery`. The protected
+  historical runs are never touched.
+- **In-process.** No queue or broker. A run's background task lives in the
+  process that accepted it; if that process dies, the recovery sweep closes
+  the run. Shutdown waits for background runs to finish.

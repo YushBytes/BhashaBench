@@ -562,6 +562,17 @@ class Settings(BaseSettings):
         ),
     )
 
+    pipeline_recovery_interval_seconds: float = Field(
+        default=300.0,
+        ge=0,
+        le=86400,
+        description=(
+            "How often the server closes runs left in flight with nothing executing "
+            "them (a crash, a restart). 0 disables it; `bhashabench runs recover-stale` "
+            "still works by hand. A run counts as stale only after "
+            "PIPELINE_RUN_TIMEOUT_SECONDS of inactivity plus a minute."
+        ),
+    )
     pipeline_run_timeout_seconds: float = Field(
         default=600.0,
         gt=0,

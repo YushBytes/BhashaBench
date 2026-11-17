@@ -43,6 +43,7 @@ _ASSIGNMENT = re.compile(
       | api[_-]subscription[_-]key
       | access[_-]?token
       | refresh[_-]?token
+      | (?:session[_-]?)?token
       | authorization
       | secret(?:[_-]?key)?
       | password
@@ -65,6 +66,10 @@ _ASSIGNMENT = re.compile(
 # A bare `Bearer <token>` with no preceding field name - how an Authorization
 # header looks once it has been flattened into a log line.
 _BARE_SCHEME = re.compile(r"(?i)\b(bearer|basic|token)\s+([A-Za-z0-9._\-+/=]{8,})")
+
+# BhashaBench's own session tokens (`app/auth/tokens.py`), wherever they
+# appear: the prefix exists so a leaked one is recognisable, here included.
+_SESSION_TOKEN = re.compile(r"\bbbs_[A-Za-z0-9_-]{4,}")
 
 _URL_CREDENTIALS = re.compile(r"(?i)\b([a-z][a-z0-9+.\-]*://)([^/\s:@]+):([^/\s@]+)@")
 
@@ -93,6 +98,7 @@ def redact(text: object) -> str:
     value = text if isinstance(text, str) else str(text)
     value = _URL_CREDENTIALS.sub(rf"\1\2:{PLACEHOLDER}@", value)
     value = _ASSIGNMENT.sub(_replace_assignment, value)
+    value = _SESSION_TOKEN.sub(PLACEHOLDER, value)
     return _BARE_SCHEME.sub(rf"\1 {PLACEHOLDER}", value)
 
 

@@ -3,7 +3,8 @@
 A run advances only inside a request (`/start`, `/bot-audio`, `/bot-text`).
 If that request dies - a killed process, a crash, a pre-Phase-0
 `offline_simulation` that had no reply source - the run stays `running` with
-no worker coming back for it. Nothing sweeps such runs automatically, by
+no worker coming back for it. Since Phase 9 the server sweeps for such runs
+on an interval (`app.pipeline.worker.RecoveryLoop`); before that nothing did, by
 design: deciding that a run is dead rather than slow is a judgement, and this
 module makes it explicit, dry-run first, never on a timer.
 
@@ -123,7 +124,14 @@ def find_stale_runs(session: Session, *, older_than: timedelta, now: datetime) -
     return sorted(found, key=lambda stale: stale.last_activity_at)
 
 
-def abandon(session: Session, stale: StaleRun, *, now: datetime) -> None:
+def abandon(
+    session: Session,
+    stale: StaleRun,
+    *,
+    now: datetime,
+    by: str = "bhashabench runs recover-stale",
+    reason: str | None = None,
+) -> None:
     """Finish one stale run: database status `failed`, outcome `abandoned`.
 
     The caller owns the transaction. Refuses a protected run before touching
@@ -140,8 +148,7 @@ def abandon(session: Session, stale: StaleRun, *, now: datetime) -> None:
     last_turn = max((int(event.get("turn_index", 0)) for event in events), default=0)
     when = stale.last_activity_at.isoformat()
     detail = (
-        f"abandoned: no activity since {when}; closed by "
-        f"'bhashabench runs recover-stale --apply' at {now.isoformat()}"
+        f"abandoned: {reason or f'no activity since {when}'}; closed by '{by}' at {now.isoformat()}"
     )
     events.append(
         {
@@ -158,7 +165,8 @@ def abandon(session: Session, stale: StaleRun, *, now: datetime) -> None:
         "last_activity_at": when,
         "idle_seconds": round(stale.idle.total_seconds(), 1),
         "previous_status": stale.pipeline_status,
-        "by": "bhashabench runs recover-stale",
+        "by": by,
+        "reason": reason,
         "finished_at_is_recovery_time": True,
     }
     meta["status"] = PipelineStatus.FAILED.value
@@ -184,7 +192,7 @@ def abandon(session: Session, stale: StaleRun, *, now: datetime) -> None:
         run,
         status=RunStatus.FAILED,
         metadata=meta,
-        error_message=f"abandoned: no activity since {when}",
+        error_message=f"abandoned: {reason or f'no activity since {when}'}",
     )
 
 

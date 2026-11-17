@@ -55,6 +55,8 @@ from app.caller.orchestrator import ConversationOrchestrator
 from app.caller.registry import build_provider as build_caller_provider
 from app.caller.schemas import Speaker
 from app.caller.service import CallerService
+from app.core.config import Settings
+from app.db.session import get_session_factory
 from app.models.test_run import RunStatus, TestRun
 from app.pipeline.bots.registry import (
     HTTP_ADAPTER,
@@ -75,13 +77,14 @@ from app.pipeline.engine import (
     RunEngine,
     RunReport,
 )
-from app.pipeline.errors import PipelineConfigurationError
+from app.pipeline.errors import PipelineConfigurationError, RunCapacityExhaustedError
 from app.pipeline.modes import (
     IMPLEMENTED_MODES,
     ExecutionMode,
     PipelineStatus,
     RunOutcome,
 )
+from app.pipeline.worker import run_worker
 from app.repositories import caller_conversations as caller_repo
 from app.repositories import pipeline_runs as pipeline_repo
 from app.schemas.common import ErrorResponse
@@ -103,7 +106,7 @@ from app.schemas.pipeline import (
 )
 from app.schemas.suite import Page
 from app.services import access_service, retention_service
-from app.services.errors import NotFoundError
+from app.services.errors import ConflictError, NotFoundError
 from app.services.transcription_service import TranscriptionService
 from app.speech.registry import build_provider as build_speech_provider
 from app.speech.service import SpeechService
@@ -197,6 +200,43 @@ def get_engine_factory(
             del caller, speech, transcription, adapter
 
     return build
+
+
+class BackgroundExecutor:
+    """Runs one run to completion with its own session and engine.
+
+    The request's session and engine are closed when the 202 is sent, so a
+    background run builds both afresh. Tests replace this dependency with one
+    bound to their rolled-back transaction.
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self.session_factory = get_session_factory()
+
+    async def execute(self, run_id: uuid.UUID) -> None:
+        session = self.session_factory()
+        try:
+            run = pipeline_repo.get_run(session, run_id)
+            adapter = (
+                None if run is None else pipeline_repo.pipeline_metadata_of(run).get("bot_adapter")
+            )
+            built = get_engine_factory(self._settings, session)(adapter)
+            engine = next(built)
+            try:
+                await engine.run_to_completion(run_id)
+                session.commit()
+            finally:
+                built.close()
+        finally:
+            session.close()
+
+
+def get_background_executor(settings: SettingsDep) -> BackgroundExecutor:
+    return BackgroundExecutor(settings)
+
+
+BackgroundExecutorDep = Annotated[BackgroundExecutor, Depends(get_background_executor)]
 
 
 EngineFactoryDep = Annotated[
@@ -588,11 +628,43 @@ def create_run(
     responses=_COMMON_ERRORS | _CAPACITY_ERROR,
     dependencies=[RunAccess.EDIT],
 )
-async def start_run(run_id: uuid.UUID, engine: EngineDep, session: DbSession) -> RunResponse:
+async def start_run(
+    run_id: uuid.UUID,
+    engine: EngineDep,
+    session: DbSession,
+    settings: SettingsDep,
+    executor: BackgroundExecutorDep,
+    response: Response,
+    background: Annotated[
+        bool,
+        Query(
+            description=(
+                "Answer 202 at once and execute on the server, so the run outlives this "
+                "request; poll `GET /test-runs/{id}`. Admission is decided before the 202."
+            )
+        ),
+    ] = False,
+) -> RunResponse:
     """Execute a run to its terminal state, or to its next wait."""
-    report = await engine.run_to_completion(run_id)
-    session.commit()
-    return _run(report)
+    if not background:
+        report = await engine.run_to_completion(run_id)
+        session.commit()
+        return _run(report)
+    worker = run_worker()
+    if worker.running(run_id):
+        raise ConflictError(f"run {run_id} is already executing in the background")
+    engine._load_active(run_id)  # refuse a finished or unknown run before answering
+    if get_run_slots(settings).available < 1:
+        slots = get_run_slots(settings)
+        raise RunCapacityExhaustedError(
+            "no run slot is free; retry later (the run is untouched)",
+            limit=slots.limit,
+            in_use=slots.in_use,
+            run_id=str(run_id),
+        )
+    worker.submit(run_id, lambda: executor.execute(run_id), executor.session_factory)
+    response.status_code = status.HTTP_202_ACCEPTED
+    return _run(engine.report(run_id))
 
 
 @router.post(

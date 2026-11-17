@@ -50,6 +50,21 @@ class TestRedaction:
     @pytest.mark.parametrize(
         "text",
         [
+            "worker died with token=bbs_AbCdEf0123456789-_xyz",
+            "session_token: bbs_AbCdEf0123456789-_xyz",
+            "raw bbs_AbCdEf0123456789-_xyz in a message",
+        ],
+    )
+    def test_a_bhashabench_session_token_is_redacted_anywhere(self, text: str) -> None:
+        """Found by the Phase 9 crash test: a run's stored error kept one."""
+        assert "bbs_AbCdEf" not in redact(text)
+
+    def test_the_session_token_rule_needs_a_word_boundary(self) -> None:
+        assert redact("xbbs_notatoken") == "xbbs_notatoken"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
             f"api_key={SECRET}",
             f"api-key: {SECRET}",
             f'{{"api_key": "{SECRET}"}}',

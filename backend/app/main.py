@@ -30,6 +30,7 @@ from app.caller.errors import (
 )
 from app.core.config import Settings, get_settings
 from app.core.languages import UnsupportedLanguageError
+from app.db.session import get_session_factory
 from app.pipeline.errors import (
     AudioValidationError,
     BotAdapterError,
@@ -46,6 +47,7 @@ from app.pipeline.errors import (
     RunCapacityExhaustedError,
     RunNotActiveError,
 )
+from app.pipeline.worker import RecoveryLoop, run_worker
 from app.schemas.common import ErrorDetail, ErrorResponse, HealthResponse, ServiceIdentity
 from app.services.errors import (
     ConflictError,
@@ -433,7 +435,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Resolving settings here means a misconfigured deployment fails at boot
     rather than on the first request.
     """
-    settings = get_settings()
+    # The app's own settings, not the global ones: a test app must never
+    # start a recovery loop against whatever database the developer's .env names.
+    settings = getattr(app.state, "settings", None) or get_settings()
     logging.basicConfig(
         level=logging.INFO if settings.is_production else logging.DEBUG,
         format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
@@ -444,7 +448,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.app_version,
         settings.app_env,
     )
-    yield
+    recovery_loop = RecoveryLoop(
+        get_session_factory(),
+        interval_seconds=settings.pipeline_recovery_interval_seconds,
+        threshold_seconds=settings.pipeline_run_timeout_seconds + 60,
+    )
+    recovery_loop.start()
+    try:
+        yield
+    finally:
+        await recovery_loop.stop()
+        await run_worker().drain()
     logger.info("Shutting down %s after %.1fs", settings.app_name, uptime_seconds())
 
 
@@ -475,6 +489,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         },
     )
+    app.state.settings = settings
 
     app.add_middleware(
         CORSMiddleware,
