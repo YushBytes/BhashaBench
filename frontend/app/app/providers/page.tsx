@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/primitives";
 import { AvailabilityBadge, Badge, SelectedBadge } from "@/components/ui/status";
 import { ApiError, api } from "@/lib/api/client";
+import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
 import type {
   BotAdapters,
   CallerProviders,
@@ -46,6 +47,7 @@ export default function ProvidersPage() {
 }
 
 async function ProviderPanels() {
+  const auth = await sessionHeaders();
   let stt: TranscriptionProviders | null = null;
   let tts: SpeechProviders | null = null;
   let caller: CallerProviders | null = null;
@@ -55,13 +57,14 @@ async function ProviderPanels() {
 
   try {
     [stt, tts, caller, adapters, languages] = await Promise.all([
-      api.transcriptionProviders({ cache: "no-store" }),
-      api.speechProviders({ cache: "no-store" }),
-      api.callerProviders({ cache: "no-store" }),
-      api.botAdapters({ cache: "no-store" }),
+      api.transcriptionProviders({ cache: "no-store", headers: auth }),
+      api.speechProviders({ cache: "no-store", headers: auth }),
+      api.callerProviders({ cache: "no-store", headers: auth }),
+      api.botAdapters({ cache: "no-store", headers: auth }),
       api.languages({ revalidate: 3600 }),
     ]);
   } catch (error) {
+    signInAgainIfExpired(error);
     failure =
       error instanceof ApiError ? error.message : "Provider status is unavailable.";
   }

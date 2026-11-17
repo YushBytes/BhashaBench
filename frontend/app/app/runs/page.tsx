@@ -14,6 +14,7 @@ import {
   cx,
 } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api/client";
+import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
 import type { Page as PageEnvelope, RunSummary } from "@/lib/api/types";
 
 export const metadata = { title: "Test runs" };
@@ -62,6 +63,7 @@ async function RunHistory({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  const auth = await sessionHeaders();
   const params = await searchParams;
   const offset = Number.parseInt(one(params.offset) ?? "0", 10) || 0;
 
@@ -74,9 +76,11 @@ async function RunHistory({
   try {
     runs = await api.runs({
       cache: "no-store",
+      headers: auth,
       query: { ...filters, limit: PAGE_SIZE, offset },
     });
   } catch (error) {
+    signInAgainIfExpired(error);
     failure =
       error instanceof ApiError
         ? error.message

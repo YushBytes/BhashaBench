@@ -8,6 +8,13 @@
  * an `ApiError` the UI renders as an error state. Returning plausible-looking
  * data when the backend is unreachable would make a broken deployment look
  * like a working one, which is the single thing this product may not do.
+ *
+ * **Sessions (Phase 14).** The browser talks only to its own origin: Next
+ * rewrites `/api/v1/*` to the backend (`next.config.ts`), so the API's
+ * HttpOnly session cookie is first-party and is sent automatically - this
+ * module never sees the token. On the server, `lib/api/server.ts` reads the
+ * cookie from the incoming request and passes it in `headers`; it calls no
+ * route itself.
  */
 
 import type {
@@ -16,6 +23,8 @@ import type {
   CallerProviders,
   CreateRunBody,
   LanguageCatalogue,
+  LoginResult,
+  Me,
   Page,
   Run,
   RunArtefacts,
@@ -29,9 +38,16 @@ import type {
   TranscriptionProviders,
 } from "./types";
 
-/** Where the API lives, from the browser's point of view. */
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+/** Where the backend lives, from the Next server's point of view. The
+ *  browser never uses this: it calls its own origin and the rewrite proxies. */
+export const BACKEND_URL =
+  process.env.BACKEND_URL ??
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  "http://localhost:8000";
+
+function base(): string {
+  return typeof window === "undefined" ? BACKEND_URL : window.location.origin;
+}
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -81,10 +97,12 @@ interface RequestOptions {
    *  client components pass `no-store`. */
   cache?: RequestCache;
   revalidate?: number;
+  /** Extra request headers. Server pages pass the session cookie here. */
+  headers?: Record<string, string>;
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const url = new URL(path.replace(/^\//, ""), `${API_BASE.replace(/\/$/, "")}/`);
+  const url = new URL(path.replace(/^\//, ""), `${base().replace(/\/$/, "")}/`);
   if (query) {
     for (const [key, value] of Object.entries(query)) {
       if (value === undefined || value === null || value === "") continue;
@@ -130,6 +148,7 @@ export async function request<T>(
     query,
     cache,
     revalidate,
+    headers: extraHeaders,
   } = options;
 
   // Our own deadline, combined with any caller-supplied signal, so a slow
@@ -140,7 +159,12 @@ export async function request<T>(
   const init: RequestInit & { next?: { revalidate: number } } = {
     method,
     signal: composed,
-    headers: body ? { "content-type": "application/json" } : undefined,
+    headers: {
+      ...(body ? { "content-type": "application/json" } : {}),
+      ...extraHeaders,
+    },
+    // Same-origin in the browser; the session cookie travels by itself.
+    credentials: "same-origin",
     body: body === undefined ? undefined : JSON.stringify(body),
   };
   if (cache) init.cache = cache;
@@ -158,7 +182,7 @@ export async function request<T>(
     }
     if (signal?.aborted) throw cause;
     throw new ApiError(
-      `Could not reach the API at ${API_BASE}. Is the backend running?`,
+      `Could not reach the API at ${base()}. Is the backend running?`,
       { kind: "network" },
     );
   }
@@ -177,6 +201,19 @@ export async function request<T>(
 // ---------------------------------------------------------------------------
 
 export const api = {
+  login: (email: string, password: string, o?: RequestOptions) =>
+    request<LoginResult>("/api/v1/auth/login", {
+      ...o,
+      method: "POST",
+      // `cookie`: the token is set HttpOnly and never returned to script.
+      body: { email, password, session_type: "cookie" },
+    }),
+
+  logout: (o?: RequestOptions) =>
+    request<void>("/api/v1/auth/logout", { ...o, method: "POST" }),
+
+  me: (o?: RequestOptions) => request<Me>("/api/v1/auth/me", o),
+
   health: (o?: RequestOptions) => request<ApiHealth>("/api/v1/health", o),
 
   languages: (o?: RequestOptions) =>
@@ -246,10 +283,8 @@ export function artefactAudioUrl(
   turnIndex: number,
   variant: string | null,
 ): string {
-  const url = new URL(
-    `api/v1/test-runs/${runId}/artifacts/${turnIndex}/audio`,
-    `${API_BASE.replace(/\/$/, "")}/`,
-  );
-  if (variant) url.searchParams.set("variant", variant);
-  return url.toString();
+  // Relative, so the browser requests it from this origin with the session
+  // cookie; an absolute backend URL would be a cross-site request without it.
+  const path = `/api/v1/test-runs/${runId}/artifacts/${turnIndex}/audio`;
+  return variant ? `${path}?variant=${encodeURIComponent(variant)}` : path;
 }

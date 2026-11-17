@@ -601,7 +601,8 @@ their phase lands.
 | `DATABASE_URL` | SQLAlchemy-style URL. **Its port must match `POSTGRES_HOST_PORT`** or host-side tooling, including `alembic upgrade head`, will connect to whatever else is on the old port | local Postgres |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Consumed by the Compose `db` service | — |
 | `CORS_ORIGINS` | Comma-separated allowed browser origins | `http://localhost:3000` |
-| `NEXT_PUBLIC_API_BASE_URL` | Backend URL used by the frontend | `http://localhost:8000` |
+| `BACKEND_URL` | Where the frontend's server reaches the backend: the `/api/v1` proxy target and server-component fetches. Compiled into the rewrites at `next build` | `http://localhost:8000` (`http://backend:8000` in Compose) |
+| `NEXT_PUBLIC_API_BASE_URL` | Host-reachable backend URL for the public site's API-docs link | `http://localhost:8000` |
 | `CALLER_PROVIDER` | Caller strategy. `deterministic` (a rule engine) or `sarvam` (a Sarvam model with the rule engine as fallback; offline-tested only, and unable to make a live call while live calls are unauthorised). `evon` is refused by name | `deterministic` |
 | `SARVAM_API_KEY` | Sarvam key, sent as `api-subscription-key`. Not needed, and not used, while live calls are off | _empty_ |
 | `SARVAM_API_BASE_URL` | Sarvam REST base URL; must be https | `https://api.sarvam.ai` |

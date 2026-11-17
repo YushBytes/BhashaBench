@@ -102,7 +102,14 @@ services:
     container_name: bhashabench-frontend
     restart: unless-stopped
     environment:
-      # Resolved in the browser, so it must be a host-reachable URL.
+      # The browser calls this site's own /api/v1, which Next proxies to the
+      # backend; server components fetch the backend directly. Both use
+      # BACKEND_URL, resolved inside the Compose network - `localhost` here is
+      # the frontend container, which is why the workspace once reported the
+      # API unreachable under full Compose.
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+      # Only the public site's "API docs" link reads this; it is resolved in
+      # the browser, so it must be a host-reachable URL.
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
       NODE_ENV: development
       WATCHPACK_POLLING: "true"

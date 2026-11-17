@@ -5,6 +5,7 @@ import { PanelSkeleton } from "@/components/ui/loading";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
 import { ErrorState, Panel } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api/client";
+import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
 import type {
   BotAdapters,
   Page as PageEnvelope,
@@ -39,16 +40,18 @@ export default function NewTestPage() {
 }
 
 async function Form() {
+  const auth = await sessionHeaders();
   let scenarios: PageEnvelope<ScenarioSummary> | null = null;
   let adapters: BotAdapters | null = null;
   let failure: string | null = null;
 
   try {
     [scenarios, adapters] = await Promise.all([
-      api.scenarios({ cache: "no-store", query: { limit: 100 } }),
-      api.botAdapters({ cache: "no-store" }),
+      api.scenarios({ cache: "no-store", headers: auth, query: { limit: 100 } }),
+      api.botAdapters({ cache: "no-store", headers: auth }),
     ]);
   } catch (error) {
+    signInAgainIfExpired(error);
     failure =
       error instanceof ApiError
         ? error.message

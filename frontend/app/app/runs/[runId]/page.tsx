@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/primitives";
 import { ModeBadge, OutcomeBadge, RunStatusBadge } from "@/components/ui/status";
 import { ApiError, api } from "@/lib/api/client";
+import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
 import {
   formatBytes,
   formatHz,
@@ -79,16 +80,18 @@ function DetailLoading() {
 }
 
 async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
+  const auth = await sessionHeaders();
   const { runId } = await params;
 
   let report: RunReport;
   let turns: RunTurns;
   try {
     [report, turns] = await Promise.all([
-      api.runReport(runId, { cache: "no-store" }),
-      api.runTurns(runId, { cache: "no-store" }),
+      api.runReport(runId, { cache: "no-store", headers: auth }),
+      api.runTurns(runId, { cache: "no-store", headers: auth }),
     ]);
   } catch (error) {
+    signInAgainIfExpired(error);
     if (error instanceof ApiError && error.status === 404) notFound();
     return (
       <>

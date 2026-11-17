@@ -21,6 +21,12 @@ This file is the working reference.
 | `/app/new-test` | Partial prerender | scenarios, bot adapters |
 | `/app/scenarios` | Partial prerender | scenarios, languages |
 | `/app/providers` | Partial prerender | 4 provider endpoints, languages |
+| `/login` | Static | `POST /auth/login` from the browser |
+
+Every `/app` route needs a session. `proxy.ts` redirects to
+`/login?next=...` when the `bb_session` cookie is absent - an optimistic
+check only; the API decides on every request, and a page that gets a 401
+redirects through `signInAgainIfExpired`.
 
 Every workspace route is a static shell with live data streamed in behind a
 `<Suspense>` boundary.
@@ -129,6 +135,22 @@ variant is safe — variants sort after base utilities.
 
 `lib/api/client.ts` is the only module that calls the API.
 
+**Sessions (Phase 14).** The browser never calls the backend directly:
+`next.config.ts` rewrites `/api/v1/*` on the site's own origin to
+`BACKEND_URL`, so the API's `HttpOnly`, `SameSite=Strict` session cookie is
+first-party, travels by itself, and no script can read it.
+
+- Sign-in posts `session_type: "cookie"`; the response carries no token.
+- Server components cannot rely on the browser sending the cookie to the
+  backend, so `lib/api/server.ts` (server-only) reads `bb_session` from the
+  incoming request and passes it to `request()` as a header. It calls no
+  route itself.
+- `artefactAudioUrl` is relative, so `<audio>` fetches through the proxy with
+  the cookie.
+- The site's origin must be in the API's `CORS_ORIGINS`: the API refuses a
+  cookie-authenticated write from an unlisted `Origin`.
+- `languages` stays cached and unauthenticated: it is public reference data.
+
 - One `request` function: timeouts (15 s, 120 s for `start`), the error
   envelope, query serialisation that drops `undefined`.
 - `ApiError.kind` is `http`, `network` or `timeout` — three failures that
@@ -216,10 +238,11 @@ npm run build      # production build - the real check for prerender errors
 npm run start      # serve the production build
 ```
 
-`NEXT_PUBLIC_API_BASE_URL` points the browser at the API (default
-`http://localhost:8000`). The workspace calls the API **from the browser** for
-audio, so the origin the frontend is served from must appear in the backend's
-`CORS_ORIGINS` — otherwise audio fails as an opaque console error.
+`BACKEND_URL` is where the Next server reaches the backend (default
+`http://localhost:8000`, `http://backend:8000` under Compose); it is the
+`/api/v1` rewrite target and is compiled in at `next build`. The origin the
+frontend is served from must appear in the backend's `CORS_ORIGINS`, or
+cookie-authenticated writes (sign-out, starting a run) are refused with 403.
 
 Browsing the dev server by IP rather than `localhost` trips Next's
 cross-origin dev-resource block, which silently prevents hydration. Use

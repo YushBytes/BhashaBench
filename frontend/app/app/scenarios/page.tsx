@@ -13,6 +13,7 @@ import {
   buttonClass,
 } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api/client";
+import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
 import { formatTimestampShort, langAttr } from "@/lib/format";
 import type {
   LanguageCatalogue,
@@ -54,6 +55,7 @@ async function Library({
 }: {
   searchParams: Promise<SearchParams>;
 }) {
+  const auth = await sessionHeaders();
   const params = await searchParams;
   const language = one(params.language);
   const search = one(params.q);
@@ -66,6 +68,7 @@ async function Library({
     [scenarios, languages] = await Promise.all([
       api.scenarios({
         cache: "no-store",
+        headers: auth,
         // `name`, as the search endpoint declares it. A misspelled filter
         // is not rejected - it is ignored, and the page would quietly show
         // every scenario while appearing to have searched.
@@ -74,6 +77,7 @@ async function Library({
       api.languages({ revalidate: 3600 }),
     ]);
   } catch (error) {
+    signInAgainIfExpired(error);
     failure =
       error instanceof ApiError ? error.message : "The library could not be loaded.";
   }

@@ -15,6 +15,7 @@ import { usePathname } from "next/navigation";
 import { Suspense, useId, useState } from "react";
 
 import { cx } from "@/components/ui/primitives";
+import { Account } from "./account";
 import { Wordmark } from "./wordmark";
 
 interface NavItem {
@@ -186,6 +187,7 @@ function SidebarChrome({ pathname }: { pathname: string | null }) {
       </div>
 
       <div className="border-t border-line p-3">
+        <Account />
         <Link
           href="/"
           className="block rounded-md px-2.5 py-2 text-[12px] text-text-muted transition-colors hover:bg-surface-raised hover:text-text-dim"
@@ -281,6 +283,7 @@ function MobileNavChrome({ pathname }: { pathname: string | null }) {
               ))}
             </div>
             <div className="border-t border-line p-3">
+              <Account />
               <Link
                 href="/"
                 onClick={() => setOpen(false)}

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/primitives";
 import { Badge, HealthBadge } from "@/components/ui/status";
 import { ApiError, api } from "@/lib/api/client";
+import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
 import type {
   ApiHealth,
   BotAdapters,
@@ -40,14 +41,19 @@ interface Loaded {
 }
 
 async function load(): Promise<Loaded> {
+  const auth = await sessionHeaders();
   const settled = await Promise.allSettled([
-    api.health({ cache: "no-store" }),
-    api.transcriptionProviders({ cache: "no-store" }),
-    api.speechProviders({ cache: "no-store" }),
-    api.callerProviders({ cache: "no-store" }),
-    api.botAdapters({ cache: "no-store" }),
-    api.runs({ cache: "no-store", query: { limit: 8 } }),
+    api.health({ cache: "no-store", headers: auth }),
+    api.transcriptionProviders({ cache: "no-store", headers: auth }),
+    api.speechProviders({ cache: "no-store", headers: auth }),
+    api.callerProviders({ cache: "no-store", headers: auth }),
+    api.botAdapters({ cache: "no-store", headers: auth }),
+    api.runs({ cache: "no-store", headers: auth, query: { limit: 8 } }),
   ]);
+
+  for (const entry of settled) {
+    if (entry.status === "rejected") signInAgainIfExpired(entry.reason);
+  }
 
   const value = <T,>(index: number): T | null =>
     settled[index].status === "fulfilled"

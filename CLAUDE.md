@@ -402,7 +402,11 @@ frontend/
 Six rules that are easy to break:
 
 **`lib/api/client.ts` is the only module that calls the API.** One `request`
-function owns the timeout, the error envelope and query serialisation. There
+function owns the timeout, the error envelope and query serialisation. Since
+Phase 14 the browser calls only its own origin (`/api/v1` is rewritten to
+`BACKEND_URL`), so the HttpOnly session cookie is first-party;
+`lib/api/server.ts` only reads that cookie for server components and passes
+it in. Never return the token to script or store it in JS-readable state. There
 is no mock mode and no fallback data: a failed call renders an error state,
 because returning plausible data when the backend is down makes a broken
 deployment look like a working one.

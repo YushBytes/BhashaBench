@@ -149,13 +149,45 @@ export interface LanguageCatalogue {
 // Suites and scenarios
 // ---------------------------------------------------------------------------
 
+/** `GET /suites` items. No `scenario_count`: only the detail route
+ *  (`GET /suites/{id}`) returns one, and this type once claimed it. */
 export interface SuiteSummary {
   id: string;
+  project_id: string;
   name: string;
   description: string | null;
   created_at: string;
   updated_at: string;
-  scenario_count: number;
+}
+
+// -- Authentication (Phase 14) -----------------------------------------------
+
+export type Role = "owner" | "admin" | "member" | "viewer";
+
+export interface SessionUser {
+  id: string;
+  email: string;
+  display_name: string;
+}
+
+/** `POST /auth/login` with `session_type: "cookie"`: `token` is always null,
+ *  because the token is set as an HttpOnly cookie and never shown to script. */
+export interface LoginResult {
+  user: SessionUser;
+  expires_at: string;
+  session_type: "cookie" | "bearer";
+  token: string | null;
+}
+
+export interface Me {
+  user: SessionUser;
+  workspaces: {
+    workspace_id: string;
+    workspace_name: string;
+    workspace_slug: string;
+    role: Role;
+  }[];
+  session_expires_at: string | null;
 }
 
 export interface ScenarioSummary {
