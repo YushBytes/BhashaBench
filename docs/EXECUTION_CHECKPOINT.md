@@ -86,12 +86,29 @@ Phase 14 (part 1), in progress. Design and rules: `docs/AUTH.md`.
 | Identity schema, scrypt, tokens, role matrix (migration `05f303520380`) | `daa9cde` | ✅ 44091545141 |
 | Login, logout, sessions, CSRF origin check, `users create` | `7a7c365` | ✅ 44093406640 |
 | Workspaces, projects, members API and the authorisation service | `e11727b` | ✅ 44130395203 |
-| `project_id` on suites (migration `b588560f044d`, legacy backfill) and every route scoped; OpenAPI-driven isolation sweep | this commit | pending |
+| `project_id` on suites (migration `b588560f044d`, legacy backfill) and every route scoped; OpenAPI-driven isolation sweep | `6bdc373` | ✅ 44139339659 |
+| Next.js 16.4.3 -> 16.4.6 (GHSA-mfr8-8qww-v76h, GHSA-vc7v-qv4w-wrv8) | `3d25f7e` | ✅ |
+| Frontend sign-in through a same-origin proxy; Compose `BACKEND_URL` fix | `6a75a4f` | see log |
 
-Then the frontend sign-in (Phase 13 integration), then the execution order above.
+**Phase 14 part 1: complete.** Verified end to end through the frontend proxy
+against the running backend.
+
+## Next task
+
+Phase 10: a storage abstraction for artefacts (local filesystem adapter
+first; no paid bucket), full-conversation recordings linked to the per-turn
+artefacts, a retention period enforced by a dry-run-first sweep, tested
+deletion, and signed, expiring artefact URLs (moved here from Phase 12) so
+`PIPELINE_SERVE_ARTEFACTS` can be retired.
+
+Deferred to Phase 14 part 2: per-client rate limiting, security headers,
+dependency/secret scanning (dev-only `minimatch` and `picomatch` advisories
+are open), and the regression gate.
 
 ## Outstanding issues
 
 - Phase 6 cannot close until a live, cost-bounded call is authorised.
 - Phase 8 cannot close without an authorised real call.
 - Deployment target: none provisioned; anything paid needs the owner.
+- A local smoke-test account `e2e-smoke@example.test` (workspace `e2e-smoke`,
+  no data) exists in the developer database from the 2026-11-17 check.

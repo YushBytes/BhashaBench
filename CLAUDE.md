@@ -30,8 +30,8 @@ work. Current progress and the next task are in
 | 10 | Recording & transcription | 🟡 Partial — per-turn artefacts only |
 | 11 | Evaluation & judge engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & analytics backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
-| 13 | Frontend dashboard | 🟡 Partial — operator workspace, no analytics |
-| 14 | CI/CD & safety | ⬜ Not started |
+| 13 | Frontend dashboard | 🟡 Partial — operator workspace with sign-in, no analytics |
+| 14 | CI/CD & safety | 🟡 Partial — authentication, sessions, workspaces, roles and tenancy enforced on every route; no rate limits, security headers, scanning or regression gate |
 | 15 | Production readiness & competition demo | 🟡 Partial — competition demo only |
 
 The competition renumbered phases in flight. The roadmap's mapping table

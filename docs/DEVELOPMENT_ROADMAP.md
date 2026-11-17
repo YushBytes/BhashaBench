@@ -64,8 +64,8 @@ keep the numbering they were written in. Use this table to translate.
 | 10 | Recording & Transcription | 🟡 Partial — per-turn artefacts only |
 | 11 | Evaluation & Judge Engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & Analytics Backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
-| 13 | Frontend Dashboard | 🟡 Partial — operator workspace, no analytics |
-| 14 | CI/CD & Safety | ⬜ Not started |
+| 13 | Frontend Dashboard | 🟡 Partial — operator workspace with sign-in, no analytics |
+| 14 | CI/CD & Safety | 🟡 Partial — authentication, sessions, workspaces, roles and tenancy enforced on every route; no rate limits, security headers, scanning or regression gate |
 | 15 | Production Readiness & Competition Demo | 🟡 Partial — competition demo only |
 
 ---
@@ -813,7 +813,19 @@ estimated, and comparison views read the Phase 12 API.
 
 ---
 
-## Phase 14 — CI/CD & Safety ⬜
+## Phase 14 — CI/CD & Safety 🟡
+
+**Part 1 delivered on 2026-11-17** (authentication and authorisation,
+scheduled here by the execution checkpoint): accounts with scrypt passwords,
+server-side sessions with an HttpOnly cookie or a bearer token, workspaces,
+projects and four roles, every existing route authenticated and scoped to
+the caller's workspace, migrations `05f303520380` and `b588560f044d`, the
+frontend signing in through a same-origin proxy, and an OpenAPI-driven test
+that fails when a route is added without a check. Design: `docs/AUTH.md`.
+
+**Not delivered, and not claimed:** per-client rate limiting, security
+headers, dependency and secret scanning in CI, multi-factor authentication,
+and password reset by email (the application sends no email).
 
 Phase 0 adds the foundation (lint, tests against a required PostgreSQL,
 migration drift, frontend build, Compose validation). Remaining: a nightly
