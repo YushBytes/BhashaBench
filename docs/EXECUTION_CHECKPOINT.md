@@ -110,21 +110,20 @@ captured live; the sweep is not scheduled).
 | Phase 14.2 unit | Commit | CI |
 |------|--------|----|
 | Rate limits and security headers | `1ce0df6` | ✅ (with `60791b4`) |
-| Dependency audits and a full-history secret scan in CI | this commit | see log |
+| Dependency audits and a full-history secret scan in CI | `78476d8` | ✅ |
+| Regression gate over the reference scenarios; Phase 14 closed | this commit | see log |
 
 **Phase 13: complete** (no component tests; no deletion controls in the UI).
 
+**Phase 14: complete.**
+
 ## Next task
 
-Phase 14 part 2: per-client rate limiting on login and the API, security
-headers (CSP, HSTS when deployed, frame and content-type options),
-dependency and secret scanning in CI (`pip-audit`, `npm audit`, a secret
-scan), and a regression gate that fails CI on a deliberately introduced
-regression. Then Phase 15.
-
-Deferred to Phase 14 part 2: rate limiting, security headers,
-dependency/secret scanning (dev-only `minimatch` and `picomatch` advisories
-open), and the regression gate.
+Phase 15: production readiness. Production images for backend and
+frontend (non-root, pinned, health-checked), a production compose file,
+configuration validation at startup, runbooks (deploy, migrate, rotate
+secrets, restore, purge, recover), and a deployment plan with every paid
+item priced and left for the owner. Nothing is provisioned or bought.
 
 ## Outstanding issues
 

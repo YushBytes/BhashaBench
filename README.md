@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 3003 tests across 67 modules
+│   ├── tests/                 3009 tests across 68 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -755,10 +755,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 3003 tests** across sixty-seven modules.
-**2962 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3009 tests** across sixty-eight modules.
+**2968 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (3003) exceeds the number that run (2962):
+why the collected total (3009) exceeds the number that run (2968):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -771,6 +771,7 @@ why the collected total (3003) exceeds the number that run (2962):
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
+| `test_benchmark_gate.py` | 6 | The CI regression gate: every reference scenario run as a `text_bot_test` against the scripted reference bot and evaluated, compared with `benchmarks/baseline.json` so a worse verdict fails the build; the baseline matching `scenarios/` and containing passes worth guarding; a deliberately broken (refusing) bot tripping the gate on every baseline pass; and the comparison rules for worse, better, missing, new and unknown verdicts
 | `test_hardening.py` | 14 | Phase 14 part 2 hardening: the sliding-window limiter (limit, window, independent keys, 0 disables), 429 with `Retry-After` on the API, liveness never limited, login limited per email across addresses and checked before the right password is verified, `X-Forwarded-For` ignored unless trusted, and the security headers on responses and errors, HSTS only when deployed, no API CSP on the docs, `no-store` on auth
 | `test_streaming_voice.py` | 17 | Phase 9 streaming voice: framing and levels, latency from caller end to first voiced frame, end-of-turn silence, silence timeout, the deadline and barge-in on a simulated clock; then the `ws_voice` adapter against the reference bot over a real socket in real time - a prompt answer with measured latency, one socket across turns, end-pointing without a signal, a barge-in making the caller yield, a silent bot timing out with no audio, an endless bot cut off at the deadline, a wrong token and an off-allowlist host refused, no token in errors - and a whole `external_bot_test` run recording per-turn streaming evidence and a silent bot turn, with fixture mode refusing an external voice bot
 | `test_background_runs.py` | 8 | Phase 9 background execution: a run started with `background=true` answers 202 and completes after its request, a crash closes the run as `failed`/`abandoned` by the background worker with a redacted reason, a finished run and a run with no free slot are refused before the 202 with nothing started, the recovery sweep closing runs whose worker died while leaving recent and protected runs alone, a zero interval starting no loop, and the app never sweeping with the global settings
@@ -856,7 +857,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2962 passed, 41 skipped ================
+================ 2968 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -1121,7 +1122,7 @@ documentation. Full detail in
 | 11 | Evaluation & judge engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & analytics backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, components not) |
-| 14 | CI/CD & safety | 🟡 Partial — authentication, sessions, workspaces, roles and tenancy enforced on every route; no rate limits, security headers, scanning or regression gate |
+| 14 | CI/CD & safety | ✅ Complete (auth, tenancy, rate limits, headers, dependency and secret scanning, regression gate; no nightly run) |
 | 15 | Production readiness & competition demo | 🟡 Partial — competition demo only |
 
 > This is the **original** 15-phase numbering, restored after the competition.

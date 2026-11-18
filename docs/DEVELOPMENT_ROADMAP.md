@@ -65,7 +65,7 @@ keep the numbering they were written in. Use this table to translate.
 | 11 | Evaluation & Judge Engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & Analytics Backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend Dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, components not) |
-| 14 | CI/CD & Safety | 🟡 Partial — authentication, sessions, workspaces, roles and tenancy enforced on every route; no rate limits, security headers, scanning or regression gate |
+| 14 | CI/CD & Safety | ✅ Complete (auth, tenancy, rate limits, headers, dependency and secret scanning, regression gate; no nightly run) |
 | 15 | Production Readiness & Competition Demo | 🟡 Partial — competition demo only |
 
 ---
@@ -856,7 +856,7 @@ estimated, and comparison views read the Phase 12 API.
 
 ---
 
-## Phase 14 — CI/CD & Safety 🟡
+## Phase 14 — CI/CD & Safety ✅
 
 **Part 1 delivered on 2026-11-17** (authentication and authorisation,
 scheduled here by the execution checkpoint): accounts with scrypt passwords,
@@ -866,9 +866,17 @@ the caller's workspace, migrations `05f303520380` and `b588560f044d`, the
 frontend signing in through a same-origin proxy, and an OpenAPI-driven test
 that fails when a route is added without a check. Design: `docs/AUTH.md`.
 
-**Not delivered, and not claimed:** per-client rate limiting, security
-headers, dependency and secret scanning in CI, multi-factor authentication,
-and password reset by email (the application sends no email).
+**Part 2 delivered on 2026-11-18**, closing the phase against its exit
+criterion - a deliberately introduced regression fails CI
+(`backend/tests/test_benchmark_gate.py`, `benchmarks/`): per-client and
+per-email rate limits, security headers, pip-audit and npm audit gates on
+runtime dependencies, and a gitleaks scan of the full history.
+
+**Not delivered, and not claimed:** a scheduled nightly benchmark and
+published score artefacts (the gate runs on every push instead), secrets
+in GitHub Environments (CI needs none), multi-factor authentication,
+password reset by email (the application sends no email), and a
+Content-Security-Policy for the frontend pages.
 
 Phase 0 adds the foundation (lint, tests against a required PostgreSQL,
 migration drift, frontend build, Compose validation). Remaining: a nightly

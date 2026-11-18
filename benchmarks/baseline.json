@@ -1,0 +1,8 @@
+{
+  "appointment_booking": "pass",
+  "bengali_balance_enquiry": "not_runnable",
+  "english_insurance_claim": "pass",
+  "marathi_delivery_reschedule": "not_runnable",
+  "tamil_electricity_bill": "pass",
+  "telugu_order_tracking": "not_runnable"
+}

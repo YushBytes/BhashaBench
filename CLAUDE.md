@@ -31,7 +31,7 @@ work. Current progress and the next task are in
 | 11 | Evaluation & judge engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & analytics backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, components not) |
-| 14 | CI/CD & safety | 🟡 Partial — authentication, sessions, workspaces, roles and tenancy enforced on every route; no rate limits, security headers, scanning or regression gate |
+| 14 | CI/CD & safety | ✅ Complete (auth, tenancy, rate limits, headers, dependency and secret scanning, regression gate; no nightly run) |
 | 15 | Production readiness & competition demo | 🟡 Partial — competition demo only |
 
 The competition renumbered phases in flight. The roadmap's mapping table
@@ -565,7 +565,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 3003 collected; 2962 pass, 41 live ones skipped
+pytest                                  # 3009 collected; 2968 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 npm --prefix frontend test              # frontend unit tests (node --test)

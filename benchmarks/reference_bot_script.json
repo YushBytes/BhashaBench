@@ -1,0 +1,9 @@
+{
+  "greeting": null,
+  "rules": [
+    {"contains_any": ["thank", "bye", "धन्यवाद", "நன்றி"], "has_number": false,
+     "reply": "You are welcome. Goodbye.", "end_session": true},
+    {"has_number": true, "reply": "Thank you. Your request with reference {number} is confirmed."},
+    {"reply": "Hello, my name is Rahul. Please tell me your policy number, consumer number or reference number."}
+  ]
+}
