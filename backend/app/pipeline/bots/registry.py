@@ -175,6 +175,7 @@ def _build_http(replies: Sequence[bytes] | None, settings: Settings | None) -> B
         settings.bot_http_allowed_hosts,
         allow_loopback=settings.bot_http_allow_loopback,
         allow_private=settings.bot_http_allow_private,
+        allow_plain_private=settings.bot_http_allow_plain_private,
     )
     config = HttpBotConfig(
         base_url=settings.bot_http_base_url.strip(),
@@ -198,6 +199,7 @@ def _build_ws_voice(replies: Sequence[bytes] | None, settings: Settings | None) 
         settings.bot_http_allowed_hosts,
         allow_loopback=settings.bot_http_allow_loopback,
         allow_private=settings.bot_http_allow_private,
+        allow_plain_private=settings.bot_http_allow_plain_private,
     )
     return WebSocketVoiceBotAdapter(  # type: ignore[return-value]
         VoiceBotConfig(

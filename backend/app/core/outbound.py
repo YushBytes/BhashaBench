@@ -19,8 +19,10 @@ Four controls, in order, each sufficient to refuse:
    the policy opts in, which only development and tests do. Link-local,
    multicast, reserved, unspecified and the metadata addresses are refused
    always - there is no flag for them, because no legitimate bot lives there.
-4. **Transport.** Plain `http` is accepted only for a loopback target. A
-   bearer token sent in clear over a network is a credential published.
+4. **Transport.** Plain `http` is accepted only for a loopback target, or a
+   private one when the policy sets `allow_plain_private` (development only;
+   the settings refuse it when deployed). A bearer token sent in clear over a
+   network is a credential published.
 
 Redirects are not followed by the clients that use this module (they pass
 `follow_redirects=False`), so a permitted host cannot bounce a request to a
@@ -76,14 +78,28 @@ class OutboundPolicy:
     """Development and tests only: lets a localhost reference bot be reached."""
     allow_private: bool = False
     """RFC 1918 and unique-local IPv6. For a bot on the operator's own LAN."""
+    allow_plain_private: bool = False
+    """Development only: accept plain http/ws to a private address as well as
+    loopback, for a bot on a local container network. Never widens which
+    addresses are reachable - `allow_private` still decides that."""
 
     @classmethod
     def from_setting(
-        cls, hosts: str, *, allow_loopback: bool = False, allow_private: bool = False
+        cls,
+        hosts: str,
+        *,
+        allow_loopback: bool = False,
+        allow_private: bool = False,
+        allow_plain_private: bool = False,
     ) -> OutboundPolicy:
         """Build from a comma-separated setting such as `BOT_HTTP_ALLOWED_HOSTS`."""
         names = frozenset(h.strip().lower().rstrip(".") for h in hosts.split(",") if h.strip())
-        return cls(names, allow_loopback=allow_loopback, allow_private=allow_private)
+        return cls(
+            names,
+            allow_loopback=allow_loopback,
+            allow_private=allow_private,
+            allow_plain_private=allow_plain_private,
+        )
 
     def host_is_listed(self, host: str) -> bool:
         host = host.lower().rstrip(".")
@@ -178,18 +194,20 @@ def check_url(
     if not addresses:
         raise OutboundTargetRefusedError(f"host '{host}' resolved to no address")
 
-    loopback_only = True
+    plain_ok = True
     for address in addresses:
         reason = classify(address, policy)
         if reason is not None:
             raise OutboundTargetRefusedError(
                 f"host '{host}' resolves to a refused address: {reason}"
             )
-        loopback_only = loopback_only and _normalise(address).is_loopback
+        ip = _normalise(address)
+        plain_ok = plain_ok and (ip.is_loopback or (policy.allow_plain_private and ip.is_private))
 
-    if scheme == "http" and not loopback_only:
+    if scheme == "http" and not plain_ok:
         raise OutboundTargetRefusedError(
-            "plain http is accepted only for a loopback target; use https so the "
+            "plain http is accepted only for a loopback target (or a private one with "
+            "BOT_HTTP_ALLOW_PLAIN_PRIVATE in development); use https so the "
             "credential is not sent in clear"
         )
     return OutboundTarget(

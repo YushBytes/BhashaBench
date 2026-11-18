@@ -554,6 +554,15 @@ class Settings(BaseSettings):
         default=False,
         description="Permit a bot on a private network range (RFC 1918, ULA).",
     )
+    bot_http_allow_plain_private: bool = Field(
+        default=False,
+        description=(
+            "Accept plain http/ws to a private-network bot, not only a loopback one, "
+            "for the local Docker stack's reference bot. Does not make private "
+            "addresses reachable (BOT_HTTP_ALLOW_PRIVATE does). Development and "
+            "tests only: refused when APP_ENV is staging or production."
+        ),
+    )
     bot_http_timeout_seconds: float = Field(
         default=10.0,
         gt=0,
@@ -787,6 +796,13 @@ class Settings(BaseSettings):
                 f"BOT_HTTP_ALLOW_LOOPBACK is enabled while APP_ENV={self.app_env}. "
                 "Loopback bots are for development; a deployed server must not "
                 "send requests to its own host."
+            )
+        if self.app_env in (AppEnv.PRODUCTION, AppEnv.STAGING) and (
+            self.bot_http_allow_plain_private
+        ):
+            raise ValueError(
+                f"BOT_HTTP_ALLOW_PLAIN_PRIVATE is enabled while APP_ENV={self.app_env}. "
+                "A deployed server sends the bot's credential only over TLS."
             )
         return self
 

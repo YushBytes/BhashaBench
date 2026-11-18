@@ -154,6 +154,25 @@ class TestTransport:
         with pytest.raises(OutboundTargetRefusedError, match="plain http"):
             check_url("http://lan-bot/", policy, resolver=_resolver({"lan-bot": ["10.1.2.3"]}))
 
+    def test_http_to_a_private_host_is_allowed_only_with_the_plain_opt_in(self) -> None:
+        resolver = _resolver({"lan-bot": ["10.1.2.3"]})
+        policy = OutboundPolicy.from_setting(
+            "lan-bot", allow_private=True, allow_plain_private=True
+        )
+        assert check_url("http://lan-bot:8090/", policy, resolver=resolver).port == 8090
+
+    def test_the_plain_opt_in_does_not_make_private_addresses_reachable(self) -> None:
+        policy = OutboundPolicy.from_setting("lan-bot", allow_plain_private=True)
+        with pytest.raises(OutboundTargetRefusedError, match="refused address"):
+            check_url("http://lan-bot/", policy, resolver=_resolver({"lan-bot": ["10.1.2.3"]}))
+
+    def test_the_plain_opt_in_never_covers_a_public_host(self) -> None:
+        policy = OutboundPolicy.from_setting(
+            "bot.example.com", allow_private=True, allow_plain_private=True
+        )
+        with pytest.raises(OutboundTargetRefusedError, match="plain http"):
+            check_url("http://bot.example.com/", policy, resolver=PUBLIC)
+
     def test_the_real_resolver_handles_localhost(self) -> None:
         policy = OutboundPolicy.from_setting("localhost", allow_loopback=True)
         target = check_url("http://localhost:1/", policy)

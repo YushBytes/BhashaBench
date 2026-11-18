@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 3036 tests across 69 modules
+│   ├── tests/                 3042 tests across 69 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -630,6 +630,7 @@ their phase lands.
 | `BOT_HTTP_ALLOWED_HOSTS` | Comma-separated hosts the `http` adapter may contact, exactly or `*.suffix`. Empty refuses every host | empty |
 | `BOT_HTTP_ALLOW_LOOPBACK` | Permit a loopback bot (the local reference bot). Refused when `APP_ENV` is staging or production | `false` |
 | `BOT_HTTP_ALLOW_PRIVATE` | Permit a bot on a private network range | `false` |
+| `BOT_HTTP_ALLOW_PLAIN_PRIVATE` | Accept plain `http`/`ws` to a private-network bot (the local Docker stack's reference bot). Does not make private addresses reachable; refused when `APP_ENV` is staging or production | `false` |
 | `BOT_HTTP_TIMEOUT_SECONDS` | Ceiling on one request to the bot | `10` |
 | `BOT_HTTP_MAX_ATTEMPTS` | Requests per turn, counting retries | `2` |
 | `PIPELINE_FIXTURE_AUDIO_PATH` | WAV the `scripted` adapter replays as every bot reply. Unset, a scripted audio run fails on turn 0 | _unset_ |
@@ -757,17 +758,17 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 3036 tests** across sixty-nine modules.
-**2995 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3042 tests** across sixty-nine modules.
+**3001 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (3036) exceeds the number that run (2995). On
+why the collected total (3042) exceeds the number that run (3001). On
 Windows one more is skipped (a symlink test the OS refuses without
 developer mode), so a local run there reports 2989 passed, 42 skipped:
 
 | Module | Tests | Covers |
 |--------|-------|--------|
 | `test_health.py` | 16 | Root, liveness and versioned health endpoints; the database probe reachable and unreachable; the error envelope; a check that no secret appears in a response |
-| `test_config.py` | 18 | Defaults, environment overrides, comma-separated list parsing, validation failures, production behaviour (including refusing the placeholder database password and a localhost-only CORS list), settings caching |
+| `test_config.py` | 21 | Defaults, environment overrides, comma-separated list parsing, validation failures, production behaviour (including refusing the placeholder database password and a localhost-only CORS list, and `BOT_HTTP_ALLOW_PLAIN_PRIVATE` outside development), settings caching |
 | `test_app_metadata.py` | 9 | App title/summary/version, the generated OpenAPI document, the application factory |
 | `test_evaluation_api.py` | 13 | The evaluation endpoints through the real routes and PostgreSQL: the metric catalogue, the stateless error-rate scorer and its validation, evaluating, listing and re-evaluating a real run after a reference, appended corrections with history, caller turns refused, and 404s |
 | `test_evaluation_evaluator.py` | 25 | The run evaluator: every verdict path on synthetic evidence (pass, bot failures, our faults undetermined, unfinished, phrases), pooled error rates, excluded failed transcriptions, nearest-rank latency, fingerprint reproducibility, and real text-bot runs evaluated from what they stored, re-evaluated, and re-scored after a reference is added |
@@ -790,7 +791,7 @@ developer mode), so a local run there reports 2989 passed, 42 skipped:
 | `test_workspaces_api.py` | 31 | Phase 14 workspaces, members and projects through the real routes: authentication on every route, the creator owning a new workspace and its `Default` project, a name another tenant used getting a fresh slug while an explicit taken slug is a 409, a slug lost to a concurrent insert retried rather than failed, sign-up never joining a same-named workspace, only the caller's workspaces listed, a foreign workspace or project 404 rather than 403, the full add-member matrix by role, admins unable to touch owners or other admins or promote to admin, the last owner kept, leaving, project creation by role, unique names, and rename/describe
 | `test_auth_api.py` | 42 | Phase 14 authentication through the real routes and PostgreSQL: bearer and cookie login (HttpOnly, SameSite=Strict, no token in the body, Secure when deployed), every login failure the same 401, lockout refusing even the right password, hash upgrade on login, digest-only storage, logout, absolute/idle/revoked expiry, deactivation, throttled activity writes, cross-origin cookie writes refused, password change revoking other sessions, sign-up off by default, no password echoed in a 422 or written to a log, and the `users create` CLI with its exit codes and no password argument
 | `test_auth_primitives.py` | 41 | Phase 14 identity primitives: scrypt hashing round-trip, salting, an independent recomputation against `hashlib.scrypt`, malformed and oversized input verifying false, rehash detection and the length-based password policy; token shape and uniqueness; the role matrix monotone by rank and assignment never above the actor; and against PostgreSQL the lower-case unique email, digest-only session tokens, the role CHECK, slug format, per-workspace project names, cascades from a user and RESTRICT from a workspace |
-| `test_outbound.py` | 36 | The outbound-request guard: scheme and userinfo rules, the host allowlist and its wildcards, metadata/link-local/private/loopback address rules including IPv4-mapped IPv6 and decimal literals, and plain http only to loopback |
+| `test_outbound.py` | 39 | The outbound-request guard: scheme and userinfo rules, the host allowlist and its wildcards, metadata/link-local/private/loopback address rules including IPv4-mapped IPv6 and decimal literals, and plain http only to loopback, or to a private address with the plain-private opt-in, which never makes a private address reachable nor covers a public host |
 | `test_reference_bot.py` | 28 | The reference text bot over a real localhost socket: the full session lifecycle, bearer authentication, the error envelope, idempotent retries, correlation echo, session capacity and expiry, and reply-script validation |
 | `test_scenario_spec.py` | 107 | YAML syntax, unsafe payloads, recursive/cyclic aliases, size and expansion limits, every validation rule, round-trip serialisation, file loading |
 | `test_database.py` | 37 | Connection, the migrated schema, model creation, relationships, foreign-key delete behaviour, every constraint, transaction rollback |
@@ -862,7 +863,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2995 passed, 41 skipped ================
+================ 3001 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

@@ -138,6 +138,22 @@ class TestProductionRefusesDevelopmentDefaults:
                 **{**PRODUCTION_SAFE, "cors_origins": ["http://localhost:3000"]},
             )
 
+    @pytest.mark.parametrize("env", [AppEnv.PRODUCTION, AppEnv.STAGING])
+    def test_plain_http_to_a_private_bot_is_refused_when_deployed(self, env: AppEnv) -> None:
+        with pytest.raises(ValueError, match="BOT_HTTP_ALLOW_PLAIN_PRIVATE"):
+            Settings(
+                app_env=env,
+                secret_key="a-real-looking-secret",
+                _env_file=None,
+                **{**PRODUCTION_SAFE, "bot_http_allow_plain_private": True},
+            )
+
+    def test_plain_http_to_a_private_bot_is_allowed_in_development(self) -> None:
+        settings = Settings(
+            app_env=AppEnv.DEVELOPMENT, bot_http_allow_plain_private=True, _env_file=None
+        )
+        assert settings.bot_http_allow_plain_private is True
+
     def test_real_values_boot(self) -> None:
         settings = Settings(
             app_env=AppEnv.PRODUCTION, secret_key="a-real-looking-secret", _env_file=None,

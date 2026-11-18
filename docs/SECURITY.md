@@ -98,7 +98,7 @@ adapter's base URL.
 | Allowlist | The host must be listed exactly or under a `*.suffix` wildcard; empty refuses all |
 | Addresses | Every resolved address is checked. Link-local, cloud metadata, multicast, reserved and unspecified are always refused; loopback and private ranges need an explicit opt-in |
 | IPv4-mapped IPv6 | Judged as the IPv4 address it maps |
-| Transport | Plain `http` only to a loopback target |
+| Transport | Plain `http`/`ws` only to a loopback target, or to a private one with `BOT_HTTP_ALLOW_PLAIN_PRIVATE` (the local Docker stack's reference bot). That flag never widens which addresses are reachable, and the settings refuse it when `APP_ENV` is staging or production |
 | Redirects | Not followed by the clients that use the guard |
 
 **Known gap: DNS rebinding.** Resolution happens immediately before each

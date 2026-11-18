@@ -10,7 +10,9 @@ for local end-to-end runs: `python -m reference_bot` from `backend/`.
 
 ## Transport and authentication
 
-- HTTPS, except to a loopback address during development.
+- HTTPS, except to a loopback address during development, or to a
+  private-network address with `BOT_HTTP_ALLOW_PLAIN_PRIVATE` (development only;
+  the local Docker stack uses it for its reference bot).
 - Every `/v1` request carries `Authorization: Bearer <token>`. BhashaBench
   reads the token from `BOT_HTTP_TOKEN`; it never appears in a URL, a log
   line, run evidence or an API response.
