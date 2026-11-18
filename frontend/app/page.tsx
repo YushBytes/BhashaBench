@@ -4,15 +4,7 @@ import { SiteFooter, SiteHeader } from "@/components/marketing/chrome";
 import { PipelineDiagram } from "@/components/marketing/pipeline-diagram";
 import { Badge } from "@/components/ui/status";
 import { buttonClass, cx } from "@/components/ui/primitives";
-import {
-  capabilities,
-  currentPhase,
-  limitations,
-  phases,
-  site,
-  totalPhases,
-  workflow,
-} from "@/lib/content";
+import { capabilities, limitations, phases, site, statusBadge, workflow } from "@/lib/content";
 
 /**
  * The public site.
@@ -20,7 +12,8 @@ import {
  * A Persuade surface: it has to make a stranger understand what this
  * instrument measures within one screen. What it may not do is overstate —
  * so the limitations have a section of their own rather than a footnote,
- * and the status table marks two of the eight delivered phases partial.
+ * and the status table, and the badge derived from it, mark the partial
+ * phases partial.
  */
 
 const STATUS_TONE = {
@@ -69,9 +62,7 @@ function Hero() {
     <section className="border-b border-line">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:items-center lg:gap-14">
         <div>
-          <Badge tone="warn">
-            Phase {currentPhase} of {totalPhases} · no telephone call placed yet
-          </Badge>
+          <Badge tone="warn">{statusBadge}</Badge>
 
           <h1 className="mt-5 text-[2.25rem] font-semibold leading-[1.08] tracking-[-0.02em] text-text sm:text-5xl lg:text-[3.5rem]">
             Does your voice AI actually understand India?
@@ -150,7 +141,7 @@ function Workflow() {
     <SectionShell
       id="workflow"
       title="What a test actually does"
-      intro="Seven steps, in this order. Each one is a stage the pipeline executes and times."
+      intro="Seven steps, in this order. The first six are pipeline stages, each executed and timed; the seventh reads what they stored."
     >
       <ol className="grid gap-x-10 gap-y-0 md:grid-cols-2">
         {workflow.map((item, index) => (
@@ -183,7 +174,7 @@ function Capabilities() {
     <SectionShell
       id="capabilities"
       title="What is built"
-      intro="Each entry names the phase that delivered it and carries its real status. Two of these are marked partial, and the reasons are in the next section."
+      intro="Each entry carries its real status. The partial one is partial for the reasons in the next section."
     >
       <ul className="divide-y divide-line border-y border-line">
         {capabilities.map((capability) => (
@@ -319,7 +310,7 @@ function Status() {
     <SectionShell
       id="status"
       title="Fifteen phases"
-      intro="Each ends with working code, passing tests and updated documentation. A phase does not start until the previous one is reviewed."
+      intro="Each ends with working code, passing tests and updated documentation. A phase whose exit criterion needs something not yet authorised — a live provider call, a real telephone call, a public deployment — stays partial however much code exists."
     >
       <ol className="overflow-hidden rounded-lg border border-line">
         {phases.map((phase, index) => (

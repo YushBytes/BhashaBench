@@ -14,7 +14,7 @@ This file is the working reference.
 
 | Route | Rendering | Reads |
 |---|---|---|
-| `/` | Static | nothing — `lib/content.ts` |
+| `/` | Static | nothing — `lib/content.ts`, held to README.md's phase table by `tests/content.test.mjs` |
 | `/app` | Partial prerender | health, 4 provider endpoints, run list |
 | `/app/runs` | Partial prerender | run list with filters |
 | `/app/runs/[runId]` | Partial prerender | run report, run turns, artefact audio; JSON/CSV export links; Delete (finished runs, shown to admins and owners of its workspace, confirmed in-page) |
@@ -279,6 +279,9 @@ They cover the formatters (no "no data" ever rendered as a number), the
 sign-in redirect guard (`lib/redirect.ts`: only `/app` paths, never
 protocol-relative), and the API client (same-origin credentials, empty
 query values dropped, the error envelope's message, network versus timeout
-failures, no fallback data). Components are not unit-tested; they are
+failures, no fallback data). `tests/content.test.mjs` holds the public
+site's phase table to README.md's, row by row, and checks that the hero
+badge is derived from it, so the landing page cannot fall behind the project
+again. Components are not unit-tested; they are
 checked by typecheck, lint, the production build, and the end-to-end check
 against the running API.
