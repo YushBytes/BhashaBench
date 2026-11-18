@@ -565,7 +565,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 3030 collected; 2989 pass, 41 live ones skipped (Windows also skips 1 symlink test)
+pytest                                  # 3031 collected; 2990 pass, 41 live ones skipped (Windows also skips 1 symlink test)
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 npm --prefix frontend test              # frontend unit tests (node --test)

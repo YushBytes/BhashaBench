@@ -355,6 +355,7 @@ class RunReport:
     """
 
     run_id: uuid.UUID
+    suite_id: uuid.UUID
     conversation_id: uuid.UUID | None
     scenario_name: str
     language: str
@@ -1933,6 +1934,7 @@ class RunEngine:
 
         return RunReport(
             run_id=run.id,
+            suite_id=run.suite_id,
             conversation_id=None if conversation is None else conversation.id,
             scenario_name=str(meta.get("scenario_name", "")),
             language=str(meta.get("language", "")),

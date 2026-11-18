@@ -450,6 +450,7 @@ def _summary(run: TestRun, turn_counts: dict[str, int]) -> RunSummary:
 def _run(report: RunReport) -> RunResponse:
     return RunResponse(
         run_id=report.run_id,
+        suite_id=report.suite_id,
         conversation_id=report.conversation_id,
         scenario_name=report.scenario_name,
         language=report.language,

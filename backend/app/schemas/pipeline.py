@@ -150,6 +150,7 @@ class RunResponse(BaseModel):
     )
 
     run_id: uuid.UUID
+    suite_id: uuid.UUID = Field(description="The suite the run belongs to.")
     conversation_id: uuid.UUID | None
     scenario_name: str
     language: str

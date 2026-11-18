@@ -365,6 +365,17 @@ class TestStartRun:
         assert body["goal_achieved"] is True
         assert body["outcome"] == "goal_achieved"
 
+    def test_the_run_names_its_suite(
+        self,
+        pipeline_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+    ) -> None:
+        # The run page reads it to decide whether the caller may delete.
+        run = _create(pipeline_client, scenario_ids, mode="offline_simulation")
+        assert run["suite_id"] == str(scenario_ids[0])
+        fetched = pipeline_client.get(f"{BASE}/{run['run_id']}").json()
+        assert fetched["suite_id"] == str(scenario_ids[0])
+
     def test_a_fixture_run_is_not_reported_as_an_external_bot_test(
         self,
         pipeline_client: TestClient,
