@@ -74,7 +74,7 @@ async function Comparison({ searchParams }: { searchParams: Promise<SearchParams
             </Link>
           }
         >
-          Enter a baseline and a candidate run id on the Analytics page. Both must have been evaluated.
+          Pick a baseline and a candidate on the Analytics page. Both must have been evaluated.
         </EmptyState>
       </Panel>
     );

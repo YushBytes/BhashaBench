@@ -22,10 +22,19 @@ import type {
   AnalyticsDimension,
   AnalyticsSummary,
   AnalyticsTrend,
+  Page,
   RegressionResult,
+  RunSummary,
   VerdictTally,
 } from "@/lib/api/types";
-import { formatErrorRate, formatMs, formatPassRate, humanise } from "@/lib/format";
+import {
+  formatErrorRate,
+  formatMs,
+  formatPassRate,
+  formatTimestampShort,
+  humanise,
+  shortId,
+} from "@/lib/format";
 
 export const metadata = { title: "Analytics" };
 
@@ -96,14 +105,21 @@ async function Analytics({ searchParams }: { searchParams: Promise<SearchParams>
   let summary: AnalyticsSummary;
   let trend: AnalyticsTrend;
   let regression: RegressionResult | null = null;
+  let finished: RunSummary[] | null = null;
   try {
-    [summary, trend, regression] = await Promise.all([
+    let recent: Page<RunSummary> | null;
+    [summary, trend, regression, recent] = await Promise.all([
       api.analyticsSummary({ cache: "no-store", headers: auth, query: { group_by: groupBy } }),
       api.analyticsTrend({ cache: "no-store", headers: auth, query: { bucket: "day" } }),
       wantsRegression
         ? api.regressions({ cache: "no-store", headers: auth, query: regressionQuery })
         : Promise.resolve(null),
+      // For the comparison pickers; without it the form falls back to ids.
+      api
+        .runs({ cache: "no-store", headers: auth, query: { status: "completed", limit: 100 } })
+        .catch(() => null),
     ]);
+    finished = recent?.items ?? null;
   } catch (error) {
     signInAgainIfExpired(error);
     return (
@@ -251,8 +267,21 @@ async function Analytics({ searchParams }: { searchParams: Promise<SearchParams>
             description="Verdict and metric deltas between two evaluated runs. Two single runs support no statistical claim."
           />
           <form action="/app/compare" method="get" className="grid gap-3 p-4 sm:p-5">
-            <RunIdField name="baseline" label="Baseline run id" />
-            <RunIdField name="candidate" label="Candidate run id" />
+            {finished && finished.length >= 2 ? (
+              <>
+                <RunPicker name="baseline" label="Baseline" runs={finished} preselect={1} />
+                <RunPicker name="candidate" label="Candidate" runs={finished} preselect={0} />
+                <p className="text-[12px] leading-relaxed text-text-muted">
+                  The {finished.length} most recent completed runs. Both must have been
+                  evaluated; the comparison says so if one has not.
+                </p>
+              </>
+            ) : (
+              <>
+                <RunIdField name="baseline" label="Baseline run id" />
+                <RunIdField name="candidate" label="Candidate run id" />
+              </>
+            )}
             <button type="submit" className={buttonClass("primary", "sm", "justify-self-start")}>
               Compare
             </button>
@@ -278,6 +307,46 @@ async function Analytics({ searchParams }: { searchParams: Promise<SearchParams>
         </Panel>
       </div>
     </div>
+  );
+}
+
+function RunPicker({
+  name,
+  label,
+  runs,
+  preselect,
+}: {
+  name: string;
+  label: string;
+  runs: RunSummary[];
+  /** Index into `runs` (newest first): the candidate defaults to the newest,
+   *  the baseline to the one before it. */
+  preselect: number;
+}) {
+  return (
+    <label className="block text-[13px] font-medium text-text-muted">
+      {label}
+      <select
+        name={name}
+        required
+        defaultValue={runs[preselect]?.run_id}
+        className="mt-1.5 block w-full rounded-md border border-line-strong bg-surface-raised px-3 py-2 text-[13px] text-text"
+      >
+        {runs.map((run) => (
+          <option key={run.run_id} value={run.run_id}>
+            {[
+              run.scenario_name,
+              humanise(run.mode),
+              run.noise_profile ? humanise(run.noise_profile) : null,
+              formatTimestampShort(run.created_at),
+              shortId(run.run_id),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
