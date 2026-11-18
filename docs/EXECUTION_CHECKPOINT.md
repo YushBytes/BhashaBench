@@ -141,6 +141,25 @@ of `508b5e8`:
 - Gitleaks (`dir` mode, the pinned CI image) over the tree: no leaks.
 - The backend log of a full run contains no `Authorization` header.
 
+| Frontend audit unit (2026-11-19) | Commit | CI |
+|------|--------|----|
+| Landing page status derived from the phase table, drift-tested against README; audit recorded in `docs/FRONTEND_AUDIT.md` | `14dc76f` | ✅ |
+| Run filters (a 422 on "Created"), text bot runs, current run caveats | `50ad6a8` | ✅ 44406328402 |
+| Reference transcripts on bot turns | `132572a` | ✅ |
+| Evaluation metrics on the run page | `cb239db` | ✅ |
+| Report and silence wording | `23e337a` | ✅ 44408020950 |
+| Shipped scenario library (`GET /scenario-library`) in the editor | `81c4932` | ❌ 44409453524, fixed by the CI-fix row |
+| Run response returns channel conditions and their source | `94d4864` | ✅ (with the fix) |
+| Channel conditions on New test | `be6e134` | ✅ (with the fix) |
+| Second documented-paths list updated (CI fix) | see log | ✅ 44411607156 |
+| Comparison by picking runs; metric names in words | `b974da8`, `e36838a` | see log |
+
+Each frontend unit was checked in a browser against the rebuilt local stack:
+a reference transcript produced WER 38.5% on the run page, a reference
+scenario was picked, validated and added, a run started from the form
+applied a G.711 codec and 40 ms jitter (recorded as operator-set and
+measured in the artefacts), and two runs were compared from the pickers.
+
 Build the images from a clone **outside OneDrive**: in the OneDrive tree,
 many backend files are cloud placeholders that Docker reports as
 `invalid file request`.

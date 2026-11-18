@@ -17,11 +17,11 @@ This file is the working reference.
 | `/` | Static | nothing — `lib/content.ts`, held to README.md's phase table by `tests/content.test.mjs` |
 | `/app` | Partial prerender | health, 4 provider endpoints, run list |
 | `/app/runs` | Partial prerender | run list with filters |
-| `/app/runs/[runId]` | Partial prerender | run report, run turns, artefact audio; JSON/CSV export links; Delete (finished runs, shown to admins and owners of its workspace, confirmed in-page) |
-| `/app/new-test` | Partial prerender | scenarios, bot adapters |
-| `/app/scenarios` | Partial prerender | scenarios, languages |
+| `/app/runs/[runId]` | Partial prerender | run report, run turns, artefact audio, evaluations with every measured metric, channel conditions with their source; reference transcripts per bot turn (read; added by members and above); JSON/CSV export links; Delete (finished runs, shown to admins and owners of its workspace, confirmed in-page) |
+| `/app/new-test` | Partial prerender | scenarios, bot adapters; per-run channel conditions (`lib/conditions.ts`) |
+| `/app/scenarios` | Partial prerender | scenarios, languages, the shipped reference library (`/scenario-library`) |
 | `/app/providers` | Partial prerender | 4 provider endpoints, languages |
-| `/app/analytics` | Partial prerender | analytics summary (grouped), daily trend, regression check |
+| `/app/analytics` | Partial prerender | analytics summary (grouped), daily trend, regression check; recent completed runs for the comparison pickers |
 | `/app/compare` | Partial prerender | `GET /analytics/compare` for two run ids |
 | `/app/workspace` | Partial prerender | `/auth/me`, workspaces, members, projects; member and project controls |
 | `/login` | Static | `POST /auth/login` from the browser |
