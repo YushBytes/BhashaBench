@@ -60,6 +60,23 @@ and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`
 auth responses are `no-store`. The frontend sends the same headers except
 the CSP.
 
+**Scanning in CI (Phase 14 part 2).** Every push runs:
+
+| Gate | Fails on |
+|------|----------|
+| `pip-audit -r backend/requirements.txt` | Any known vulnerability in a runtime Python dependency |
+| `npm audit --omit=dev --audit-level=high` | A high or critical advisory in a runtime frontend dependency |
+| Gitleaks over the full git history (`.gitleaks.toml`) | Any credential-shaped string not on the allowlist |
+
+The gitleaks allowlist names the exact fabricated values the redaction tests
+use, never a directory, so a real key pasted into a test still fails the
+build. When it was introduced the full history (141 commits) was scanned:
+all 11 findings were documented fixtures, and none was a working credential.
+
+Dev-only advisories are reviewed by hand. Open at the time of writing:
+`picomatch` (high, under the ESLint toolchain; its only fix is a forced,
+breaking upgrade). It is not shipped in any build.
+
 **Known gaps.** The rate-limit windows live in one process, so N processes
 allow N times the rate; `TRUST_FORWARDED_FOR` must only be set behind a
 proxy that overwrites the header. The frontend has no Content-Security-

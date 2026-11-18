@@ -1,6 +1,6 @@
 # BhashaBench CI foundation (Phase 0; Phase 14 builds on it).
 #
-# Three independent jobs. No secrets are read and no live provider is called:
+# Four independent jobs. No secrets are read and no live provider is called:
 # both live suites are opt-in (TRANSCRIPTION_LIVE_TESTS / SPEECH_LIVE_TESTS)
 # and stay off, and the providers default to the offline fakes.
 
@@ -62,6 +62,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
 
+      - name: Dependency audit (runtime requirements, pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt
+
       - name: Ruff lint
         run: ruff check .
 
@@ -112,8 +117,30 @@ jobs:
       - name: Unit tests (node --test)
         run: npm test
 
+      # Runtime dependencies only, at high severity: dev-only tooling
+      # advisories are reviewed by hand (docs/SECURITY.md) rather than
+      # fixed by a forced, breaking toolchain upgrade.
+      - name: Dependency audit (runtime, high and above)
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Production build
         run: npm run build
+
+  secrets:
+    name: secret scan (gitleaks, full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Pinned image; .gitleaks.toml allowlists the exact fabricated test
+      # fixtures by value, so a real key added anywhere still fails.
+      - name: Gitleaks
+        run: >
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2
+          git /repo --config /repo/.gitleaks.toml --no-banner --redact=100
 
   compose:
     name: compose (configuration)

@@ -1,0 +1,21 @@
+# Secret scanning (Phase 14 part 2). Gitleaks' default rules, plus an
+# allowlist of the exact fabricated values the tests use to prove that
+# credentials are redacted. Listed by value, not by directory, so a real key
+# pasted into a test is still caught. Each value below was checked when it
+# was added: all are documented fixtures, none is a working credential.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fabricated credential-shaped test fixtures"
+regexes = [
+  '''gnani-test-key-0123456789abcdef''',
+  '''timbre-test-key-0123456789abcdef''',
+  '''gnani_live_key_9f3a21c7b85e4d06af12''',
+  '''sk_live_abcdefghijklmnop''',
+  '''bbs_AbCdEf0123456789-_xyz''',
+  '''test-secret-key-not-used-for-anything''',
+  '''timbre-key-0123456789abcdef''',
+  '''gnani_tts_key_abcdef0123456789''',
+]

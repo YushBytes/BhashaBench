@@ -109,7 +109,8 @@ captured live; the sweep is not scheduled).
 
 | Phase 14.2 unit | Commit | CI |
 |------|--------|----|
-| Rate limits and security headers | this commit | see log |
+| Rate limits and security headers | `1ce0df6` | ✅ (with `60791b4`) |
+| Dependency audits and a full-history secret scan in CI | this commit | see log |
 
 **Phase 13: complete** (no component tests; no deletion controls in the UI).
 
