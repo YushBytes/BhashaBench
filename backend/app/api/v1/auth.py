@@ -56,6 +56,18 @@ def _clear_cookie(response: Response, settings: Settings) -> None:
     )
 
 
+@router.get(
+    "/options",
+    summary="What this deployment allows before sign-in",
+    description=(
+        "Public. `signup_enabled` says whether POST /auth/signup is open "
+        "(AUTH_ALLOW_SIGNUP), so a sign-in page offers sign-up only where it works."
+    ),
+)
+def options(settings: SettingsDep) -> dict[str, bool]:
+    return {"signup_enabled": settings.auth_allow_signup}
+
+
 @router.post(
     "/signup",
     status_code=status.HTTP_201_CREATED,

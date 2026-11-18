@@ -330,6 +330,13 @@ class TestSignup:
         "workspace_name": "New Team",
     }
 
+    def test_options_say_whether_signup_is_open(
+        self, api_client: TestClient, settings: Settings
+    ) -> None:
+        assert api_client.get(f"{AUTH}/options").json() == {"signup_enabled": False}
+        settings.auth_allow_signup = True
+        assert api_client.get(f"{AUTH}/options").json() == {"signup_enabled": True}
+
     def test_disabled_by_default(self, api_client: TestClient) -> None:
         response = api_client.post(f"{AUTH}/signup", json=self.BODY)
         assert response.status_code == 403

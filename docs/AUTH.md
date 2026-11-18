@@ -106,7 +106,7 @@ Rules enforced by the service, not trusted to a client:
 
 | Routes | Check |
 |--------|-------|
-| `/`, `/health`, `/api/v1/health`, `/api/v1/languages`, `/api/v1/evaluation/metrics`, `/auth/login`, `/auth/signup` | Public |
+| `/`, `/health`, `/api/v1/health`, `/api/v1/languages`, `/api/v1/evaluation/metrics`, `/auth/login`, `/auth/signup`, `/auth/options` | Public |
 | Transcription, speech, scenario validation, error-rate, provider and adapter lists | Authenticated (they hold no tenant data, but spend provider credit or describe configuration) |
 | `/suites/{suite_id}...`, `/scenarios/{scenario_id}...`, `/test-runs/{run_id}...`, `/caller/conversations/{conversation_id}...` | A route dependency from `app/api/access.py` resolves the resource to its workspace before the handler runs: `view` to read, `edit` to change or drive, `delete` to delete |
 | Lists and aggregates (`GET /suites`, `/scenarios`, `/test-runs`, `/analytics/*`) | Scoped to the caller's visible projects in SQL; a `suite_id` filter naming a suite the caller cannot see is 404, not an empty page |
@@ -132,6 +132,7 @@ everything; it is a different trust boundary from the API, not a client of it.
 
 | Method | Path | |
 |--------|------|-|
+| `GET` | `/api/v1/auth/options` | `{"signup_enabled": bool}`, so a sign-in page offers sign-up only where it works |
 | `POST` | `/api/v1/auth/signup` | 403 unless `AUTH_ALLOW_SIGNUP`; 201 with the new user |
 | `POST` | `/api/v1/auth/login` | 200 with user and expiry; cookie or token per `session_type`; 401 on any failure |
 | `POST` | `/api/v1/auth/logout` | 204; revokes this session |

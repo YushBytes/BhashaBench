@@ -46,6 +46,7 @@ PUBLIC = {
     ("get", "/api/v1/evaluation/metrics"),
     ("post", "/api/v1/auth/login"),
     ("post", "/api/v1/auth/signup"),
+    ("get", "/api/v1/auth/options"),
     ("post", "/api/v1/telephony/events/{provider}"),
 }
 """Public on purpose: liveness, the language and metric catalogues (static

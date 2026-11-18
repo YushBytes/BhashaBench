@@ -112,6 +112,7 @@ class TestOpenApiDocument:
             "/api/v1/test-runs/{run_id}/export",
             # Phase 14: authentication.
             "/api/v1/auth/signup",
+            "/api/v1/auth/options",
             "/api/v1/auth/login",
             "/api/v1/auth/logout",
             "/api/v1/auth/me",
