@@ -28,6 +28,14 @@ import {
   cx,
 } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api/client";
+import {
+  CODECS,
+  type ConditionDraft,
+  type ConditionKey,
+  NUMERIC_CONDITIONS,
+  SAMPLE_RATES_HZ,
+  buildAudioConditions,
+} from "@/lib/conditions";
 import { langAttr } from "@/lib/format";
 import type {
   BotAdapters,
@@ -156,6 +164,13 @@ export function NewTestForm({
   const [degrade, setDegrade] = useState(true);
   const [seed, setSeed] = useState<string>("");
   const [maxTurns, setMaxTurns] = useState<string>("");
+  const [conditions, setConditions] = useState<ConditionDraft>({
+    codec: "",
+    sample_rate_hz: "",
+    numbers: {},
+  });
+  const built = buildAudioConditions(conditions);
+  const declared = built.body ? Object.keys(built.body).length : 0;
   const [adapter, setAdapter] = useState<string>(() => preferredAdapter(mode, adapters));
 
   const [busy, setBusy] = useState(false);
@@ -187,6 +202,10 @@ export function NewTestForm({
 
   async function launch() {
     if (!scenario) return;
+    if (built.problem) {
+      setError(built.problem);
+      return;
+    }
     setBusy(true);
     setError(null);
     setOrphan(null);
@@ -201,6 +220,7 @@ export function NewTestForm({
         seed: seed.trim() === "" ? null : Number(seed),
         max_turns: maxTurns.trim() === "" ? null : Number(maxTurns),
         degrade_caller_audio: degrade,
+        audio_conditions: built.body,
         bot_adapter: adapter || null,
       });
       runId = created.run_id;
@@ -406,6 +426,85 @@ export function NewTestForm({
               </span>
             </span>
           </label>
+
+          <details className="mt-4 rounded-md border border-line" open={declared > 0}>
+            <summary className="cursor-pointer px-3 py-2 text-[13px] text-text">
+              Channel conditions{declared > 0 ? ` · ${declared} declared` : ""}
+              <span className="ml-2 text-[12px] text-text-muted">codec, jitter, dropouts, level, truncation</span>
+            </summary>
+            <div className="border-t border-line px-3 py-3">
+              <p className={hint}>
+                Each field overrides the scenario&rsquo;s value for this run only. Leave a field
+                empty to keep the scenario&rsquo;s; 0 is a declared value, not &ldquo;off&rdquo;.
+                The run page records which source each applied condition came from. Ignored, and
+                reported as not enforced, for a mode that moves no audio.
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
+                  Codec
+                  <select
+                    className={cx(field, "mt-1 normal-case tracking-normal")}
+                    value={conditions.codec}
+                    onChange={(e) => setConditions({ ...conditions, codec: e.target.value })}
+                  >
+                    <option value="">Scenario&rsquo;s (none if undeclared)</option>
+                    {CODECS.map(([value, text]) => (
+                      <option key={value} value={value}>
+                        {text}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
+                  Sample rate
+                  <select
+                    className={cx(field, "mt-1 normal-case tracking-normal")}
+                    value={conditions.sample_rate_hz}
+                    onChange={(e) => setConditions({ ...conditions, sample_rate_hz: e.target.value })}
+                  >
+                    <option value="">Scenario&rsquo;s</option>
+                    {SAMPLE_RATES_HZ.map((rate) => (
+                      <option key={rate} value={String(rate)}>
+                        {rate.toLocaleString("en-IN")} Hz
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {NUMERIC_CONDITIONS.map((condition) => (
+                  <label
+                    key={condition.key}
+                    className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted"
+                  >
+                    {condition.label} ({condition.unit})
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={condition.min}
+                      max={condition.max}
+                      step={condition.integer ? 1 : "any"}
+                      placeholder={`${condition.min} to ${condition.max}`}
+                      className={cx(field, "mt-1 normal-case tracking-normal")}
+                      value={conditions.numbers[condition.key as ConditionKey] ?? ""}
+                      onChange={(e) =>
+                        setConditions({
+                          ...conditions,
+                          numbers: { ...conditions.numbers, [condition.key]: e.target.value },
+                        })
+                      }
+                    />
+                    <span className="mt-1 block text-[11px] font-normal normal-case tracking-normal text-text-muted">
+                      {condition.hint}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {built.problem ? (
+                <p role="alert" className="mt-2 text-[12px] text-bad">
+                  {built.problem}
+                </p>
+              ) : null}
+            </div>
+          </details>
         </Step>
 
         <Step
@@ -518,6 +617,9 @@ export function NewTestForm({
             <Row label="Degrade caller audio" mono>
               {String(degrade)}
             </Row>
+            <Row label="Channel conditions" mono>
+              {declared === 0 ? "scenario's own" : `${declared} declared`}
+            </Row>
             <Row label="Seed" mono>
               {seed.trim() === "" ? "server default" : seed}
             </Row>
@@ -529,9 +631,9 @@ export function NewTestForm({
             </Row>
           </dl>
           <p className="border-t border-line px-4 py-3 text-[12px] leading-relaxed text-text-muted">
-            Starting creates the run and executes it. A run in{" "}
-            <span className="font-mono">external_bot_test</span> pauses at the
-            first turn and waits for you to supply the bot&rsquo;s reply.
+            Starting creates the run and executes it in the background. With
+            the <span className="font-mono">manual</span> adapter it pauses at
+            each bot turn and waits for you to supply the reply.
           </p>
         </Panel>
       </div>

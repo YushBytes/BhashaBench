@@ -384,6 +384,10 @@ export interface DegradationRequested {
   /** `null` when no noise is requested. */
   snr_db: number | null;
   packet_loss_percent: number;
+  /** Channel conditions requested, field by field; `null` when none declared. */
+  conditions?: Record<string, number | string> | null;
+  /** For each key of `conditions`, who set it. */
+  condition_sources?: Record<string, "scenario" | "operator"> | null;
 }
 
 export interface Run {
@@ -504,6 +508,8 @@ export interface CreateRunBody {
   seed?: number | null;
   max_turns?: number | null;
   degrade_caller_audio?: boolean;
+  /** Channel-condition overrides; see lib/conditions.ts. */
+  audio_conditions?: Record<string, number | string> | null;
   bot_adapter?: string | null;
 }
 

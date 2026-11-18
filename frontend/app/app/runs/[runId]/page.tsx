@@ -336,6 +336,20 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
               {describeRequested(run.degradation_requested) ?? humanise(run.noise_profile)}
             </Fact>
             <Fact
+              label="Channel conditions"
+              mono
+              hint="Requested, field by field, with who set each: the scenario or the operator. Each degraded artefact records what was achieved."
+            >
+              {run.degradation_requested?.conditions
+                ? Object.entries(run.degradation_requested.conditions)
+                    .map(
+                      ([key, value]) =>
+                        `${key}=${value} (${run.degradation_requested?.condition_sources?.[key] ?? "?"})`,
+                    )
+                    .join(" · ")
+                : "none declared"}
+            </Fact>
+            <Fact
               label="Scenario declared"
               hint="The acoustic environment the scenario asked for, kept beside what was applied."
             >

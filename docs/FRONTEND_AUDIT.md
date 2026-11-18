@@ -42,7 +42,7 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 | Language | 1, through the scenario's language | — |
 | Accent | 4: no accent parameter exists anywhere in the product | not in scope: no model for it |
 | Noise profile and seed | 1 | — |
-| Channel conditions (codec, jitter, dropout, gain, clipping, truncation, silence) | 2: accepted by the API per run, absent from the UI | see checkpoint |
+| Channel conditions (codec, jitter, dropout, gain, clipping, truncation, silence) | 2: accepted by the API per run, absent from the UI; and the run response dropped `conditions`/`condition_sources`, so nobody could see what applied | fixed: a "Channel conditions" section on New test (bounds tested against the backend), returned by the API and shown on the run page with each value's source |
 | Interruptions | 2: bot barge-in detected only by `ws_voice`; the caller never interrupts | stated, not changed |
 | Code-mixing | 2: authorable; the deterministic caller does not honour it and the run says so | stated, not changed |
 | Execution and live progress | 1 | — |
