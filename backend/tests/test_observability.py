@@ -11,8 +11,10 @@ from fastapi.testclient import TestClient
 
 from app.core.config import Settings
 from app.core.logging import (
+    WIRE_LOGGERS,
     JsonFormatter,
     RequestIdFilter,
+    TextFormatter,
     configure,
     request_id_from,
     reset_request_id,
@@ -69,6 +71,44 @@ class TestJsonLogs:
             "auth failed token=bbs_AbCdEf0123456789-_xyz", detail="password=hunter2hunter2"
         )
         assert "bbs_AbCdEf" not in json.dumps(line) and "hunter2" not in json.dumps(line)
+
+    def test_the_text_format_redacts_the_whole_line_and_the_traceback(self) -> None:
+        # The local Docker stack logs in this format, and it once printed the
+        # voice bot's bearer token from a websockets handshake line.
+        token = "Bearer s3cr3t-bot-token-0123456789"
+        try:
+            raise RuntimeError(f"handshake failed with {token}")
+        except RuntimeError:
+            import sys
+
+            record = logging.LogRecord(
+                "websockets.client",
+                logging.ERROR,
+                "",
+                0,
+                f"> Authorization: {token}",
+                None,
+                sys.exc_info(),
+            )
+        record.request_id = "-"  # type: ignore[attr-defined]
+        line = TextFormatter().format(record)
+        assert "s3cr3t-bot-token" not in line
+        assert "Authorization" in line and "RuntimeError" in line
+
+    def test_wire_loggers_stay_at_info_when_the_process_logs_debug(self) -> None:
+        saved = {name: logging.getLogger(name).level for name in WIRE_LOGGERS}
+        root_level = logging.getLogger().level
+        try:
+            configure(json_format=False, level=logging.DEBUG)
+            assert logging.getLogger("bhashabench").isEnabledFor(logging.DEBUG)
+            for name in WIRE_LOGGERS:
+                assert not logging.getLogger(f"{name}.client").isEnabledFor(logging.DEBUG), name
+            configure(json_format=False, level=logging.WARNING)
+            assert not logging.getLogger("websockets").isEnabledFor(logging.INFO)
+        finally:
+            for name, level in saved.items():
+                logging.getLogger(name).setLevel(level)
+            logging.getLogger().setLevel(root_level)
 
     def test_configure_never_removes_another_handler(self) -> None:
         root = logging.getLogger()

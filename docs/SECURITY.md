@@ -17,6 +17,19 @@ against the code.
   `*_api_key` variable for tests not marked `live`.
 - Provider error text is passed through `app/transcription/redaction.py`
   before it reaches the database or an API response.
+- Every log line passes through the same redactor, in both formats: the
+  JSON formatter redacts each field, the text formatter the whole line
+  including the traceback. The wire-level loggers (`websockets`, `httpcore`,
+  `hpack`) are held at INFO or above whatever the process level, because at
+  DEBUG `websockets` logs each handshake header.
+
+**Finding, 2026-11-19.** The local Docker stack runs at DEBUG in text
+format, and its backend log carried the voice bot's
+`Authorization: Bearer ...` line from the `websockets` handshake: the text
+formatter did not redact, contrary to its own documentation, and the
+library logged headers at DEBUG. The token was the local reference bot's
+non-secret default, and nothing deployed was affected (production logs at
+INFO). Both causes are fixed above, and each has a test.
 
 **Incident, 2026-11-16.** A failing test compared the Gnani key directly and
 pytest printed it in a session transcript. Both causes are fixed (above); the

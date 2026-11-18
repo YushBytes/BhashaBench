@@ -10,7 +10,14 @@ across lines - and an operator can quote the id from a browser's network tab.
 message, request_id, and any `extra` fields), which a log shipper can index
 without parsing. The default `text` keeps the readable format for
 development. Values pass through the shared redactor, so a credential that
-reaches a log message is masked in either format.
+reaches a log message is masked in either format - the text format redacts
+the whole formatted line, traceback included.
+
+Wire-level libraries are held at INFO or above whatever the process level
+(`WIRE_LOGGERS`). At DEBUG, `websockets` logs every handshake header,
+including the voice bot's `Authorization: Bearer ...`, and a hex dump of
+every audio frame; `httpcore` and `hpack` log request internals. None of
+that is diagnostic for this application and some of it is a credential.
 """
 
 from __future__ import annotations
@@ -28,6 +35,9 @@ from app.transcription.redaction import redact
 REQUEST_ID_HEADER = "X-Request-ID"
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("request_id", default=None)
+
+WIRE_LOGGERS = ("websockets", "httpcore", "hpack")
+"""Never below INFO: at DEBUG they log headers (credentials) and payloads."""
 
 # Attributes every LogRecord has; anything else came from `extra=`.
 _STANDARD = set(logging.LogRecord("", 0, "", 0, "", None, None).__dict__) | {"message", "asctime"}
@@ -72,14 +82,20 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False, default=str)
 
 
+class TextFormatter(logging.Formatter):
+    """The readable development format, redacted as a whole line."""
+
+    def __init__(self) -> None:
+        super().__init__("%(asctime)s %(levelname)-8s %(name)s [%(request_id)s] %(message)s")
+
+    def format(self, record: logging.LogRecord) -> str:
+        return redact(super().format(record))
+
+
 def configure(*, json_format: bool, level: int) -> None:
     handler = logging.StreamHandler()
     handler.addFilter(RequestIdFilter())
-    handler.setFormatter(
-        JsonFormatter()
-        if json_format
-        else logging.Formatter("%(asctime)s %(levelname)-8s %(name)s [%(request_id)s] %(message)s")
-    )
+    handler.setFormatter(JsonFormatter() if json_format else TextFormatter())
     handler._bhashabench = True  # type: ignore[attr-defined]
     root = logging.getLogger()
     # Replace only our own handler: others (a test runner's capture, a
@@ -87,12 +103,16 @@ def configure(*, json_format: bool, level: int) -> None:
     root.handlers[:] = [h for h in root.handlers if not getattr(h, "_bhashabench", False)]
     root.addHandler(handler)
     root.setLevel(level)
+    for name in WIRE_LOGGERS:
+        logging.getLogger(name).setLevel(max(level, logging.INFO))
 
 
 __all__ = [
     "REQUEST_ID_HEADER",
+    "WIRE_LOGGERS",
     "JsonFormatter",
     "RequestIdFilter",
+    "TextFormatter",
     "configure",
     "current_request_id",
     "request_id_from",
