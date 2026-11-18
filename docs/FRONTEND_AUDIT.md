@@ -52,14 +52,16 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 | Analytics | 1 | — |
 | Comparison | 2: works, but needs two typed run ids | see checkpoint |
 | Exports | 1 | — |
-| Run-list mode filter | 2: `text_bot_test` missing | see checkpoint |
+| Run filters | 2: the "Created" status sent `created`, which the API refuses (422), so the history failed to load; `text_bot_test` and four outcomes were missing | fixed: values come from `lib/run-filters.ts`, tested against the backend enums |
+| Text bot runs | 2: `types.ts` lacked `text_bot_test` and the `bot_text_*` fields, so such a run was captioned "No external bot was contacted" | fixed: transcribed fields, own caveat and mislabel check |
 
 ## Copy that contradicted the product
 
 - The landing page, as above.
 - The run page caveat "evaluation is a later phase", rendered under the
-  Evaluation panel.
+  Evaluation panel. Fixed; a run on the offline fakes now also says so.
 - The Providers page: every result comes "from audio moved inside this
-  process or handed to it by an operator", false since `ws_voice`.
+  process or handed to it by an operator", false since `ws_voice`. Fixed.
 - The backend's unenforced-settings note: "interruption handling is
-  Phase 9", which is complete.
+  Phase 9", which is complete. Fixed: it now says the caller never talks
+  over the bot and only `ws_voice` detects a barge-in.

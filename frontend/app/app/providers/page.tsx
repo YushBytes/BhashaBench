@@ -105,9 +105,9 @@ async function ProviderPanels() {
               {adapters?.telephony_status}
             </p>
             <p className="border-t border-line px-4 py-3 text-[12px] leading-relaxed text-text-muted">
-              No run has been placed over a phone line. Every result in this
-              product comes from audio moved inside this process or handed to
-              it by an operator.
+              No run has been placed over a phone line. Bot audio reaches this
+              server from fixtures, from an operator&rsquo;s upload, or from an
+              external bot over the voice WebSocket - never from a call.
             </p>
           </Panel>
         </div>

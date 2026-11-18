@@ -150,6 +150,16 @@ const OUTCOME: Record<RunOutcome, { tone: Tone; label: string; hint: string }> =
     label: "Bot unavailable",
     hint: "The bot adapter could not obtain a reply.",
   },
+  bot_protocol_error: {
+    tone: "warn",
+    label: "Bot protocol error",
+    hint: "The bot answered outside its protocol. A finding about the bot's integration.",
+  },
+  bot_ended_session: {
+    tone: "warn",
+    label: "Bot ended session",
+    hint: "The bot closed the session before the caller reached its objective.",
+  },
   cancelled: {
     tone: "idle",
     label: "Cancelled",
@@ -212,11 +222,18 @@ export const MODE_COPY: Record<
       "that the pipeline works, not that any bot does.",
   },
   external_bot_test: {
-    label: "External bot",
+    label: "External voice bot",
     tone: "accent",
     hint:
       "Bot audio was supplied from outside this process. The only mode that " +
-      "may be described as testing a bot.",
+      "may be described as testing a voice bot.",
+  },
+  text_bot_test: {
+    label: "Text bot",
+    tone: "accent",
+    hint:
+      "An external bot answered in text over HTTP. It tests what the bot says, " +
+      "and nothing about audio, speech recognition or synthesis.",
   },
   telephony_test: {
     label: "Telephony",

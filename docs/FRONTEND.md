@@ -282,6 +282,8 @@ query values dropped, the error envelope's message, network versus timeout
 failures, no fallback data). `tests/content.test.mjs` holds the public
 site's phase table to README.md's, row by row, and checks that the hero
 badge is derived from it, so the landing page cannot fall behind the project
-again. Components are not unit-tested; they are
+again. `tests/run-filters.test.mjs` reads the backend's `RunStatus`,
+`ExecutionMode` and `RunOutcome` and fails on a filter value the API would
+refuse, or a value it would accept that the filters do not offer. Components are not unit-tested; they are
 checked by typecheck, lint, the production build, and the end-to-end check
 against the running API.

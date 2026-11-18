@@ -16,31 +16,7 @@ import { useRouter } from "next/navigation";
 import { useRef } from "react";
 
 import { buttonClass, cx } from "@/components/ui/primitives";
-
-const STATUSES = [
-  "created",
-  "running",
-  "completed",
-  "failed",
-  "cancelled",
-] as const;
-
-const MODES = [
-  ["offline_simulation", "Offline simulation"],
-  ["audio_fixture_test", "Fixture test"],
-  ["external_bot_test", "External bot"],
-] as const;
-
-const OUTCOMES = [
-  ["goal_achieved", "Goal achieved"],
-  ["bot_refused", "Bot refused"],
-  ["bot_unintelligible", "Bot unintelligible"],
-  ["no_progress", "No progress"],
-  ["turn_budget_exhausted", "Budget exhausted"],
-  ["provider_error", "Provider error"],
-  ["audio_validation_failed", "Audio invalid"],
-  ["cancelled", "Cancelled"],
-] as const;
+import { RUN_MODES, RUN_OUTCOMES, RUN_STATUSES } from "@/lib/run-filters";
 
 const field =
   "h-9 w-full rounded-md border border-line-strong bg-surface-raised px-2.5 " +
@@ -105,9 +81,9 @@ export function RunFilters({
             className={cx(field, "mt-1")}
           >
             <option value="">Any</option>
-            {STATUSES.map((value) => (
+            {RUN_STATUSES.map(([value, text]) => (
               <option key={value} value={value}>
-                {value.charAt(0).toUpperCase() + value.slice(1)}
+                {text}
               </option>
             ))}
           </select>
@@ -124,7 +100,7 @@ export function RunFilters({
             className={cx(field, "mt-1")}
           >
             <option value="">Any</option>
-            {MODES.map(([value, text]) => (
+            {RUN_MODES.map(([value, text]) => (
               <option key={value} value={value}>
                 {text}
               </option>
@@ -143,7 +119,7 @@ export function RunFilters({
             className={cx(field, "mt-1")}
           >
             <option value="">Any</option>
-            {OUTCOMES.map(([value, text]) => (
+            {RUN_OUTCOMES.map(([value, text]) => (
               <option key={value} value={value}>
                 {text}
               </option>

@@ -261,7 +261,7 @@ value and the `reason` — and the API and inspector show it:
 
 | Setting | Listed when | Why |
 |---|---|---|
-| `constraints.allow_interruptions` | always | turns strictly alternate; no barge-in (Phase 9) |
+| `constraints.allow_interruptions` | always | the caller never talks over the bot; only `ws_voice` detects the bot barging in |
 | `constraints.max_silence_seconds` | always | no silence detection or re-prompt timer (Phase 9) |
 | `constraints.required_phrases`, `forbidden_phrases` | non-empty | nothing checks the bot's replies (Phase 11) |
 | `code_mixing` | `expected: true`, deterministic caller | the caller speaks monolingual phrase tables |

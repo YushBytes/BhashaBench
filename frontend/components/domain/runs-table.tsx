@@ -45,7 +45,8 @@ export function RunsTable({
         <tbody>
           {runs.map((run) => {
             const mislabelled =
-              run.mode === "external_bot_test" && !run.bot_audio_externally_received;
+              (run.mode === "external_bot_test" && !run.bot_audio_externally_received) ||
+              (run.mode === "text_bot_test" && !run.bot_text_externally_received);
             const duration = formatSeconds(run.duration_seconds);
             const created = formatTimestampShort(run.created_at);
 

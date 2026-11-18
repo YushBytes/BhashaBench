@@ -86,6 +86,25 @@ export function RunEvidence({ run }: { run: Run }) {
         "does not establish anything about an external bot, whatever it was " +
         "created as.",
     });
+  } else if (run.mode === "text_bot_test") {
+    caveats.push(
+      run.bot_text_externally_received
+        ? {
+            level: "note",
+            title: "An external bot answered in text",
+            body:
+              `${run.bot_text_replies_received} replies came from the bot over HTTP. ` +
+              "This tests what the bot says. No audio moved, so it establishes " +
+              "nothing about speech recognition, synthesis or the line.",
+          }
+        : {
+            level: "caution",
+            title: "Labelled a text bot test, but no reply came from the bot",
+            body:
+              "No reply in this run was received from the external bot. It does " +
+              "not establish anything about a bot, whatever it was created as.",
+          },
+    );
   } else if (run.mode !== "external_bot_test") {
     caveats.push({
       level: "note",
@@ -108,13 +127,25 @@ export function RunEvidence({ run }: { run: Run }) {
     });
   }
 
+  if (run.stt_provider === "fake" || run.tts_provider === "fake") {
+    caveats.push({
+      level: "caution",
+      title: "Offline speech providers",
+      body:
+        "Speech in this run was synthesised or transcribed by the offline fake, " +
+        "so transcripts are scripted, not recognised. No accuracy figure from " +
+        "this run describes Gnani or any other speech engine.",
+    });
+  }
+
   caveats.push({
     level: "note",
-    title: "Measurements, not scores",
+    title: "Measured, then evaluated",
     body:
-      "Counts and durations on this page were measured. There is no accuracy " +
-      "figure, word error rate or quality verdict: none is computable without " +
-      "a reviewed reference transcript, and evaluation is a later phase.",
+      "Counts and durations here are measurements. Verdicts are in the " +
+      "Evaluation panel, each with its reason. WER and CER need a reviewed " +
+      "reference transcript for a bot turn; without one they are not " +
+      "reported, never assumed to be zero.",
   });
 
   return (

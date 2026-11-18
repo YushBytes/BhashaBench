@@ -1395,7 +1395,10 @@ class TestSettingsNotEnforced:
 
         assert found["constraints.allow_interruptions"]["declared"] is True
         assert found["constraints.max_silence_seconds"]["declared"] == 3.0
-        assert "Phase 9" in found["constraints.allow_interruptions"]["reason"]
+        reason = found["constraints.allow_interruptions"]["reason"]
+        # Phase 9 delivered barge-in detection for ws_voice only; the caller
+        # still never interrupts, so the setting stays listed and says why.
+        assert "never talks over the bot" in reason and "ws_voice" in reason
 
     def test_declared_phrases_code_mixing_and_style_are_listed(
         self, db_session: Session, pipeline_settings: Settings, store: AudioArtefactStore

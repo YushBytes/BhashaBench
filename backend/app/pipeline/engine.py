@@ -209,8 +209,9 @@ def settings_not_enforced(
     add(
         "constraints.allow_interruptions",
         constraints.get("allow_interruptions", True),
-        "Turns strictly alternate. Nothing talks over the bot or detects the bot "
-        "talking over the caller; interruption handling is Phase 9.",
+        "The caller never talks over the bot, so caller interruptions are not "
+        "exercised. Only the ws_voice adapter detects the bot talking over the "
+        "caller (a barge-in, recorded per turn).",
     )
     add(
         "constraints.max_silence_seconds",

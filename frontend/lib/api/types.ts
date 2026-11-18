@@ -24,6 +24,7 @@ export type ExecutionMode =
   | "offline_simulation"
   | "audio_fixture_test"
   | "external_bot_test"
+  | "text_bot_test"
   | "telephony_test";
 
 export type PipelineStatus =
@@ -44,6 +45,8 @@ export type RunOutcome =
   | "provider_error"
   | "audio_validation_failed"
   | "external_bot_unavailable"
+  | "bot_protocol_error"
+  | "bot_ended_session"
   | "cancelled"
   | "abandoned";
 
@@ -355,6 +358,8 @@ export interface RunSummary {
   noise_profile: string | null;
   bot_adapter: string | null;
   bot_audio_externally_received: boolean;
+  bot_exchange: string | null;
+  bot_text_externally_received: boolean;
   uses_language_model: boolean;
   caller_turns: number;
   bot_turns: number;
@@ -396,6 +401,14 @@ export interface Run {
   tts_provider: string | null;
   bot_adapter: string;
   bot_audio_externally_received: boolean;
+  /** `text` for a text_bot_test, `audio`, or `null` for an offline simulation. */
+  bot_exchange: string | null;
+  /** True only when a text_bot_test recorded a reply from the external bot.
+   *  Counted from the replies, never read from the mode. */
+  bot_text_externally_received: boolean;
+  bot_text_replies_received: number;
+  bot_session_id: string | null;
+  bot_greeting: string | null;
   noise_profile: NoiseProfile;
   scenario_noise_profile: string | null;
   degradation_seed: number | null;
