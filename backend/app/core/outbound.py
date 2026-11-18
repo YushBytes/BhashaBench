@@ -24,8 +24,9 @@ Four controls, in order, each sufficient to refuse:
    the settings refuse it when deployed). A bearer token sent in clear over a
    network is a credential published.
 
-Redirects are not followed by the clients that use this module (they pass
-`follow_redirects=False`), so a permitted host cannot bounce a request to a
+Redirects are not followed by the clients that use this module (`httpx` with
+`follow_redirects=False`; the WebSocket adapter overrides `websockets`'
+redirect handling), so a permitted host cannot bounce a request to a
 forbidden one.
 
 **Residual risk, stated:** resolution happens immediately before each request,

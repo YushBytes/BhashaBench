@@ -207,6 +207,53 @@ class TestAgainstTheReferenceBot:
             asyncio.run(_turns(_adapter(bot.replace("/v1/voice", "/nope"), token=TOKEN), 1))
         assert TOKEN not in str(refused.value)
 
+    def test_a_redirect_is_refused_and_the_token_never_follows_it(self) -> None:
+        # websockets follows a 3xx handshake answer, cross-origin included, and
+        # resends our headers. The target never passed check_url, so a bot
+        # could aim us anywhere and collect the bearer token.
+        async def scenario() -> list[bytes]:
+            followed: list[bytes] = []
+
+            async def elsewhere(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+                followed.append(await reader.read(4096))
+                writer.close()
+
+            async def redirector(
+                reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+            ) -> None:
+                await reader.read(4096)
+                writer.write(
+                    b"HTTP/1.1 302 Found\r\nLocation: ws://127.0.0.1:%d/v1/voice\r\n"
+                    b"Content-Length: 0\r\nConnection: close\r\n\r\n" % target_port
+                )
+                await writer.drain()
+                writer.close()
+
+            target = await asyncio.start_server(elsewhere, "127.0.0.1", 0)
+            target_port = target.sockets[0].getsockname()[1]
+            source = await asyncio.start_server(redirector, "127.0.0.1", 0)
+            source_port = source.sockets[0].getsockname()[1]
+            adapter = _adapter(f"ws://127.0.0.1:{source_port}/v1/voice")
+            try:
+                with pytest.raises(BotUnavailableError):
+                    await adapter.send_turn(
+                        _wav(0.1),
+                        run_id=uuid.uuid4(),
+                        turn_index=0,
+                        content_type="audio/wav",
+                        language="hi-IN",
+                        timeout_seconds=5,
+                    )
+            finally:
+                await adapter.close()
+                source.close()
+                target.close()
+                await source.wait_closed()
+                await target.wait_closed()
+            return followed
+
+        assert asyncio.run(scenario()) == []
+
 
 # ---------------------------------------------------------------------------
 # A whole run through the engine

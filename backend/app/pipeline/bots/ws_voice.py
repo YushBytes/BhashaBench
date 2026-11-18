@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import websockets
+import websockets.asyncio.client
 from pydantic import SecretStr
 
 from app.core.outbound import OutboundPolicy, OutboundTargetRefusedError, check_url
@@ -70,6 +71,21 @@ CAPABILITIES = BotCapabilities(
         "Speaks the project's own protocol, not any vendor's.",
     ),
 )
+
+
+class _connect_without_redirects(websockets.asyncio.client.connect):  # noqa: N801
+    """`websockets.connect` that never follows a redirect.
+
+    The library follows 3xx answers to the handshake, cross-origin included,
+    and sends the same headers - the bot's bearer token - to the new URI. That
+    URI never passed `check_url`, so following it would let an allowlisted bot
+    point this process at any address and collect the credential. A redirect
+    is therefore a failed handshake, as `follow_redirects=False` makes it for
+    the HTTP adapter.
+    """
+
+    def process_redirect(self, exc: Exception) -> Exception | str:
+        return exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,7 +143,7 @@ class WebSocketVoiceBotAdapter:
         headers = {"Authorization": f"Bearer {self._config.token.get_secret_value()}"}
         try:
             socket = await asyncio.wait_for(
-                websockets.connect(
+                _connect_without_redirects(
                     self._config.url, additional_headers=headers, max_size=MAX_BOT_FRAME_BYTES * 64
                 ),
                 timeout=self._config.connect_timeout_seconds,
