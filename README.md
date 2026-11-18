@@ -166,55 +166,60 @@ through the whole pipeline, inspectable in the operator workspace.
 · [readiness report](docs/COMPETITION_READINESS_REPORT.md)
 · demo video: **_pending upload_**
 
-### Prerequisites
+### Start the whole stack (zero cost, Windows-friendly)
 
-Python 3.12+, Node 20+, Docker (for PostgreSQL only), and a `.env` copied from
-[`.env.example`](.env.example).
+One command runs the complete application locally: frontend, API, background
+worker, PostgreSQL, migrations and the reference bot. It needs only Docker
+Desktop, reads **no `.env`**, needs no API key, and cannot make a paid request.
+**[docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md)** is the full Windows 11 /
+PowerShell guide: prerequisites, persistence, backup, reset and
+troubleshooting.
 
-### Start the stack
-
-Three terminals. This is the configuration that was verified end to end.
-
-```bash
-# 1. PostgreSQL only
-docker compose up -d db
-
-# 2. Backend. PIPELINE_FIXTURE_AUDIO_PATH is what lets a fixture run complete;
-#    without it a scripted run has no replies and fails on turn 0, by design.
-#    PowerShell: $env:PIPELINE_FIXTURE_AUDIO_PATH="backend/tests/fixtures/audio/tone_8k_mono.wav"
-PIPELINE_FIXTURE_AUDIO_PATH=backend/tests/fixtures/audio/tone_8k_mono.wav   python -m uvicorn app.main:app --app-dir backend --port 8000
-
-# 3. Frontend - keep it on port 3000, which is what CORS_ORIGINS allows, and
-#    bind it to loopback so other devices on the network cannot reach it
-cd frontend && npm run dev -- --hostname 127.0.0.1 --port 3000
+```powershell
+# Clone OUTSIDE OneDrive: Docker cannot read OneDrive placeholder files.
+git clone https://github.com/YushBytes/BhashaBench.git C:\dev\BhashaBench
+Set-Location C:\dev\BhashaBench
+docker compose -f docker-compose.local.yml up --build -d
+docker compose -f docker-compose.local.yml ps    # wait for backend/frontend "healthy"
 ```
 
 | Surface | URL |
 |---|---|
 | Public site | <http://localhost:3000> |
-| Operator workspace | <http://localhost:3000/app> |
+| Operator workspace (sign up at `/signup`) | <http://localhost:3000/app> |
 | API | <http://localhost:8000> |
-| API documentation | <http://localhost:8000/docs> |
+| API documentation | <http://localhost:8000/docs> · <http://localhost:8000/redoc> |
 | Health | <http://localhost:8000/api/v1/health> |
 
-Check it is up before going further — all three components should read `ok`:
+Speech-to-text and text-to-speech run on the offline `fake` providers in this
+stack, and every run says so in its own evidence (`stt_provider: fake`).
 
-```bash
-curl http://localhost:8000/api/v1/health
+Verify the whole workflow (sign-up, every execution mode, recordings, signed
+links, evaluation, analytics, comparison, exports, roles, tenant isolation and
+persistence across a restart) through the real HTTP surface:
+
+```powershell
+py scripts\local_e2e.py --restart
 ```
 
 ### Load the scenario and execute a run
 
-```bash
-python scripts/demo.py setup   # load the demo scenario (idempotent)
-python scripts/demo.py run     # execute one run and print its evidence
+Every route but health needs a session, so the script signs in with an account
+you created at <http://localhost:3000/signup>. Credentials come from the
+environment, never from arguments, which shell history keeps:
+
+```powershell
+$env:BHASHABENCH_EMAIL = "you@example.com"
+$env:BHASHABENCH_PASSWORD = "<the password you signed up with>"
+py scripts\demo.py setup   # load the demo scenario into your first project (idempotent)
+py scripts\demo.py run     # execute one run and print its evidence
 ```
 
 `run` prints the workspace URL for the run it just executed. Open it to see the
 transcript, the stage timings, both audio variants per turn and the waveforms.
 
 The script creates a suite and a scenario if they are absent and reuses them
-otherwise. **It deletes nothing and calls no paid API** — the demonstration uses
+otherwise. **It deletes nothing and calls no paid API**: the demonstration uses
 the offline `fake` speech and transcription providers, so no Gnani request is
 made and no credit is consumed.
 
@@ -234,18 +239,21 @@ is the platform refusing to claim otherwise.
 
 ### Shut down
 
-```bash
-# Ctrl+C the backend and the frontend, then:
-docker compose stop db      # keeps the data
-# docker compose down       # also removes the containers; the named volume survives
+```powershell
+docker compose -f docker-compose.local.yml down      # keeps every account, run and recording
+# docker compose -f docker-compose.local.yml down -v # DELETES all local data
 ```
 
-### Known rough edges
+### Known rough edges (developer setup)
 
-- **Do not run the whole stack with `docker compose up`** for the demo. The
+These apply to the developer `docker-compose.yml` and a host-run frontend, not
+to `docker-compose.local.yml`, which wires the frontend to the API over the
+Compose network.
+
+- **Do not run the developer stack with `docker compose up`** for the demo. The
   frontend's server components fetch the API from inside the container, where
   `localhost:8000` is the container itself, so the workspace renders "The API is
-  not reachable". Run the frontend on the host instead.
+  not reachable". Use `docker-compose.local.yml`, or run the frontend on the host.
 - If the frontend 404s on `/app` after pulling changes, its build cache volume
   is stale: `docker compose up -d --force-recreate --renew-anon-volumes frontend`.
 - Audio playback needs the frontend on port 3000, or the browser fetch is
@@ -473,6 +481,12 @@ BhashaBench/
 ---
 
 ## Quick start with Docker
+
+**To run and demonstrate BhashaBench, use `docker-compose.local.yml`**
+(see [Run the demo](#run-the-demo) and
+[docs/LOCAL_DEPLOYMENT.md](docs/LOCAL_DEPLOYMENT.md)): it needs no `.env` and no
+keys. The developer stack below reads your `.env` and is for working on the
+code.
 
 Requires Docker Desktop with Compose v2.
 

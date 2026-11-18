@@ -18,12 +18,18 @@ that - deliberately, and not by running this.
 
 Requires the backend to be running and `PIPELINE_FIXTURE_AUDIO_PATH` to be set
 for `run`; see docs/COMPETITION_DEMO_SCRIPT.md.
+
+Every route but health is private (Phase 14), so it signs in first with
+`BHASHABENCH_EMAIL` and `BHASHABENCH_PASSWORD` from the environment - never
+from arguments, which shell history keeps - as a bearer session, and signs
+out when done. The suite is created in that account's first project.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -38,9 +44,15 @@ DEFAULT_API = "http://localhost:8000"
 MODE = "audio_fixture_test"
 
 
+_SESSION: dict[str, str] = {}
+"""The bearer token of this process's own session, once signed in."""
+
+
 def _request(api: str, path: str, *, method: str = "GET", body: dict | None = None) -> dict:
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(f"{api}{path}", data=data, method=method)
+    if "token" in _SESSION:
+        req.add_header("Authorization", f"Bearer {_SESSION['token']}")
     if data is not None:
         req.add_header("Content-Type", "application/json")
     try:
@@ -69,6 +81,39 @@ def _health(api: str) -> None:
         )
 
 
+def _sign_in(api: str) -> None:
+    email = os.environ.get("BHASHABENCH_EMAIL", "")
+    password = os.environ.get("BHASHABENCH_PASSWORD", "")
+    if not email or not password:
+        raise SystemExit(
+            "set BHASHABENCH_EMAIL and BHASHABENCH_PASSWORD to an account on this server "
+            "(create one at http://localhost:3000/signup)."
+        )
+    session = _request(
+        api,
+        "/api/v1/auth/login",
+        method="POST",
+        body={"email": email, "password": password, "session_type": "bearer"},
+    )
+    _SESSION["token"] = session["token"]
+
+
+def _sign_out(api: str) -> None:
+    if "token" in _SESSION:
+        _request(api, "/api/v1/auth/logout", method="POST")
+        _SESSION.clear()
+
+
+def _first_project(api: str) -> str:
+    for workspace in _request(api, "/api/v1/workspaces"):
+        if workspace.get("role") == "viewer":
+            continue
+        projects = _request(api, f"/api/v1/workspaces/{workspace['id']}/projects")
+        if projects:
+            return str(projects[0]["id"])
+    raise SystemExit("this account has no project it may create suites in.")
+
+
 def _find_suite(api: str) -> str | None:
     page = _request(api, "/api/v1/suites?limit=100")
     for suite in page.get("items", []):
@@ -87,7 +132,6 @@ def _find_scenario(api: str, suite_id: str) -> str | None:
 
 def setup(api: str) -> tuple[str, str]:
     """Ensure the demo suite and scenario exist. Reuses whatever is there."""
-    _health(api)
 
     suite_id = _find_suite(api)
     if suite_id is None:
@@ -96,7 +140,11 @@ def setup(api: str) -> tuple[str, str]:
                 api,
                 "/api/v1/suites",
                 method="POST",
-                body={"name": SUITE_NAME, "description": SUITE_DESCRIPTION},
+                body={
+                    "name": SUITE_NAME,
+                    "description": SUITE_DESCRIPTION,
+                    "project_id": _first_project(api),
+                },
             )["id"]
         )
         print(f"suite       : created {suite_id}")
@@ -191,10 +239,15 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if args.command == "setup":
-        setup(args.api)
-    else:
-        run(args.api)
+    _health(args.api)
+    _sign_in(args.api)
+    try:
+        if args.command == "setup":
+            setup(args.api)
+        else:
+            run(args.api)
+    finally:
+        _sign_out(args.api)
     return 0
 
 

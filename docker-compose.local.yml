@@ -1,0 +1,148 @@
+# =============================================================================
+# BhashaBench - complete local stack, zero cost, no credentials needed
+# =============================================================================
+#
+#   docker compose -f docker-compose.local.yml up --build
+#
+# Then open http://localhost:3000 and create an account. Full guide, with
+# PowerShell commands: docs/LOCAL_DEPLOYMENT.md.
+#
+# What this stack is, deliberately:
+# - Production images (the same ones CI builds), run with APP_ENV=development
+#   because production refuses the offline `fake` speech and transcription
+#   providers - which are what make this free. Every run it executes says so
+#   in its own evidence (stt_provider/tts_provider "fake").
+# - It reads NO `.env` file. Nothing here can pick up a Gnani or Sarvam key by
+#   accident, so it cannot make a paid request. Live providers are configured
+#   deliberately and elsewhere.
+# - Everything is published on loopback (127.0.0.1) only: other machines on
+#   your network cannot reach it. The database publishes no port at all.
+# - The values below that look like credentials are local-only and not
+#   secrets: they protect containers no other machine can reach. Override them
+#   from your shell if you like (see the guide). Never reuse them on a server.
+# - Data lives in named volumes and survives `down` and restarts. Only
+#   `down -v` deletes it.
+
+name: bhashabench-local
+
+x-backend-image: &backend-image
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+    target: production
+  image: bhashabench-backend:local
+
+x-backend-env: &backend-env
+  APP_ENV: development
+  DATABASE_URL: postgresql+psycopg://bhashabench:${LOCAL_DB_PASSWORD:-bhashabench-local-only}@db:5432/bhashabench
+  SECRET_KEY: ${LOCAL_SECRET_KEY:-bhashabench-local-only-signing-key}
+  LOG_FORMAT: text
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bhashabench
+      POSTGRES_USER: bhashabench
+      POSTGRES_PASSWORD: ${LOCAL_DB_PASSWORD:-bhashabench-local-only}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bhashabench -d bhashabench"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Applies every Alembic migration, then exits. Safe to run on every start:
+  # `upgrade head` on an up-to-date database changes nothing.
+  migrate:
+    <<: *backend-image
+    environment:
+      <<: *backend-env
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # The repository's reference bot: a real separate process speaking both bot
+  # protocols (text over HTTP, voice over WebSocket). It is a test double with
+  # scripted replies - it establishes that the platform drives an external
+  # bot, not that any production bot behaves well.
+  reference-bot:
+    <<: *backend-image
+    command: ["python", "-m", "reference_bot"]
+    environment:
+      REFERENCE_BOT_TOKEN: ${LOCAL_BOT_TOKEN:-bhashabench-local-reference-bot}
+      REFERENCE_BOT_HOST: 0.0.0.0
+      REFERENCE_BOT_PORT: "8090"
+    expose:
+      - "8090"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8090/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    <<: *backend-image
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      AUTH_ALLOW_SIGNUP: "true"
+      # Offline, free, and labelled as such on every run.
+      TRANSCRIPTION_PROVIDER: fake
+      SPEECH_PROVIDER: fake
+      CALLER_PROVIDER: deterministic
+      TELEPHONY_PROVIDER: mock
+      # Artefacts (turn audio, recordings) on the `artefacts` volume.
+      CALLER_AUDIO_STORAGE_DIR: /storage
+      # The `scripted` adapter's fixtures, so offline and audio-fixture runs
+      # complete. Fixtures, not a bot: runs using them report
+      # bot_audio_externally_received=false.
+      PIPELINE_FIXTURE_AUDIO_PATH: /app/tests/fixtures/audio/tone_8k_mono.wav
+      PIPELINE_FIXTURE_BOT_TEXT_PATH: /app/tests/fixtures/bot_text/cooperative_en.txt
+      # The reference bot, for text_bot_test (http) and external_bot_test
+      # (ws_voice). Only this host may be contacted; it sits on the private
+      # Compose network, hence ALLOW_PRIVATE, and is spoken to in plain
+      # http/ws, hence ALLOW_PLAIN_PRIVATE (refused outside development).
+      BOT_HTTP_BASE_URL: http://reference-bot:8090
+      BOT_WS_URL: ws://reference-bot:8090/v1/voice
+      BOT_HTTP_TOKEN: ${LOCAL_BOT_TOKEN:-bhashabench-local-reference-bot}
+      BOT_HTTP_ALLOWED_HOSTS: reference-bot
+      BOT_HTTP_ALLOW_PRIVATE: "true"
+      BOT_HTTP_ALLOW_PLAIN_PRIVATE: "true"
+    volumes:
+      - artefacts:/storage
+    ports:
+      - "127.0.0.1:${BACKEND_HOST_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      reference-bot:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        BACKEND_URL: http://backend:8000
+    image: bhashabench-frontend:local
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8000
+    ports:
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  artefacts:
