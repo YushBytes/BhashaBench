@@ -349,6 +349,18 @@ class DegradationRequestedResponse(BaseModel):
         description="Target signal-to-noise ratio. `null` when no noise is requested."
     )
     packet_loss_percent: float = Field(ge=0.0, le=100.0)
+    conditions: dict[str, float | str] | None = Field(
+        default=None,
+        description=(
+            "Channel conditions requested for this run (gain, clipping, sample "
+            "rate, codec, jitter, dropouts, truncation, silence), field by field. "
+            "`null` when none was declared by the scenario or the operator."
+        ),
+    )
+    condition_sources: dict[str, Literal["scenario", "operator"]] | None = Field(
+        default=None,
+        description="For each key of `conditions`, whether the scenario or the operator set it.",
+    )
 
 
 class BotTextRequest(BaseModel):

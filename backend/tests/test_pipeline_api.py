@@ -234,6 +234,34 @@ class TestCreateRun:
         assert body["goal_achieved"] is False
         assert body["finished_at"] is None
 
+    def test_operator_channel_conditions_come_back_with_their_source(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        # The request's own documentation promises condition_sources; the
+        # response model once dropped both fields, so no client could see
+        # which conditions a run applied.
+        body = _create(
+            pipeline_client,
+            scenario_ids,
+            mode="audio_fixture_test",
+            audio_conditions={"gain_db": -12.0, "codec": "g711_alaw", "jitter_ms": 0},
+        )
+        requested = body["degradation_requested"]
+        assert requested["conditions"] == {"gain_db": -12.0, "codec": "g711_alaw", "jitter_ms": 0}
+        assert requested["condition_sources"] == {
+            "gain_db": "operator",
+            "codec": "operator",
+            "jitter_ms": "operator",
+        }
+
+    def test_no_declared_condition_reports_none_rather_than_an_empty_claim(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        requested = _create(pipeline_client, scenario_ids, mode="audio_fixture_test")[
+            "degradation_requested"
+        ]
+        assert requested["conditions"] is None and requested["condition_sources"] is None
+
     def test_the_mode_is_recorded(
         self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
     ) -> None:
