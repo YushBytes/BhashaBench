@@ -33,6 +33,7 @@ import type {
   DegradationRequested,
   EvaluationList,
   RecordingManifest,
+  Role,
   RunReport,
   RunTurns,
 } from "@/lib/api/types";
@@ -136,7 +137,10 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
     typeof run.awaiting_bot_text_for_turn !== "number";
   const finished = ["completed", "failed", "cancelled", "timed_out"].includes(run.status);
   const latest = evaluations?.evaluations[0] ?? null;
-  const canDelete = finished ? await mayDelete(run.suite_id, auth) : false;
+  const role = finished ? await roleForSuite(run.suite_id, auth) : null;
+  const canDelete = role === "owner" || role === "admin";
+  // Recording a reference is an edit (member and above); a viewer reads them.
+  const references = !finished ? "hidden" : role && role !== "viewer" ? "edit" : "view";
 
   return (
     <>
@@ -377,7 +381,12 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
               title="Conversation"
               description="Each turn with the audio that carried it. Play a turn to hear exactly what the other side received."
             />
-            <Conversation run={run} turns={turns.turns} artefacts={report.artefacts} />
+            <Conversation
+              run={run}
+              turns={turns.turns}
+              artefacts={report.artefacts}
+              references={references}
+            />
           </Panel>
 
           <div className="min-w-0 space-y-5">
@@ -468,24 +477,25 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
 }
 
 /**
- * Whether the caller is admin or owner of the workspace holding this run's
- * suite - the role DELETE /test-runs/{id} requires. Only decides whether
- * the control is shown; the server checks again. Any failure hides it.
+ * The caller's role in the workspace holding this run's suite. Decides only
+ * which controls are shown - Delete needs admin or owner, recording a
+ * reference needs member or above - and the server checks again. Any
+ * failure returns null, which shows neither.
  */
-async function mayDelete(suiteId: string, headers: Record<string, string>): Promise<boolean> {
+async function roleForSuite(suiteId: string, headers: Record<string, string>): Promise<Role | null> {
   try {
     const [suites, workspaces] = await Promise.all([
       api.suites({ cache: "no-store", headers }),
       api.workspaces({ cache: "no-store", headers }),
     ]);
     const suite = suites.items.find((item) => item.id === suiteId);
-    if (!suite) return false;
-    for (const workspace of workspaces.filter((w) => w.role === "owner" || w.role === "admin")) {
+    if (!suite) return null;
+    for (const workspace of workspaces) {
       const projects = await api.projects(workspace.id, { cache: "no-store", headers });
-      if (projects.some((project) => project.id === suite.project_id)) return true;
+      if (projects.some((project) => project.id === suite.project_id)) return workspace.role;
     }
   } catch {
-    return false;
+    return null;
   }
-  return false;
+  return null;
 }

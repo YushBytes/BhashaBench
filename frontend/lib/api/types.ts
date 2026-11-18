@@ -653,6 +653,24 @@ export interface EvaluationList {
   evaluations: EvaluationRead[];
 }
 
+/** `POST /test-runs/{id}/turns/{i}/reference`: reviewed ground truth for one
+ *  bot turn, the input WER and CER need. Append-only; the newest is used. */
+export interface ReferenceRead {
+  reference_id: string;
+  run_id: string;
+  turn_index: number;
+  text: string;
+  reviewer: string | null;
+  created_at: string;
+}
+
+/** `GET /test-runs/{id}/turns/{i}/reference`: oldest first; the last is used. */
+export interface ReferenceHistory {
+  run_id: string;
+  turn_index: number;
+  references: ReferenceRead[];
+}
+
 /** `GET /test-runs/{id}/recording`. Fields beyond `status` are present only
  *  when the backend set them; `reason` explains a failed or absent one. */
 export interface RecordingManifest {

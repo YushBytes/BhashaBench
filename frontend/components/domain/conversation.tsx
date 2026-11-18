@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/status";
 import { cx } from "@/components/ui/primitives";
 import { humanise, langAttr } from "@/lib/format";
 import type { Artefact, Run, RunTurn } from "@/lib/api/types";
+import { ReferenceEditor } from "./reference-editor";
 
 /**
  * The conversation, turn by turn, with the audio that carried it.
@@ -71,10 +72,12 @@ function TurnCard({
   turn,
   run,
   artefacts,
+  references,
 }: {
   turn: RunTurn;
   run: Run;
   artefacts: Artefact[];
+  references: "edit" | "view" | "hidden";
 }) {
   const side = speakerOf(turn);
   const isCaller = side === "caller";
@@ -144,6 +147,15 @@ function TurnCard({
         <Transcript turn={turn} language={run.language} />
       </div>
 
+      {!isCaller && references !== "hidden" ? (
+        <ReferenceEditor
+          runId={run.run_id}
+          turnIndex={turn.index}
+          transcript={turn.text}
+          canEdit={references === "edit"}
+        />
+      ) : null}
+
       {turn.synthesis_error ? (
         <p className="mt-2 rounded-md border border-bad/30 bg-bad-dim px-3 py-2 text-[12px] text-bad">
           Synthesis failed: <span className="font-mono">{turn.synthesis_error}</span>
@@ -170,10 +182,14 @@ export function Conversation({
   run,
   turns,
   artefacts,
+  references = "hidden",
 }: {
   run: Run;
   turns: RunTurn[];
   artefacts: Artefact[];
+  /** Reference transcripts on bot turns: `edit` for a member of a finished
+   *  run's workspace, `view` for a viewer, `hidden` while the run is live. */
+  references?: "edit" | "view" | "hidden";
 }) {
   if (turns.length === 0) {
     return (
@@ -191,6 +207,7 @@ export function Conversation({
           turn={turn}
           run={run}
           artefacts={artefacts}
+          references={references}
         />
       ))}
     </ol>

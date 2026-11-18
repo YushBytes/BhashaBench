@@ -33,6 +33,8 @@ import type {
   Page,
   ProjectRead,
   RecordingManifest,
+  ReferenceHistory,
+  ReferenceRead,
   RegressionResult,
   Role,
   Run,
@@ -330,6 +332,21 @@ export const api = {
 
   evaluateRun: (id: string, o?: RequestOptions) =>
     request<EvaluationRead>(`/api/v1/test-runs/${id}/evaluations`, { ...o, method: "POST" }),
+
+  turnReferences: (id: string, turnIndex: number, o?: RequestOptions) =>
+    request<ReferenceHistory>(`/api/v1/test-runs/${id}/turns/${turnIndex}/reference`, o),
+
+  addTurnReference: (
+    id: string,
+    turnIndex: number,
+    body: { text: string; reviewer?: string | null },
+    o?: RequestOptions,
+  ) =>
+    request<ReferenceRead>(`/api/v1/test-runs/${id}/turns/${turnIndex}/reference`, {
+      ...o,
+      method: "POST",
+      body,
+    }),
 
   runRecording: (id: string, o?: RequestOptions) =>
     request<RecordingManifest>(`/api/v1/test-runs/${id}/recording`, o),

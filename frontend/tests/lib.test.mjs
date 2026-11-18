@@ -99,6 +99,19 @@ describe("request", () => {
     assert.deepEqual(JSON.parse(calls[0].init.body), { email: "a@b.test", password: "pw", session_type: "cookie" });
   });
 
+  it("reads and records a bot turn's reference transcript at the evaluation route", async () => {
+    const calls = stub(new Response(JSON.stringify({ references: [] }), { status: 200 }));
+    await api.turnReferences("r1", 3);
+    assert.equal(new URL(calls[0].url).pathname, "/api/v1/test-runs/r1/turns/3/reference");
+    assert.equal(calls[0].init.method ?? "GET", "GET");
+
+    const saved = stub(new Response(JSON.stringify({ reference_id: "x" }), { status: 201 }));
+    await api.addTurnReference("r1", 3, { text: "policy number please" });
+    assert.equal(new URL(saved[0].url).pathname, "/api/v1/test-runs/r1/turns/3/reference");
+    assert.equal(saved[0].init.method, "POST");
+    assert.deepEqual(JSON.parse(saved[0].init.body), { text: "policy number please" });
+  });
+
   it("surfaces the API's error message and status, with no fallback data", async () => {
     stub(new Response(JSON.stringify({ error: { type: "unauthenticated", message: "no valid session", status_code: 401 } }), { status: 401 }));
     await assert.rejects(request("/api/v1/auth/me"), (error) => {
