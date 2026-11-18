@@ -24,7 +24,12 @@ function message(cause: unknown, fallback: string): string {
   return cause instanceof ApiError ? cause.message : fallback;
 }
 
-export function CreateSuite() {
+export interface ProjectChoice {
+  id: string;
+  label: string;
+}
+
+export function CreateSuite({ projects }: { projects: ProjectChoice[] }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -37,7 +42,8 @@ export function CreateSuite() {
         setPending(true);
         setError(null);
         try {
-          await api.createSuite(String(new FormData(form).get("name")));
+          const data = new FormData(form);
+          await api.createSuiteIn(String(data.get("name")), String(data.get("project")));
           form.reset();
           router.refresh();
         } catch (cause) {
@@ -51,7 +57,15 @@ export function CreateSuite() {
         New suite name
         <input name="name" required maxLength={200} className={field} />
       </label>
-      <Button type="submit" tone="primary" size="sm" disabled={pending}>
+      <label className="block text-[13px] font-medium text-text-muted sm:col-span-2">
+        In project
+        <select name="project" required className={field} defaultValue={projects[0]?.id}>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.label}</option>
+          ))}
+        </select>
+      </label>
+      <Button type="submit" tone="primary" size="sm" disabled={pending || projects.length === 0}>
         {pending ? "Creating…" : "Create suite"}
       </Button>
       {error ? <p role="alert" className="text-[12px] text-bad sm:col-span-2">{error}</p> : null}

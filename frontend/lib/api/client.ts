@@ -44,6 +44,7 @@ import type {
   ScenarioDetail,
   ScenarioSummary,
   ScenarioValidation,
+  SessionUser,
   SpeechProviders,
   SuiteSummary,
   TranscriptionProviders,
@@ -221,6 +222,30 @@ export const api = {
       body: { email, password, session_type: "cookie" },
     }),
 
+  authOptions: (o?: RequestOptions) =>
+    request<{ signup_enabled: boolean }>("/api/v1/auth/options", o),
+
+  signup: (
+    body: { email: string; display_name: string; password: string; workspace_name: string },
+    o?: RequestOptions,
+  ) => request<SessionUser>("/api/v1/auth/signup", { ...o, method: "POST", body }),
+
+  createWorkspace: (name: string, o?: RequestOptions) =>
+    request<WorkspaceRead>("/api/v1/workspaces", { ...o, method: "POST", body: { name } }),
+
+  createSuiteIn: (name: string, projectId: string, o?: RequestOptions) =>
+    request<SuiteSummary>("/api/v1/suites", {
+      ...o,
+      method: "POST",
+      body: { name, project_id: projectId },
+    }),
+
+  deleteRun: (id: string, o?: RequestOptions) =>
+    request<{ run_id: string; artefact_files_deleted: number }>(`/api/v1/test-runs/${id}`, {
+      ...o,
+      method: "DELETE",
+    }),
+
   logout: (o?: RequestOptions) =>
     request<void>("/api/v1/auth/logout", { ...o, method: "POST" }),
 
@@ -282,6 +307,14 @@ export const api = {
 
   createRun: (body: CreateRunBody, o?: RequestOptions) =>
     request<Run>("/api/v1/test-runs", { ...o, method: "POST", body }),
+
+  /** Answers 202 at once and executes on the server; the run page follows it. */
+  startRunInBackground: (id: string, o?: RequestOptions) =>
+    request<Run>(`/api/v1/test-runs/${id}/start`, {
+      ...o,
+      method: "POST",
+      query: { background: true },
+    }),
 
   startRun: (id: string, o?: RequestOptions) =>
     request<Run>(`/api/v1/test-runs/${id}/start`, {
@@ -375,4 +408,13 @@ export function artefactAudioUrl(
 /** The full-conversation recording, relative so the cookie travels with it. */
 export function recordingAudioUrl(runId: string): string {
   return `/api/v1/test-runs/${runId}/recording/audio`;
+}
+
+/** Downloads, relative so the session cookie travels with them. */
+export function runExportUrl(runId: string, format: "json" | "csv"): string {
+  return `/api/v1/test-runs/${runId}/export?format=${format}`;
+}
+
+export function runsCsvUrl(): string {
+  return "/api/v1/analytics/runs.csv";
 }

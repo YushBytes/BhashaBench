@@ -1,6 +1,11 @@
 import { Suspense } from "react";
 
-import { AddMember, CreateProject, MemberRole } from "@/components/domain/workspace-controls";
+import {
+  AddMember,
+  CreateProject,
+  CreateWorkspace,
+  MemberRole,
+} from "@/components/domain/workspace-controls";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
 import { TableSkeleton } from "@/components/ui/loading";
 import {
@@ -61,8 +66,11 @@ async function Workspace({ searchParams }: { searchParams: Promise<SearchParams>
     return (
       <Panel>
         <EmptyState title="You are not in any workspace">
-          An owner or admin of a workspace adds you by your email address.
+          Create one below, or ask an owner or admin of a workspace to add you by email.
         </EmptyState>
+        <div className="border-t border-line p-4 sm:p-5">
+          <CreateWorkspace />
+        </div>
       </Panel>
     );
   }
@@ -139,6 +147,13 @@ async function Workspace({ searchParams }: { searchParams: Promise<SearchParams>
             <AddMember workspaceId={workspace.id} canGrantPrivileged={isOwner} />
           </div>
         ) : null}
+      </Panel>
+
+      <Panel>
+        <PanelHeader title="New workspace" description="A separate tenancy boundary: nothing is shared between workspaces." />
+        <div className="p-4 sm:p-5">
+          <CreateWorkspace />
+        </div>
       </Panel>
 
       <Panel>

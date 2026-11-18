@@ -8,9 +8,9 @@ import { Wordmark } from "@/components/shell/wordmark";
 export const metadata: Metadata = { title: "Sign in · BhashaBench" };
 
 /**
- * Sign-in. There is no sign-up link: accounts are created by an operator
- * (`bhashabench users create`) unless a deployment turns sign-up on, and a
- * link to a route that answers 403 would be a button that does not work.
+ * Sign-in. The sign-up link always leads somewhere true: /signup shows the
+ * form where AUTH_ALLOW_SIGNUP is on, and otherwise says how accounts are
+ * made on this server.
  */
 export default function LoginPage() {
   return (
@@ -28,9 +28,10 @@ export default function LoginPage() {
             <LoginForm />
           </Suspense>
         </div>
-        <p className="mt-8 text-[12px] leading-relaxed text-text-dim">
-          No account? An owner of your workspace adds you; the first account on a server is
-          created with <code className="font-mono">bhashabench users create</code>.
+        <p className="mt-8 text-[13px] text-text-muted">
+          No account?{" "}
+          <Link href="/signup" className="text-accent hover:underline">Create one</Link>
+          {" "}(where this server allows sign-up), or ask an owner of your workspace to add you.
         </p>
       </div>
     </main>

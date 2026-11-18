@@ -320,6 +320,10 @@ export interface BotAdapter {
   display_name: string;
   selected: boolean;
   contacts_external_system: boolean;
+  /** Whether this deployment has configured what the adapter needs. */
+  available: boolean;
+  /** Which setting is missing when unavailable. Names settings, never values. */
+  unavailable_reason: string | null;
   supports_sessions: boolean;
   requires_credentials: boolean;
   accepts_containers: string[];

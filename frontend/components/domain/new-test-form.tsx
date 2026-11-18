@@ -69,8 +69,24 @@ const MODE_BLURB: Record<string, string> = {
   audio_fixture_test:
     "Every stage runs with the bot stubbed by fixture audio. Establishes that the pipeline works, not that any bot does.",
   external_bot_test:
-    "The run pauses at each turn and waits for you to supply the bot's reply. The only mode whose results describe a real bot.",
+    "Talks to an external voice bot: streamed over the voice protocol (ws_voice), or paused each turn for you to supply its reply (manual). The only audio mode whose results describe a real bot.",
+  text_bot_test:
+    "Exchanges text with an external bot over the HTTP text protocol. Describes what the bot says, nothing about audio.",
 };
+
+/** The adapter each mode can use, best first. The engine refuses a pairing
+ *  the mode cannot describe; this only saves the operator from choosing one. */
+const MODE_ADAPTERS: Record<string, string[]> = {
+  offline_simulation: ["scripted"],
+  audio_fixture_test: ["scripted"],
+  external_bot_test: ["ws_voice", "manual"],
+  text_bot_test: ["http"],
+};
+
+function preferredAdapter(mode: string, adapters: BotAdapters): string {
+  const usable = adapters.adapters.filter((a) => a.available).map((a) => a.name);
+  return (MODE_ADAPTERS[mode] ?? []).find((name) => usable.includes(name)) ?? adapters.selected;
+}
 
 const field =
   "h-10 w-full rounded-md border border-line-strong bg-surface-raised px-2.5 " +
@@ -139,7 +155,7 @@ export function NewTestForm({
   const [degrade, setDegrade] = useState(true);
   const [seed, setSeed] = useState<string>("");
   const [maxTurns, setMaxTurns] = useState<string>("");
-  const [adapter, setAdapter] = useState<string>(adapters.selected);
+  const [adapter, setAdapter] = useState<string>(() => preferredAdapter(mode, adapters));
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -199,7 +215,9 @@ export function NewTestForm({
     }
 
     try {
-      await api.startRun(runId);
+      // Background: the run executes on the server and the run page follows
+      // it live, so a long run never holds this browser request open.
+      await api.startRunInBackground(runId);
     } catch (cause) {
       // The run exists. Saying "failed" without saying that would send the
       // operator to create a second one.
@@ -281,7 +299,10 @@ export function NewTestForm({
                   name="mode"
                   value={value}
                   checked={mode === value}
-                  onChange={() => setMode(value)}
+                  onChange={() => {
+                    setMode(value);
+                    setAdapter(preferredAdapter(value, adapters));
+                  }}
                   className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
                 />
                 <span className="min-w-0">
@@ -402,6 +423,7 @@ export function NewTestForm({
                   adapter === item.name
                     ? "border-accent-line bg-accent-dim"
                     : "border-line bg-surface-raised hover:border-line-strong",
+                  !item.available && "cursor-not-allowed opacity-60",
                 )}
               >
                 <input
@@ -410,6 +432,7 @@ export function NewTestForm({
                   value={item.name}
                   checked={adapter === item.name}
                   onChange={() => setAdapter(item.name)}
+                  disabled={!item.available}
                   className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
                 />
                 <span className="min-w-0">
@@ -428,6 +451,9 @@ export function NewTestForm({
                       {item.contacts_external_system ? "Contacts external system" : "Sends nowhere"}
                     </Badge>
                   </span>
+                  {!item.available && item.unavailable_reason ? (
+                    <p className="mt-1 text-[12px] text-warn">Not configured: {item.unavailable_reason}</p>
+                  ) : null}
                   <ul className="mt-1 space-y-0.5">
                     {item.notes.map((note) => (
                       <li key={note} className="text-[12px] leading-relaxed text-text-dim">

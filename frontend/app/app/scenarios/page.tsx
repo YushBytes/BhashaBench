@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { Suspense } from "react";
 
-import { AddScenario, CreateSuite } from "@/components/domain/scenario-authoring";
+import {
+  AddScenario,
+  CreateSuite,
+  type ProjectChoice,
+} from "@/components/domain/scenario-authoring";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
 import { TableSkeleton } from "@/components/ui/loading";
 import {
@@ -237,8 +241,19 @@ async function Library({
 async function Authoring() {
   const auth = await sessionHeaders();
   let suites: PageEnvelope<SuiteSummary>;
+  const projects: ProjectChoice[] = [];
   try {
-    suites = await api.suites({ cache: "no-store", headers: auth });
+    const [loaded, workspaces] = await Promise.all([
+      api.suites({ cache: "no-store", headers: auth }),
+      api.workspaces({ cache: "no-store", headers: auth }),
+    ]);
+    suites = loaded;
+    // Projects the caller may create suites in: member role or above.
+    for (const workspace of workspaces.filter((w) => w.role !== "viewer")) {
+      for (const project of await api.projects(workspace.id, { cache: "no-store", headers: auth })) {
+        projects.push({ id: project.id, label: `${workspace.name} / ${project.name}` });
+      }
+    }
   } catch (error) {
     signInAgainIfExpired(error);
     return (
@@ -263,7 +278,13 @@ async function Authoring() {
           ))}
         </ul>
         <div className="border-t border-line p-4 sm:p-5">
-          <CreateSuite />
+          {projects.length > 0 ? (
+            <CreateSuite projects={projects} />
+          ) : (
+            <p className="text-[13px] text-text-muted">
+              Your role is viewer everywhere, so you cannot create suites.
+            </p>
+          )}
         </div>
       </Panel>
       <Panel>

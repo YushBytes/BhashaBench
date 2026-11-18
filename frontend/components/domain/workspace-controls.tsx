@@ -150,3 +150,39 @@ export function CreateProject({ workspaceId }: { workspaceId: string }) {
     </form>
   );
 }
+
+export function CreateWorkspace() {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  return (
+    <form
+      className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        setPending(true);
+        setError(null);
+        try {
+          const created = await api.createWorkspace(String(new FormData(form).get("name")));
+          form.reset();
+          router.push(`/app/workspace?id=${created.id}`);
+          router.refresh();
+        } catch (cause) {
+          setError(cause instanceof ApiError ? cause.message : "The workspace could not be created.");
+        } finally {
+          setPending(false);
+        }
+      }}
+    >
+      <label className="block text-[13px] font-medium text-text-muted">
+        New workspace name (you become its owner; it gets a Default project)
+        <input name="name" required maxLength={200} className={field} />
+      </label>
+      <Button type="submit" tone="primary" size="sm" disabled={pending}>
+        {pending ? "Creating…" : "Create workspace"}
+      </Button>
+      {error ? <p role="alert" className="text-[12px] text-bad sm:col-span-2">{error}</p> : null}
+    </form>
+  );
+}

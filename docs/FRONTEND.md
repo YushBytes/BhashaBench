@@ -25,6 +25,7 @@ This file is the working reference.
 | `/app/compare` | Partial prerender | `GET /analytics/compare` for two run ids |
 | `/app/workspace` | Partial prerender | `/auth/me`, workspaces, members, projects; member and project controls |
 | `/login` | Static | `POST /auth/login` from the browser |
+| `/signup` | Streamed | `GET /auth/options`; the form only where `AUTH_ALLOW_SIGNUP` is on, then `POST /auth/signup` and `POST /auth/login` |
 
 Every `/app` route needs a session. `proxy.ts` redirects to
 `/login?next=...` when the `bb_session` cookie is absent - an optimistic
