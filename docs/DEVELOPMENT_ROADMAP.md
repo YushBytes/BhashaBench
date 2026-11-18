@@ -66,7 +66,7 @@ keep the numbering they were written in. Use this table to translate.
 | 12 | Reporting & Analytics Backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend Dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, components not) |
 | 14 | CI/CD & Safety | ✅ Complete (auth, tenancy, rate limits, headers, dependency and secret scanning, regression gate; no nightly run) |
-| 15 | Production Readiness & Competition Demo | 🟡 Partial — production images, compose, startup refusals, backup/restore (rehearsed locally) and a priced plan; not deployed, no week unattended |
+| 15 | Production Readiness & Competition Demo | 🟡 Partial — production images, compose, startup refusals, backup/restore (rehearsed locally), a priced plan, and a zero-cost local stack verified end to end; not publicly deployed, no week unattended |
 
 ---
 
@@ -848,8 +848,9 @@ run in CI.
 
 **Not delivered, and not claimed:** component or browser tests (pages are
 checked by typecheck, lint, build and an end-to-end pass against the running
-API), and deletion controls for suites, scenarios and runs (the API routes
-exist; the UI does not offer them yet).
+API), and deletion controls for suites and scenarios (the API routes exist; the
+UI does not offer them yet). Runs can be deleted from the run page by an
+admin or owner (`c8935d5`).
 
 **Exit criteria.** Every metric shown is measured, never sampled or
 estimated, and comparison views read the Phase 12 API.

@@ -120,7 +120,32 @@ captured live; the sweep is not scheduled).
 | Token-protected `/metrics` | `a9edb87` | see log |
 | Load test script and a recorded local run | this commit | see log |
 
-**Phase 13: complete** (no component tests; no deletion controls in the UI).
+| Local delivery unit (2026-11-19) | Commit | CI |
+|------|--------|----|
+| Workspace slugs allocated by the unique constraint; sign-up never joins an existing workspace | `78c7156` | ✅ 44398495799 |
+| `BOT_HTTP_ALLOW_PLAIN_PRIVATE` (plain http/ws to a private bot; development only) | `b1530f9` | ✅ 44398495799 |
+| WebSocket adapter refuses redirects (token could follow a 3xx to an unchecked host) | `cfe7c60` | ✅ 44396925791 |
+| Text logs redacted; `websockets`/`httpcore`/`hpack` held at INFO | `c7fcf71` | ✅ 44398495799 |
+| Zero-cost local stack, `local_e2e.py`, authenticated `demo.py`, Windows guide | `2180a1e` | ✅ 44398495799 |
+| Local stack's allowed origins follow `FRONTEND_HOST_PORT` | `508b5e8` | ✅ 44398495799 |
+
+**Local deployment: complete and verified.** `docker-compose.local.yml`
+(`docs/LOCAL_DEPLOYMENT.md`) runs everything on one Windows machine with no
+keys, no `.env` and no spending. Measured on 2026-11-19 against a fresh clone
+of `508b5e8`:
+
+- `scripts/local_e2e.py --restart`: **74 passed, 0 failed**, on the default
+  ports with existing data, and on 3100/8100 with empty volumes.
+- Backend suite: 3045 collected; 3003 passed, 42 skipped on Windows (41 live,
+  1 symlink). Frontend: 24/24 unit tests, typecheck and lint clean.
+- Gitleaks (`dir` mode, the pinned CI image) over the tree: no leaks.
+- The backend log of a full run contains no `Authorization` header.
+
+Build the images from a clone **outside OneDrive**: in the OneDrive tree,
+many backend files are cloud placeholders that Docker reports as
+`invalid file request`.
+
+**Phase 13: complete** (no component tests; the UI deletes runs, since `c8935d5`, but not suites or scenarios).
 
 **Phase 14: complete.**
 
@@ -139,8 +164,10 @@ and only then cut `1.0.0`.
 
 Not blocked, if wanted meanwhile: caller phrase tables for Bengali, Marathi
 and Telugu (three reference scenarios are not runnable), a frontend CSP with
-nonces, delete controls in the UI, and caching the per-request project scope
-(the load test's bottleneck).
+nonces, component tests for the frontend, pinning the checked address into
+the outbound transport (the DNS-rebinding gap in `docs/SECURITY.md`), and
+caching the per-request project scope (the load test's bottleneck). The
+local deployment does not depend on any of these.
 
 ## Outstanding issues
 
@@ -149,3 +176,5 @@ nonces, delete controls in the UI, and caching the per-request project scope
 - Deployment target: none provisioned; anything paid needs the owner.
 - A local smoke-test account `e2e-smoke@example.test` (workspace `e2e-smoke`,
   no data) exists in the developer database from the 2026-11-17 check.
+- The `bhashabench-local` Docker volumes hold throwaway `e2e-*@example.test`
+  accounts and runs from the 2026-11-19 checks. `down -v` clears them.

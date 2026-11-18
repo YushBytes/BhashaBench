@@ -1144,7 +1144,7 @@ documentation. Full detail in
 | 12 | Reporting & analytics backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, components not) |
 | 14 | CI/CD & safety | ✅ Complete (auth, tenancy, rate limits, headers, dependency and secret scanning, regression gate; no nightly run) |
-| 15 | Production readiness & competition demo | 🟡 Partial — production images, compose, startup refusals, backup/restore (rehearsed locally) and a priced plan; not deployed, no week unattended |
+| 15 | Production readiness & competition demo | 🟡 Partial — production images, compose, startup refusals, backup/restore (rehearsed locally), a priced plan, and a zero-cost local stack verified end to end; not publicly deployed, no week unattended |
 
 > This is the **original** 15-phase numbering, restored after the competition.
 > The competition renumbered phases in flight; the roadmap's mapping table
