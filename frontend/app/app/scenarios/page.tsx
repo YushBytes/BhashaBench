@@ -23,6 +23,7 @@ import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
 import { formatTimestampShort, langAttr } from "@/lib/format";
 import type {
   LanguageCatalogue,
+  LibraryScenario,
   Page as PageEnvelope,
   ScenarioSummary,
   SuiteSummary,
@@ -160,10 +161,10 @@ async function Library({
                 "Nothing in the library matches these filters."
               ) : (
                 <>
-                  Scenarios are authored as YAML and loaded through the API or
-                  the <code className="font-mono text-[12px]">bhashabench</code>{" "}
-                  CLI. The repository ships six reference scenarios under{" "}
-                  <code className="font-mono text-[12px]">scenarios/</code>.
+                  Create a suite below, then start from one of the shipped
+                  reference scenarios or paste your own YAML. The API and the{" "}
+                  <code className="font-mono text-[12px]">bhashabench</code> CLI
+                  load scenarios too.
                 </>
               )}
             </EmptyState>
@@ -241,13 +242,17 @@ async function Library({
 async function Authoring() {
   const auth = await sessionHeaders();
   let suites: PageEnvelope<SuiteSummary>;
+  let library: LibraryScenario[] | null = null;
   const projects: ProjectChoice[] = [];
   try {
-    const [loaded, workspaces] = await Promise.all([
+    const [loaded, workspaces, shipped] = await Promise.all([
       api.suites({ cache: "no-store", headers: auth }),
       api.workspaces({ cache: "no-store", headers: auth }),
+      // The library is a convenience; the editor works without it.
+      api.scenarioLibrary({ cache: "no-store", headers: auth }).catch(() => null),
     ]);
     suites = loaded;
+    library = shipped?.scenarios ?? null;
     // Projects the caller may create suites in: member role or above.
     for (const workspace of workspaces.filter((w) => w.role !== "viewer")) {
       for (const project of await api.projects(workspace.id, { cache: "no-store", headers: auth })) {
@@ -290,7 +295,7 @@ async function Authoring() {
       <Panel>
         <PanelHeader title="Add a scenario" description="Validated by the server before it can be added, and again when it is." />
         <div className="p-4 sm:p-5">
-          <AddScenario suites={suites.items} />
+          <AddScenario suites={suites.items} library={library} />
         </div>
       </Panel>
     </div>

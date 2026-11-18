@@ -99,6 +99,12 @@ describe("request", () => {
     assert.deepEqual(JSON.parse(calls[0].init.body), { email: "a@b.test", password: "pw", session_type: "cookie" });
   });
 
+  it("reads the shipped scenario library from its own route", async () => {
+    const calls = stub(new Response(JSON.stringify({ scenarios: [], total: 0 }), { status: 200 }));
+    await api.scenarioLibrary();
+    assert.equal(new URL(calls[0].url).pathname, "/api/v1/scenario-library");
+  });
+
   it("reads and records a bot turn's reference transcript at the evaluation route", async () => {
     const calls = stub(new Response(JSON.stringify({ references: [] }), { status: 200 }));
     await api.turnReferences("r1", 3);

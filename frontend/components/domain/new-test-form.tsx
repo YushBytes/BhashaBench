@@ -15,6 +15,7 @@
  * happened.
  */
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -173,13 +174,12 @@ export function NewTestForm({
       <Panel>
         <EmptyState title="There are no scenarios to run">
           A run executes a scenario, so the library has to hold at least one.
-          Scenarios are authored as YAML and loaded through{" "}
-          <code className="font-mono text-[12px]">
-            POST /api/v1/suites/&#123;id&#125;/scenarios
-          </code>{" "}
-          or the <code className="font-mono text-[12px]">bhashabench</code> CLI.
-          The repository ships six reference scenarios under{" "}
-          <code className="font-mono text-[12px]">scenarios/</code>.
+          On{" "}
+          <Link href="/app/scenarios" className="text-accent underline-offset-2 hover:underline">
+            Scenarios
+          </Link>
+          , create a suite and add one: start from a shipped reference scenario
+          or paste your own YAML.
         </EmptyState>
       </Panel>
     );

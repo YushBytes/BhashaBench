@@ -15,7 +15,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api/client";
-import type { ScenarioValidation, SuiteSummary } from "@/lib/api/types";
+import type { LibraryScenario, ScenarioValidation, SuiteSummary } from "@/lib/api/types";
 
 const field =
   "mt-1.5 block w-full rounded-md border border-line-strong bg-surface-raised px-3 py-2 text-[13px] text-text";
@@ -73,9 +73,17 @@ export function CreateSuite({ projects }: { projects: ProjectChoice[] }) {
   );
 }
 
-export function AddScenario({ suites }: { suites: SuiteSummary[] }) {
+export function AddScenario({
+  suites,
+  library,
+}: {
+  suites: SuiteSummary[];
+  /** The shipped reference scenarios; `null` when the library could not be read. */
+  library: LibraryScenario[] | null;
+}) {
   const router = useRouter();
   const [yaml, setYaml] = useState("");
+  const [picked, setPicked] = useState("");
   const [suiteId, setSuiteId] = useState(suites[0]?.id ?? "");
   const [validation, setValidation] = useState<ScenarioValidation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +117,39 @@ export function AddScenario({ suites }: { suites: SuiteSummary[] }) {
         </select>
       </label>
       <label className="block text-[13px] font-medium text-text-muted">
+        Start from a reference scenario
+        <select
+          value={picked}
+          disabled={!library || library.length === 0}
+          onChange={(e) => {
+            const entry = library?.find((item) => item.key === e.target.value);
+            setPicked(e.target.value);
+            if (entry) {
+              setYaml(entry.yaml);
+              setValidation(null);
+              setCreated(null);
+            }
+          }}
+          className={field}
+        >
+          <option value="">
+            {library === null ? "The reference library could not be loaded" : "Write your own, or choose one…"}
+          </option>
+          {(library ?? []).map((item) => (
+            <option key={item.key} value={item.key}>
+              {item.name} ({item.language})
+            </option>
+          ))}
+        </select>
+        {picked ? (
+          <span className="mt-1 block text-[12px] font-normal leading-relaxed text-text-dim">
+            {library?.find((item) => item.key === picked)?.objective} Edit it below - the
+            language, persona, facts and audio conditions are all in the YAML - then
+            validate and add it.
+          </span>
+        ) : null}
+      </label>
+      <label className="block text-[13px] font-medium text-text-muted">
         Scenario YAML (see docs/SCENARIO_FORMAT.md)
         <textarea
           value={yaml}
@@ -139,6 +180,7 @@ export function AddScenario({ suites }: { suites: SuiteSummary[] }) {
               const scenario = await api.createScenario(suiteId, yaml);
               setCreated(scenario.name);
               setYaml("");
+              setPicked("");
               setValidation(null);
               router.refresh();
             })

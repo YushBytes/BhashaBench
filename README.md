@@ -438,7 +438,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 3045 tests across 69 modules
+│   ├── tests/                 3049 tests across 70 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -772,10 +772,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 3045 tests** across sixty-nine modules.
-**3004 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3049 tests** across seventy modules.
+**3008 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (3045) exceeds the number that run (3004). On
+why the collected total (3049) exceeds the number that run (3008). On
 Windows one more is skipped (a symlink test the OS refuses without
 developer mode), so a local run there reports 2989 passed, 42 skipped:
 
@@ -807,6 +807,7 @@ developer mode), so a local run there reports 2989 passed, 42 skipped:
 | `test_auth_primitives.py` | 41 | Phase 14 identity primitives: scrypt hashing round-trip, salting, an independent recomputation against `hashlib.scrypt`, malformed and oversized input verifying false, rehash detection and the length-based password policy; token shape and uniqueness; the role matrix monotone by rank and assignment never above the actor; and against PostgreSQL the lower-case unique email, digest-only session tokens, the role CHECK, slug format, per-workspace project names, cascades from a user and RESTRICT from a workspace |
 | `test_outbound.py` | 39 | The outbound-request guard: scheme and userinfo rules, the host allowlist and its wildcards, metadata/link-local/private/loopback address rules including IPv4-mapped IPv6 and decimal literals, and plain http only to loopback, or to a private address with the plain-private opt-in, which never makes a private address reachable nor covers a public host |
 | `test_reference_bot.py` | 28 | The reference text bot over a real localhost socket: the full session lifecycle, bearer authentication, the error envelope, idempotent retries, correlation echo, session capacity and expiry, and reply-script validation |
+| `test_scenario_library.py` | 4 | The shipped scenario library: signed-in only, every file under `scenarios/` and `scenarios/demo/` and no bundle, each entry byte-identical to its file and valid, and an entry added to a suite through the ordinary create |
 | `test_scenario_spec.py` | 107 | YAML syntax, unsafe payloads, recursive/cyclic aliases, size and expansion limits, every validation rule, round-trip serialisation, file loading |
 | `test_database.py` | 37 | Connection, the migrated schema, model creation, relationships, foreign-key delete behaviour, every constraint, transaction rollback |
 | `test_api_suites_scenarios.py` | 63 | The Phase 2 endpoints, pagination, duplicates, unknown ids, malformed UUIDs, oversized bodies, error-envelope shape |
@@ -877,7 +878,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 3004 passed, 41 skipped ================
+================ 3008 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -940,7 +941,7 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 
 ## API endpoints
 
-The API exposes **63 paths and 80 HTTP operations**, plus one WebSocket route
+The API exposes **64 paths and 81 HTTP operations**, plus one WebSocket route
 that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 63
 documented paths in total.
 
@@ -1021,6 +1022,7 @@ Every route below needs a session; a suite in a workspace you are not in is
 | `PUT` | `/api/v1/scenarios/{scenario_id}` | Replaces the definition. Takes `{"yaml": "..."}` |
 | `DELETE` | `/api/v1/scenarios/{scenario_id}` | 204 |
 | `POST` | `/api/v1/scenarios/validate` | Validates YAML without storing anything |
+| `GET` | `/api/v1/scenario-library` | The reference scenarios that ship with BhashaBench, as YAML, for the editor to start from (signed in; read-only) |
 | `GET` | `/api/v1/scenarios` | Searches the whole library. `suite_id`, `language`, `name`, repeatable `tag`, `limit`, `offset` |
 | `POST` | `/api/v1/scenarios/{scenario_id}/copy` | 201. Copies into another suite with a new id. Takes `{"target_suite_id": ..., "new_name": ...}` |
 | `POST` | `/api/v1/scenarios/{scenario_id}/move` | Moves to another suite, keeping the id |

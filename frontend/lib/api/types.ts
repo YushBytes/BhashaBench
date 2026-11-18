@@ -653,6 +653,23 @@ export interface EvaluationList {
   evaluations: EvaluationRead[];
 }
 
+/** `GET /scenario-library`: the scenarios that ship with BhashaBench. */
+export interface LibraryScenario {
+  /** Path under `scenarios/` without `.yaml`, e.g. `demo/tamil_crop_insurance`. */
+  key: string;
+  name: string;
+  language: string;
+  description: string | null;
+  objective: string;
+  /** The file as shipped, comments included. */
+  yaml: string;
+}
+
+export interface ScenarioLibrary {
+  scenarios: LibraryScenario[];
+  total: number;
+}
+
 /** `POST /test-runs/{id}/turns/{i}/reference`: reviewed ground truth for one
  *  bot turn, the input WER and CER need. Append-only; the newest is used. */
 export interface ReferenceRead {

@@ -16,6 +16,7 @@ from app.api.v1 import (
     evaluation,
     health,
     languages,
+    scenario_library,
     scenarios,
     speech,
     suites,
@@ -38,6 +39,7 @@ api_router.include_router(suites.router)
 # prefixes do not overlap, so routing is unambiguous either way.
 api_router.include_router(scenarios.suite_scenarios_router)
 api_router.include_router(scenarios.scenarios_router)
+api_router.include_router(scenario_library.router)
 
 # Phase 4. Mounted last because it is the newest surface, not because of any
 # routing constraint - `/transcription` overlaps nothing above.

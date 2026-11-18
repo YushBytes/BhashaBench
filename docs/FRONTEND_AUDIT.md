@@ -37,7 +37,7 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 | Workspaces, projects, members, roles | 1 | — |
 | Sign-up, sign-in, tenant isolation | 1 | — |
 | Suites | 1 (no delete in the UI) | — |
-| Scenario creation | 2: YAML paste only; the shipped reference scenarios cannot be loaded | see checkpoint |
+| Scenario creation | 2: YAML paste only; the shipped reference scenarios cannot be loaded | fixed: "Start from a reference scenario" in the editor, served by `GET /api/v1/scenario-library` |
 | Bot adapter selection | 1 (reference bot only, by design) | — |
 | Language | 1, through the scenario's language | — |
 | Accent | 4: no accent parameter exists anywhere in the product | not in scope: no model for it |

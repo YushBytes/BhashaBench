@@ -53,6 +53,11 @@ bundle. Adding one to the top level does.
 
 ## Using them
 
+In the web workspace, **Scenarios → Add a scenario → Start from a reference
+scenario** offers every file here and in `demo/` (served by
+`GET /api/v1/scenario-library`), to edit, validate and add to a suite.
+From the command line:
+
 ```bash
 # Check every file. No database needed.
 for f in scenarios/*.yaml; do bhashabench validate "$f" || exit 1; done

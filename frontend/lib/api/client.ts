@@ -35,6 +35,7 @@ import type {
   RecordingManifest,
   ReferenceHistory,
   ReferenceRead,
+  ScenarioLibrary,
   RegressionResult,
   Role,
   Run,
@@ -332,6 +333,8 @@ export const api = {
 
   evaluateRun: (id: string, o?: RequestOptions) =>
     request<EvaluationRead>(`/api/v1/test-runs/${id}/evaluations`, { ...o, method: "POST" }),
+
+  scenarioLibrary: (o?: RequestOptions) => request<ScenarioLibrary>("/api/v1/scenario-library", o),
 
   turnReferences: (id: string, turnIndex: number, o?: RequestOptions) =>
     request<ReferenceHistory>(`/api/v1/test-runs/${id}/turns/${turnIndex}/reference`, o),
