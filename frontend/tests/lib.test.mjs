@@ -120,7 +120,19 @@ describe("request", () => {
   it("reports its own deadline as a timeout", async () => {
     globalThis.fetch = (_url, init) =>
       new Promise((_resolve, reject) => init.signal.addEventListener("abort", () => reject(init.signal.reason)));
-    await assert.rejects(request("/api/v1/health", { timeoutMs: 20 }), (error) => error instanceof ApiError && error.kind === "timeout");
+    // AbortSignal.timeout's timer is unreferenced: with nothing else pending,
+    // Node 22 exits the loop before it fires. A browser or the Next server
+    // never does, so the test keeps the loop alive rather than the client
+    // changing its timer.
+    const keepAlive = setTimeout(() => {}, 5_000);
+    try {
+      await assert.rejects(
+        request("/api/v1/health", { timeoutMs: 20 }),
+        (error) => error instanceof ApiError && error.kind === "timeout",
+      );
+    } finally {
+      clearTimeout(keepAlive);
+    }
   });
 
   it("returns undefined for 204", async () => {
