@@ -37,6 +37,7 @@ import type {
   RunReport,
   RunTurns,
 } from "@/lib/api/types";
+import { metricRows } from "@/lib/evaluation";
 
 
 export async function generateMetadata({
@@ -189,6 +190,19 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
                   Verdict: {latest.verdict}{" "}
                   <span className="font-mono text-[12px] font-normal text-text-dim">{latest.evaluator_version}</span>
                 </p>
+                <dl className="mt-3 divide-y divide-line rounded-md border border-line">
+                  {metricRows(latest.metrics).map((row) => (
+                    <div key={row.key} className="grid gap-x-4 gap-y-0.5 px-3 py-2 sm:grid-cols-[11rem_minmax(0,1fr)]">
+                      <dt className="text-[12px] text-text-muted">{row.label}</dt>
+                      <dd className="min-w-0">
+                        <span className={row.value === null ? "text-[13px] text-text-muted" : "font-mono text-[13px] tabular text-text"}>
+                          {row.value ?? "not reported"}
+                        </span>
+                        <span className="block text-[11px] leading-relaxed text-text-muted">{row.detail}</span>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
                 <ul className="mt-3 space-y-1.5">
                   {latest.criteria.map((criterion) => (
                     <li key={criterion.name} className="text-[13px]">

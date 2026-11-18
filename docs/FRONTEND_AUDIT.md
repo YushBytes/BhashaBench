@@ -48,7 +48,7 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 | Execution and live progress | 1 | — |
 | Recordings and playback | 1 | — |
 | Evaluation verdict | 1 | — |
-| WER / CER | 2: needs a reference transcript per bot turn; no way to enter one in the UI | see checkpoint |
+| WER / CER | 2: needs a reference transcript per bot turn; no way to enter one in the UI. And the Evaluation panel rendered criteria only, so a computed WER never appeared on the run page | fixed: references recorded per bot turn (`132572a`); the panel lists every metric, "not reported" with the evaluator's reason when unmeasured |
 | Analytics | 1 | — |
 | Comparison | 2: works, but needs two typed run ids | see checkpoint |
 | Exports | 1 | — |
