@@ -75,6 +75,49 @@ def slugify(name: str) -> str:
     return slug or "workspace"
 
 
+SLUG_ATTEMPTS = 5
+"""Fresh suffixes tried before a derived slug is given up on. A collision on
+a random 32-bit suffix is already improbable; five makes it negligible."""
+
+
+def _suffixed(slug: str) -> str:
+    return f"{slug[:54]}-{uuid.uuid4().hex[:8]}"
+
+
+def add_new_workspace(session: Session, *, name: str, slug: str | None = None) -> Workspace:
+    """Insert a new workspace and its `Default` project. Never joins one.
+
+    Slugs are global. An explicitly requested `slug` that is taken is a
+    `ConflictError`. A slug derived from `name` never is: when another
+    workspace holds it, it gets a random suffix, because a refusal would tell
+    the caller that some other tenant's workspace of that name exists.
+
+    The unique constraint decides, not a prior lookup: each insert runs in a
+    savepoint, so a concurrent request that takes the slug between our check
+    and our insert costs a retry with a new suffix rather than a failure.
+    Flushes; does not commit.
+    """
+    name = name.strip()
+    explicit = slug is not None
+    candidate = slug if slug is not None else slugify(name)
+    for _ in range(SLUG_ATTEMPTS):
+        if repo.get_workspace_by_slug(session, candidate) is None:
+            try:
+                with session.begin_nested():
+                    workspace = repo.add_workspace(session, name=name or candidate, slug=candidate)
+            except IntegrityError:
+                pass  # taken concurrently; fall through as if the lookup had seen it
+            else:
+                repo.add_project(
+                    session, workspace_id=workspace.id, name=DEFAULT_PROJECT_NAME, description=None
+                )
+                return workspace
+        if explicit:
+            raise ConflictError(f"workspace slug '{candidate}' is taken")
+        candidate = _suffixed(slugify(name))
+    raise ConflictError("could not allocate a workspace slug; retry")
+
+
 def _validate_new_password(password: str, email: str) -> None:
     problem = passwords.password_problem(password, email=email)
     if problem is not None:
@@ -91,12 +134,17 @@ def create_user(
     workspace_name: str | None = None,
     workspace_slug: str | None = None,
     role: Role = Role.OWNER,
+    new_workspace: bool = False,
 ) -> tuple[User, Workspace]:
     """A user and their membership, creating the workspace if it does not exist.
 
     A new workspace gets a `Default` project, so a fresh account can create a
-    suite at once. Joining an existing workspace adds a membership only.
-    Commits.
+    suite at once. Joining an existing workspace adds a membership only, and
+    only the CLI, which holds database credentials, asks for that. With
+    `new_workspace=True` (self-service sign-up) the user always gets a
+    workspace of their own: looking a slug up and joining whatever holds it
+    would let a concurrent sign-up of the same name make this user an owner
+    of a stranger's workspace. Commits.
     """
     email = normalise_email(email)
     if "@" not in email[1:]:
@@ -104,19 +152,23 @@ def create_user(
     _validate_new_password(password, email)
     if repo.get_user_by_email(session, email) is not None:
         raise ConflictError(f"a user with email '{email}' already exists")
-    slug = workspace_slug or slugify(workspace_name or display_name or email.split("@")[0])
     user = repo.add_user(
         session,
         email=email,
         display_name=display_name.strip() or email,
         password_hash=passwords.hash_password(password, log2_n=settings.auth_password_hash_log2_n),
     )
-    workspace = repo.get_workspace_by_slug(session, slug)
-    if workspace is None:
-        workspace = repo.add_workspace(session, name=workspace_name or slug, slug=slug)
-        repo.add_project(
-            session, workspace_id=workspace.id, name=DEFAULT_PROJECT_NAME, description=None
+    if new_workspace:
+        workspace = add_new_workspace(
+            session,
+            name=workspace_name or display_name or email.split("@")[0],
+            slug=workspace_slug,
         )
+    else:
+        slug = workspace_slug or slugify(workspace_name or display_name or email.split("@")[0])
+        workspace = repo.get_workspace_by_slug(session, slug)
+        if workspace is None:
+            workspace = add_new_workspace(session, name=workspace_name or slug, slug=slug)
     repo.add_membership(session, workspace_id=workspace.id, user_id=user.id, role=role)
     try:
         session.commit()
@@ -140,9 +192,6 @@ def signup(
         raise PermissionDeniedError(
             "sign-up is disabled on this deployment; ask a workspace owner to add you"
         )
-    slug = slugify(workspace_name)
-    if repo.get_workspace_by_slug(session, slug) is not None:
-        slug = f"{slug[:54]}-{uuid.uuid4().hex[:8]}"
     return create_user(
         session,
         settings,
@@ -150,8 +199,8 @@ def signup(
         display_name=display_name,
         password=password,
         workspace_name=workspace_name,
-        workspace_slug=slug,
         role=Role.OWNER,
+        new_workspace=True,
     )
 
 
@@ -257,6 +306,7 @@ __all__ = [
     "LOGIN_FAILED",
     "IssuedSession",
     "Principal",
+    "add_new_workspace",
     "change_password",
     "create_user",
     "login",

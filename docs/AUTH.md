@@ -101,6 +101,19 @@ Rules enforced by the service, not trusted to a client:
   email invitation, because the application sends no email.
 - Creating a workspace makes the caller its owner and gives it a `Default`
   project.
+- **Slugs are global, and a derived one never conflicts.** A slug derived
+  from the name (at sign-up or `POST /workspaces` without `slug`) gets a
+  random suffix when another workspace holds it, because a 409 would confirm
+  that some other tenant's workspace of that name exists. Only an explicitly
+  requested `slug` that is taken is a 409. The unique constraint decides, not a
+  prior lookup: each insert runs in a savepoint, so a request that loses a
+  race for a slug retries with a new suffix instead of failing.
+- **Sign-up never joins an existing workspace.** It always creates one. Only
+  `bhashabench users create --workspace` (the CLI, which holds database
+  credentials) adds an account to a workspace that already exists. Sign-up
+  once looked the slug up again after hashing the password and joined
+  whatever held it, so a concurrent sign-up with the same workspace name
+  could make a stranger an owner.
 
 ## Enforcement on every route
 
@@ -139,7 +152,7 @@ everything; it is a different trust boundary from the API, not a client of it.
 | `GET` | `/api/v1/auth/me` | The user, their workspaces and roles, the session's expiry |
 | `POST` | `/api/v1/auth/password` | Changes the password; returns how many other sessions were revoked |
 | `GET` | `/api/v1/workspaces` | The caller's workspaces with their role in each |
-| `POST` | `/api/v1/workspaces` | 201; the caller becomes owner; a `Default` project is created |
+| `POST` | `/api/v1/workspaces` | 201; the caller becomes owner; a `Default` project is created; 409 only for an explicit `slug` that is taken |
 | `GET` | `/api/v1/workspaces/{id}` | One workspace; 404 to a non-member |
 | `GET` | `/api/v1/workspaces/{id}/members` | Members and roles (any member) |
 | `POST` | `/api/v1/workspaces/{id}/members` | Add an existing account by email (admin or owner, within `can_assign`) |

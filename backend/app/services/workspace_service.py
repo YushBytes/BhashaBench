@@ -24,7 +24,11 @@ from app.models.identity import Project, Role, User, Workspace, WorkspaceMembers
 from app.repositories import identity as repo
 from app.repositories import suites as suite_repo
 from app.services import access_service
-from app.services.auth_service import DEFAULT_PROJECT_NAME, Principal, normalise_email, slugify
+from app.services.auth_service import (
+    Principal,
+    add_new_workspace,
+    normalise_email,
+)
 from app.services.errors import ConflictError, NotFoundError, PermissionDeniedError
 
 
@@ -42,17 +46,11 @@ def _commit(session: Session, conflict: str) -> None:
 def create_workspace(
     session: Session, principal: Principal, *, name: str, slug: str | None
 ) -> tuple[Workspace, Role]:
-    slug = slug or slugify(name)
-    if repo.get_workspace_by_slug(session, slug) is not None:
-        raise ConflictError(f"workspace slug '{slug}' is taken")
-    workspace = repo.add_workspace(session, name=name.strip(), slug=slug)
+    workspace = add_new_workspace(session, name=name, slug=slug)
     repo.add_membership(
         session, workspace_id=workspace.id, user_id=principal.user_id, role=Role.OWNER
     )
-    repo.add_project(
-        session, workspace_id=workspace.id, name=DEFAULT_PROJECT_NAME, description=None
-    )
-    _commit(session, f"workspace slug '{slug}' is taken")
+    _commit(session, "the workspace was created concurrently; retry")
     return workspace, Role.OWNER
 
 

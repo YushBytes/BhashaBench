@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 3031 tests across 69 modules
+│   ├── tests/                 3036 tests across 69 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -757,10 +757,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 3031 tests** across sixty-nine modules.
-**2990 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3036 tests** across sixty-nine modules.
+**2995 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (3031) exceeds the number that run (2990). On
+why the collected total (3036) exceeds the number that run (2995). On
 Windows one more is skipped (a symlink test the OS refuses without
 developer mode), so a local run there reports 2989 passed, 42 skipped:
 
@@ -787,7 +787,7 @@ developer mode), so a local run there reports 2989 passed, 42 skipped:
 | `test_recording.py` | 8 | Phase 10 full-conversation recordings: turns concatenated in order with correct offsets across sample rates and channel counts, the degraded caller variant chosen as what was on the line, undecodable or missing turns excluded with a reason rather than filled with silence, no audio when nothing decodes; and through the API, a finished audio run storing a recording whose segments link to its turn artefacts and whose WAV duration matches the manifest, `not_applicable` for a run with no audio, 404 before a run finishes, and the recording removed with its conversation's artefacts
 | `test_storage.py` | 31 | Phase 10 blob storage: key validation (absolute, `..`, empty segments, backslash, NUL, length), the local adapter's round trip, overwrite, idempotent delete, prefix deletion that touches nothing else, atomic writes that leave neither a partial object nor a temporary file, a symlink out of the root refused (skipped on Windows, which needs elevation to create one; runs in CI), the registry and settings refusing a backend that does not exist, and the artefact store writing, reading and deleting a conversation through it
 | `test_access_control.py` | 26 | Phase 14 authorisation swept across the generated OpenAPI document: every operation outside the public allowlist 401 without a credential; on real suites, scenarios, runs, conversations and evaluations, every resource route 404 to an outsider (identical to a missing id), a viewer's reads matching the owner's and every write 403, members unable to delete; listings, aggregates and CSV export empty for an outsider and a foreign `suite_id` filter 404; runs and conversations unable to borrow another tenant's scenario; project inference for new suites; per-project suite names; project deletion refused while non-empty; the WebSocket handshake refused with 1008 without a credential or from a foreign origin; and the migration moving pre-tenancy suites into a member-less `legacy` workspace and rolling back without losing them
-| `test_workspaces_api.py` | 26 | Phase 14 workspaces, members and projects through the real routes: authentication on every route, the creator owning a new workspace and its `Default` project, only the caller's workspaces listed, a foreign workspace or project 404 rather than 403, the full add-member matrix by role, admins unable to touch owners or other admins or promote to admin, the last owner kept, leaving, project creation by role, unique names, and rename/describe
+| `test_workspaces_api.py` | 31 | Phase 14 workspaces, members and projects through the real routes: authentication on every route, the creator owning a new workspace and its `Default` project, a name another tenant used getting a fresh slug while an explicit taken slug is a 409, a slug lost to a concurrent insert retried rather than failed, sign-up never joining a same-named workspace, only the caller's workspaces listed, a foreign workspace or project 404 rather than 403, the full add-member matrix by role, admins unable to touch owners or other admins or promote to admin, the last owner kept, leaving, project creation by role, unique names, and rename/describe
 | `test_auth_api.py` | 42 | Phase 14 authentication through the real routes and PostgreSQL: bearer and cookie login (HttpOnly, SameSite=Strict, no token in the body, Secure when deployed), every login failure the same 401, lockout refusing even the right password, hash upgrade on login, digest-only storage, logout, absolute/idle/revoked expiry, deactivation, throttled activity writes, cross-origin cookie writes refused, password change revoking other sessions, sign-up off by default, no password echoed in a 422 or written to a log, and the `users create` CLI with its exit codes and no password argument
 | `test_auth_primitives.py` | 41 | Phase 14 identity primitives: scrypt hashing round-trip, salting, an independent recomputation against `hashlib.scrypt`, malformed and oversized input verifying false, rehash detection and the length-based password policy; token shape and uniqueness; the role matrix monotone by rank and assignment never above the actor; and against PostgreSQL the lower-case unique email, digest-only session tokens, the role CHECK, slug format, per-workspace project names, cascades from a user and RESTRICT from a workspace |
 | `test_outbound.py` | 36 | The outbound-request guard: scheme and userinfo rules, the host allowlist and its wildcards, metadata/link-local/private/loopback address rules including IPv4-mapped IPv6 and decimal literals, and plain http only to loopback |
@@ -862,7 +862,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2990 passed, 41 skipped ================
+================ 2995 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

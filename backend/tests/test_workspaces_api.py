@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.models.identity import Role
+from app.models.identity import Role, Workspace
 from tests.auth_helpers import Team, make_team, make_user
 
 API = "/api/v1"
@@ -52,9 +52,34 @@ class TestWorkspaces:
             f"{API}/workspaces/{body['id']}/projects", headers=team.member.headers
         ).json()
         assert [p["name"] for p in projects] == ["Default"]
+
+    def test_a_name_another_tenant_used_gets_a_fresh_slug_not_a_conflict(
+        self, api_client: TestClient, team: Team
+    ) -> None:
+        # Slugs are global; refusing a derived one would confirm that some
+        # other tenant's workspace of that name exists.
+        first = api_client.post(
+            f"{API}/workspaces", headers=team.member.headers, json={"name": "Side Project"}
+        )
+        second = api_client.post(
+            f"{API}/workspaces", headers=team.outsider.headers, json={"name": "Side Project"}
+        )
+        assert (first.status_code, second.status_code) == (201, 201)
+        assert first.json()["slug"] == "side-project"
+        assert second.json()["slug"].startswith("side-project-")
+        assert second.json()["name"] == "Side Project"
+
+    def test_an_explicitly_requested_slug_that_is_taken_is_a_conflict(
+        self, api_client: TestClient, team: Team
+    ) -> None:
+        body = {"name": "Mine", "slug": "claimed-slug"}
+        assert (
+            api_client.post(f"{API}/workspaces", headers=team.member.headers, json=body).status_code
+            == 201
+        )
         assert (
             api_client.post(
-                f"{API}/workspaces", headers=team.owner.headers, json={"name": "Side Project"}
+                f"{API}/workspaces", headers=team.outsider.headers, json=body
             ).status_code
             == 409
         )
@@ -238,3 +263,78 @@ class TestProjects:
             == 403
         )
         assert api_client.get(path, headers=team.viewer.headers).json()["name"] == "Main"
+
+
+class TestSlugAllocationUnderConcurrency:
+    """The unique constraint, not a prior lookup, decides who gets a slug.
+
+    A concurrent request that takes the slug between our lookup and our
+    insert is simulated by making the lookup miss once while the row exists.
+    """
+
+    @staticmethod
+    def _blind_lookup_once(monkeypatch: pytest.MonkeyPatch) -> None:
+        from app.repositories import identity as identity_repo
+
+        real = identity_repo.get_workspace_by_slug
+        calls = {"n": 0}
+
+        def lookup(session: Session, slug: str) -> Workspace | None:
+            calls["n"] += 1
+            return None if calls["n"] == 1 else real(session, slug)
+
+        monkeypatch.setattr(identity_repo, "get_workspace_by_slug", lookup)
+
+    def test_a_derived_slug_taken_after_the_lookup_is_retried_with_a_suffix(
+        self,
+        db_session: Session,
+        api_client: TestClient,
+        team: Team,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        taken = team.workspace.slug
+        self._blind_lookup_once(monkeypatch)
+        response = api_client.post(
+            f"{API}/workspaces", headers=team.outsider.headers, json={"name": taken}
+        )
+        assert response.status_code == 201, response.text
+        assert response.json()["slug"].startswith(f"{taken}-")
+        assert response.json()["id"] != str(team.workspace.id)
+
+    def test_an_explicit_slug_taken_after_the_lookup_is_a_conflict(
+        self, api_client: TestClient, team: Team, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._blind_lookup_once(monkeypatch)
+        response = api_client.post(
+            f"{API}/workspaces",
+            headers=team.outsider.headers,
+            json={"name": "Anything", "slug": team.workspace.slug},
+        )
+        assert response.status_code == 409
+
+    def test_sign_up_racing_a_same_named_workspace_never_joins_it(
+        self,
+        db_session: Session,
+        settings: Settings,
+        team: Team,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        # Before the fix, sign-up looked the slug up again after hashing the
+        # password and joined whatever held it - as owner.
+        from app.services import auth_service
+
+        monkeypatch.setattr(settings, "auth_allow_signup", True)
+        self._blind_lookup_once(monkeypatch)
+        user, workspace = auth_service.signup(
+            db_session,
+            settings,
+            email=f"racer-{uuid.uuid4().hex[:8]}@example.test",
+            display_name="Racer",
+            password="a long enough password 123",
+            workspace_name=team.workspace.slug,
+        )
+        assert workspace.id != team.workspace.id
+        assert workspace.slug.startswith(f"{team.workspace.slug}-")
+        from app.repositories import identity as identity_repo
+
+        assert identity_repo.membership(db_session, team.workspace.id, user.id) is None
