@@ -43,6 +43,7 @@ import type {
   RunTurns,
   ScenarioDetail,
   ScenarioSummary,
+  ScenarioValidation,
   SpeechProviders,
   SuiteSummary,
   TranscriptionProviders,
@@ -235,6 +236,19 @@ export const api = {
 
   scenarios: (o?: RequestOptions) =>
     request<Page<ScenarioSummary>>("/api/v1/scenarios", o),
+
+  createSuite: (name: string, o?: RequestOptions) =>
+    request<SuiteSummary>("/api/v1/suites", { ...o, method: "POST", body: { name } }),
+
+  validateScenario: (yaml: string, o?: RequestOptions) =>
+    request<ScenarioValidation>("/api/v1/scenarios/validate", { ...o, method: "POST", body: { yaml } }),
+
+  createScenario: (suiteId: string, yaml: string, o?: RequestOptions) =>
+    request<ScenarioDetail>(`/api/v1/suites/${suiteId}/scenarios`, {
+      ...o,
+      method: "POST",
+      body: { yaml },
+    }),
 
   scenario: (id: string, o?: RequestOptions) =>
     request<ScenarioDetail>(`/api/v1/scenarios/${id}`, o),

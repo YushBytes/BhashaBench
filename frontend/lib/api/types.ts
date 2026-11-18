@@ -645,3 +645,12 @@ export interface RecordingManifest {
   excluded?: { turn_index: number; speaker: string; reason: string }[];
   assembly?: string;
 }
+
+// -- Suite and scenario authoring (Phases 2-3) -------------------------------
+
+export interface ScenarioValidation {
+  /** HTTP 200 either way: `valid` carries the verdict. */
+  valid: boolean;
+  errors: { field: string; message: string; type: string }[];
+  normalized_yaml: string | null;
+}

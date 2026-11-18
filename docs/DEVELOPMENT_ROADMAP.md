@@ -64,7 +64,7 @@ keep the numbering they were written in. Use this table to translate.
 | 10 | Recording & Transcription | ✅ Complete (local filesystem storage; recordings assembled from turn audio, not captured live) |
 | 11 | Evaluation & Judge Engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & Analytics Backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
-| 13 | Frontend Dashboard | 🟡 Partial — operator workspace with sign-in, no analytics |
+| 13 | Frontend Dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, components not) |
 | 14 | CI/CD & Safety | 🟡 Partial — authentication, sessions, workspaces, roles and tenancy enforced on every route; no rate limits, security headers, scanning or regression gate |
 | 15 | Production Readiness & Competition Demo | 🟡 Partial — competition demo only |
 
@@ -832,13 +832,24 @@ that phase introduces; and PDF export, which needs a rendering dependency.
 
 ---
 
-## Phase 13 — Frontend Dashboard 🟡
+## Phase 13 — Frontend Dashboard ✅
 
 Delivered: the operator workspace and public site (Part A, competition
 Phase 8).
 
-Remaining: metric views built only from real data, comparison views, run
-auto-refresh, scenario and suite management, a frontend test suite.
+**Complete on 2026-11-18** against its exit criteria: every metric shown is
+measured and read from the API - pass rates always with their Wilson
+interval and n, "no decided runs" never shown as 0% - and the comparison
+and regression views read the Phase 12 endpoints and show their conclusions
+verbatim. Also delivered: sign-in, workspace and member management, suite
+and scenario authoring with server validation, run auto-refresh, the
+evaluation and full-recording panels, and a `node --test` suite for `lib/`
+run in CI.
+
+**Not delivered, and not claimed:** component or browser tests (pages are
+checked by typecheck, lint, build and an end-to-end pass against the running
+API), and deletion controls for suites, scenarios and runs (the API routes
+exist; the UI does not offer them yet).
 
 **Exit criteria.** Every metric shown is measured, never sampled or
 estimated, and comparison views read the Phase 12 API.

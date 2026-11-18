@@ -1117,7 +1117,7 @@ documentation. Full detail in
 | 10 | Recording & transcription | ✅ Complete (local filesystem storage; recordings assembled from turn audio, not captured live) |
 | 11 | Evaluation & judge engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & analytics backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
-| 13 | Frontend dashboard | 🟡 Partial — operator workspace with sign-in, no analytics |
+| 13 | Frontend dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, components not) |
 | 14 | CI/CD & safety | 🟡 Partial — authentication, sessions, workspaces, roles and tenancy enforced on every route; no rate limits, security headers, scanning or regression gate |
 | 15 | Production readiness & competition demo | 🟡 Partial — competition demo only |
 

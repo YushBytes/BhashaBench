@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { Suspense } from "react";
 
+import { AddScenario, CreateSuite } from "@/components/domain/scenario-authoring";
 import { PageBody, PageHeader } from "@/components/shell/page-header";
 import { TableSkeleton } from "@/components/ui/loading";
 import {
   EmptyState,
   ErrorState,
   Panel,
+  PanelHeader,
   TableScroll,
   Td,
   Th,
@@ -19,6 +21,7 @@ import type {
   LanguageCatalogue,
   Page as PageEnvelope,
   ScenarioSummary,
+  SuiteSummary,
 } from "@/lib/api/types";
 
 export const metadata = { title: "Scenarios" };
@@ -44,6 +47,9 @@ export default function ScenariosPage({
       <PageBody>
         <Suspense fallback={<TableSkeleton />}>
           <Library searchParams={searchParams} />
+        </Suspense>
+        <Suspense fallback={<TableSkeleton rows={2} />}>
+          <Authoring />
         </Suspense>
       </PageBody>
     </>
@@ -223,5 +229,49 @@ async function Library({
           )}
         </Panel>
     </>
+  );
+}
+
+/** Suites and new scenarios. The page loads the caller's suites; the forms
+ *  call the real create and validate routes. */
+async function Authoring() {
+  const auth = await sessionHeaders();
+  let suites: PageEnvelope<SuiteSummary>;
+  try {
+    suites = await api.suites({ cache: "no-store", headers: auth });
+  } catch (error) {
+    signInAgainIfExpired(error);
+    return (
+      <Panel>
+        <ErrorState
+          title="Suites could not be loaded"
+          detail={error instanceof ApiError ? error.message : "The request failed."}
+        />
+      </Panel>
+    );
+  }
+  return (
+    <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+      <Panel>
+        <PanelHeader
+          title="Suites"
+          description={`${suites.total} in your workspace${suites.total === 1 ? "" : "s"}. Names are unique within a project.`}
+        />
+        <ul className="divide-y divide-line">
+          {suites.items.map((suite) => (
+            <li key={suite.id} className="px-4 py-2.5 text-[13px] text-text sm:px-5">{suite.name}</li>
+          ))}
+        </ul>
+        <div className="border-t border-line p-4 sm:p-5">
+          <CreateSuite />
+        </div>
+      </Panel>
+      <Panel>
+        <PanelHeader title="Add a scenario" description="Validated by the server before it can be added, and again when it is." />
+        <div className="p-4 sm:p-5">
+          <AddScenario suites={suites.items} />
+        </div>
+      </Panel>
+    </div>
   );
 }

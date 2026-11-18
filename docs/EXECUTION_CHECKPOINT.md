@@ -103,14 +103,19 @@ captured live; the sweep is not scheduled).
 
 | Phase 13 unit | Commit | CI |
 |------|--------|----|
-| Analytics, compare and workspace pages; run page evaluation, recording and auto-refresh | this commit | see log |
+| Analytics, compare and workspace pages; run page evaluation, recording and auto-refresh | `6342a93` | ✅ |
+| `node --test` suite for `lib/` in CI; redirect guard tightened | `016c7f8` | see log |
+| Suite and scenario authoring; Phase 13 closed | this commit | see log |
+
+**Phase 13: complete** (no component tests; no deletion controls in the UI).
 
 ## Next task
 
-Phase 13 (continued): suite and scenario management, a `node --test` suite for `lib/` (Node 24 strips types natively), and `docs/FRONTEND.md` routes for /app/analytics, /app/compare and /app/workspace. Then Phase 14 part 2 and Phase 15. Original brief, Phase 13: the frontend against the real API - metric and comparison views
-built only from the Phase 12 analytics endpoints, run auto-refresh (now that
-runs execute in the background), scenario and suite management, workspace
-and member views, recording playback, and a frontend test suite.
+Phase 14 part 2: per-client rate limiting on login and the API, security
+headers (CSP, HSTS when deployed, frame and content-type options),
+dependency and secret scanning in CI (`pip-audit`, `npm audit`, a secret
+scan), and a regression gate that fails CI on a deliberately introduced
+regression. Then Phase 15.
 
 Deferred to Phase 14 part 2: rate limiting, security headers,
 dependency/secret scanning (dev-only `minimatch` and `picomatch` advisories
