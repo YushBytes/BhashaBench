@@ -17,17 +17,12 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api/client";
+import { safeNext } from "@/lib/redirect";
 
 const field =
   "mt-1.5 block w-full rounded-md border border-line-strong bg-surface-raised px-3 py-2.5 " +
   "text-[15px] text-text outline-none transition-colors placeholder:text-text-dim " +
   "focus:border-accent focus-visible:ring-2 focus-visible:ring-accent/40";
-
-/** Only same-site paths are followed after sign-in: an open redirect would let
- *  a crafted link send a freshly signed-in user anywhere. */
-function safeNext(value: string | null): string {
-  return value && value.startsWith("/app") && !value.startsWith("//") ? value : "/app";
-}
 
 export function LoginForm() {
   const router = useRouter();

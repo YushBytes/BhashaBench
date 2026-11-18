@@ -568,6 +568,7 @@ below Python's recursion limit.
 pytest                                  # 2989 collected; 2948 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
+npm --prefix frontend test              # frontend unit tests (node --test)
 ```
 
 - `filterwarnings = ["error"]` is set. A new deprecation warning **fails the

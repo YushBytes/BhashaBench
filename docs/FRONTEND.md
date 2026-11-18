@@ -21,6 +21,9 @@ This file is the working reference.
 | `/app/new-test` | Partial prerender | scenarios, bot adapters |
 | `/app/scenarios` | Partial prerender | scenarios, languages |
 | `/app/providers` | Partial prerender | 4 provider endpoints, languages |
+| `/app/analytics` | Partial prerender | analytics summary (grouped), daily trend, regression check |
+| `/app/compare` | Partial prerender | `GET /analytics/compare` for two run ids |
+| `/app/workspace` | Partial prerender | `/auth/me`, workspaces, members, projects; member and project controls |
 | `/login` | Static | `POST /auth/login` from the browser |
 
 Every `/app` route needs a session. `proxy.ts` redirects to
@@ -247,3 +250,34 @@ cookie-authenticated writes (sign-out, starting a run) are refused with 403.
 Browsing the dev server by IP rather than `localhost` trips Next's
 cross-origin dev-resource block, which silently prevents hydration. Use
 `localhost`, or set `allowedDevOrigins`.
+
+## Analytics views (Phase 13)
+
+- A pass rate is shown only as `formatPassRate` renders it: the point
+  estimate, its Wilson 95% interval and n. No decided runs reads "No
+  decided runs", never 0%.
+- The regression check and the run comparison show the API's own
+  conclusion, reason and statistical note verbatim; the page adds no
+  interpretation of its own.
+- The run page refreshes itself every 3 s while a run is in flight (not
+  while it waits for an operator) and stops when it finishes. It shows the
+  latest evaluation with an evaluate button, and plays the full recording
+  through the same-origin proxy, listing any excluded turns.
+- Workspace controls are shown only to roles that can use them; the server
+  still decides, and a refusal is shown as the API worded it. Nothing is
+  updated optimistically.
+
+## Tests
+
+```bash
+npm test     # node --test on tests/**/*.test.mjs; no test framework added
+```
+
+Node strips TypeScript types itself, so tests import `lib/` files directly.
+They cover the formatters (no "no data" ever rendered as a number), the
+sign-in redirect guard (`lib/redirect.ts`: only `/app` paths, never
+protocol-relative), and the API client (same-origin credentials, empty
+query values dropped, the error envelope's message, network versus timeout
+failures, no fallback data). Components are not unit-tested; they are
+checked by typecheck, lint, the production build, and the end-to-end check
+against the running API.
