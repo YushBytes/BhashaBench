@@ -262,10 +262,18 @@ $env:BACKEND_HOST_PORT  = "8100"
 docker compose -f docker-compose.local.yml up -d
 ```
 
-The backend's allowed browser origins are `localhost:3000` and
-`127.0.0.1:3000`. The browser only ever calls the frontend's own origin,
-which forwards `/api/v1` inside the Docker network, so a different frontend
-port still works.
+The browser only ever calls the frontend's own origin, which forwards
+`/api/v1` inside the Docker network. The backend refuses a cookie-signed
+write from any origin it does not list (protection against cross-site
+request forgery), so its allowed origins follow `FRONTEND_HOST_PORT`
+automatically: `localhost:<port>` and `127.0.0.1:<port>`. Set the variables
+in the same PowerShell window you run `docker compose` from, and every time:
+a later `up` without them moves the frontend back to 3000. Then run the
+check against the new ports:
+
+```powershell
+py scripts\local_e2e.py --frontend http://127.0.0.1:3100 --backend http://127.0.0.1:8100
+```
 
 ## 12. Troubleshooting
 

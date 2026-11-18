@@ -92,7 +92,10 @@ services:
     restart: unless-stopped
     environment:
       <<: *backend-env
-      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      # The browser's origin is the frontend's published port. Cookie-signed
+      # writes from any other origin are refused (CSRF), so this must follow
+      # FRONTEND_HOST_PORT or a moved frontend becomes read-only.
+      CORS_ORIGINS: http://localhost:${FRONTEND_HOST_PORT:-3000},http://127.0.0.1:${FRONTEND_HOST_PORT:-3000}
       AUTH_ALLOW_SIGNUP: "true"
       # Offline, free, and labelled as such on every run.
       TRANSCRIPTION_PROVIDER: fake
