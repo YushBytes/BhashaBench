@@ -20,7 +20,7 @@ from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -615,6 +615,11 @@ class Settings(BaseSettings):
             "own audio profile takes precedence."
         ),
     )
+    log_format: Literal["text", "json"] = Field(
+        default="text",
+        description="`json` writes one JSON object per log line, with the request id.",
+    )
+
     # -- HTTP hardening (Phase 14, part 2) -------------------------------------
     rate_limit_requests_per_minute: int = Field(
         default=600,

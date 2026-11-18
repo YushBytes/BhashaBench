@@ -30,6 +30,8 @@ from app.caller.errors import (
 )
 from app.core.config import AppEnv, Settings, get_settings
 from app.core.languages import UnsupportedLanguageError
+from app.core.logging import REQUEST_ID_HEADER, request_id_from, reset_request_id, set_request_id
+from app.core.logging import configure as configure_logging
 from app.core.security import UNLIMITED_PATHS, SlidingWindowLimiter, client_key, security_headers
 from app.db.session import get_session_factory
 from app.pipeline.errors import (
@@ -446,9 +448,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # The app's own settings, not the global ones: a test app must never
     # start a recovery loop against whatever database the developer's .env names.
     settings = getattr(app.state, "settings", None) or get_settings()
-    logging.basicConfig(
+    configure_logging(
+        json_format=settings.log_format == "json",
         level=logging.INFO if settings.is_production else logging.DEBUG,
-        format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
     )
     logger.info(
         "Starting %s v%s in %s mode",
@@ -508,6 +510,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # the CORS headers a browser needs to read it.
     @app.middleware("http")
     async def harden(request: Request, call_next: Any) -> Any:
+        request_id = request_id_from(request.headers.get(REQUEST_ID_HEADER))
+        token = set_request_id(request_id)
+        try:
+            response = await _harden(request, call_next)
+        finally:
+            reset_request_id(token)
+        response.headers[REQUEST_ID_HEADER] = request_id
+        return response
+
+    async def _harden(request: Request, call_next: Any) -> Any:
         path = request.url.path
         if path.startswith("/api/") and path not in UNLIMITED_PATHS:
             key = client_key(request, trust_forwarded_for=settings.trust_forwarded_for)

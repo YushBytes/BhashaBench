@@ -125,6 +125,14 @@ The server closes runs left in flight every `PIPELINE_RECOVERY_INTERVAL_SECONDS`
 By hand: `python -m app.cli runs recover-stale --older-than 1h` (dry run),
 then `--apply`.
 
+## Logs and request ids
+
+Set `LOG_FORMAT=json` in production: every line is one JSON object with
+`ts`, `level`, `logger`, `message`, `request_id` and any structured fields,
+credentials redacted. Every response carries `X-Request-ID` (the caller's,
+when it is safe, otherwise a new one), so a user can quote the id of a
+failing request and it can be found in the logs at once.
+
 ## Not done, and needed for Phase 15's exit criterion
 
 Phase 15 closes only when the platform has **run unattended for a week with

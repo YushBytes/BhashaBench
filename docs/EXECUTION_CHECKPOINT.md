@@ -115,7 +115,8 @@ captured live; the sweep is not scheduled).
 
 | Phase 15 unit | Commit | CI |
 |------|--------|----|
-| Production images, prod compose, startup refusals, backup/restore (rehearsed locally), deployment plan | this commit | see log |
+| Production images, prod compose, startup refusals, backup/restore (rehearsed locally), deployment plan | `84e5cd5` | see log |
+| Request ids and JSON logs | this commit | see log |
 
 **Phase 13: complete** (no component tests; no deletion controls in the UI).
 
