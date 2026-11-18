@@ -48,9 +48,23 @@ Session tokens carry a `bbs_` prefix, and the shared redactor
 appears - added after the Phase 9 crash test found one surviving in a run's
 stored error.
 
-**Known gaps.** No per-client rate limiting yet (Phase 14 part 2), so the
-lockout is the only brake on guessing and can be used to lock a known
-account. No multi-factor authentication. No email verification or password
+**Rate limits and headers (Phase 14 part 2)**, `app/core/security.py`:
+every `/api/` request is limited per client address
+(`RATE_LIMIT_REQUESTS_PER_MINUTE`, 600), and login per address *and* per
+email (`RATE_LIMIT_LOGINS_PER_MINUTE`, 10), answering 429 with
+`Retry-After` and checked before the password is verified. Liveness is never
+limited. Every API response carries `nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: no-referrer`, a device-denying `Permissions-Policy`, COOP,
+and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`
+(the dev-only docs pages excepted); HSTS is added in staging and production;
+auth responses are `no-store`. The frontend sends the same headers except
+the CSP.
+
+**Known gaps.** The rate-limit windows live in one process, so N processes
+allow N times the rate; `TRUST_FORWARDED_FOR` must only be set behind a
+proxy that overwrites the header. The frontend has no Content-Security-
+Policy yet: Next's inline scripts need per-request nonces, and a policy with
+`'unsafe-inline'` would be decoration. No multi-factor authentication. No email verification or password
 reset by email: the application sends no email, and an account is created
 by an operator (`bhashabench users create`) or by sign-up when enabled.
 

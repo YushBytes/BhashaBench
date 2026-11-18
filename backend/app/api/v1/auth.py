@@ -8,10 +8,11 @@ session's absolute lifetime. See docs/AUTH.md.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Request, Response, status
 
 from app.api.deps import SESSION_COOKIE, CurrentPrincipal, DbSession, SettingsDep
 from app.core.config import Settings
+from app.core.security import client_key
 from app.models.identity import AuthSession
 from app.repositories import identity as repo
 from app.schemas.auth import (
@@ -26,6 +27,7 @@ from app.schemas.auth import (
 )
 from app.schemas.common import ErrorResponse
 from app.services import auth_service
+from app.services.errors import RateLimitedError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -90,8 +92,18 @@ def signup(body: SignupRequest, session: DbSession, settings: SettingsDep) -> Us
     responses=_401,
 )
 def login(
-    body: LoginRequest, response: Response, session: DbSession, settings: SettingsDep
+    body: LoginRequest,
+    request: Request,
+    response: Response,
+    session: DbSession,
+    settings: SettingsDep,
 ) -> LoginResponse:
+    limiter = request.app.state.login_limiter
+    address = client_key(request, trust_forwarded_for=settings.trust_forwarded_for)
+    for key in (f"login-ip:{address}", f"login-email:{auth_service.normalise_email(body.email)}"):
+        wait = limiter.hit(key)
+        if wait is not None:
+            raise RateLimitedError(int(wait))
     issued = auth_service.login(
         session, settings, email=body.email, password=body.password.get_secret_value()
     )

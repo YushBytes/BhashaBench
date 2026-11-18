@@ -28,6 +28,14 @@ class UnauthenticatedError(DomainError):
     indistinguishable, or the login form enumerates users."""
 
 
+class RateLimitedError(DomainError):
+    """Too many attempts in the window. 429 with `Retry-After`."""
+
+    def __init__(self, retry_after_seconds: int) -> None:
+        super().__init__(f"too many attempts; retry in {retry_after_seconds} s")
+        self.retry_after_seconds = retry_after_seconds
+
+
 class InvalidRequestError(DomainError):
     """Well-formed input that a business rule refuses, e.g. a weak password. 422."""
 

@@ -105,7 +105,11 @@ captured live; the sweep is not scheduled).
 |------|--------|----|
 | Analytics, compare and workspace pages; run page evaluation, recording and auto-refresh | `6342a93` | ✅ |
 | `node --test` suite for `lib/` in CI; redirect guard tightened | `016c7f8` | see log |
-| Suite and scenario authoring; Phase 13 closed | this commit | see log |
+| Suite and scenario authoring; Phase 13 closed | `e8d8050` | see log |
+
+| Phase 14.2 unit | Commit | CI |
+|------|--------|----|
+| Rate limits and security headers | this commit | see log |
 
 **Phase 13: complete** (no component tests; no deletion controls in the UI).
 

@@ -28,8 +28,9 @@ from app.caller.errors import (
     ScenarioNotUsableError,
     TurnBudgetExhaustedError,
 )
-from app.core.config import Settings, get_settings
+from app.core.config import AppEnv, Settings, get_settings
 from app.core.languages import UnsupportedLanguageError
+from app.core.security import UNLIMITED_PATHS, SlidingWindowLimiter, client_key, security_headers
 from app.db.session import get_session_factory
 from app.pipeline.errors import (
     AudioValidationError,
@@ -54,6 +55,7 @@ from app.services.errors import (
     InvalidRequestError,
     NotFoundError,
     PermissionDeniedError,
+    RateLimitedError,
     UnauthenticatedError,
 )
 from app.services.health import uptime_seconds
@@ -305,6 +307,12 @@ def register_exception_handlers(app: FastAPI) -> None:
         response.headers["WWW-Authenticate"] = "Bearer"
         return response
 
+    @app.exception_handler(RateLimitedError)
+    async def handle_rate_limited(_request: Request, exc: RateLimitedError) -> JSONResponse:
+        response = _error_response(status.HTTP_429_TOO_MANY_REQUESTS, "rate_limited", str(exc))
+        response.headers["Retry-After"] = str(exc.retry_after_seconds)
+        return response
+
     @app.exception_handler(InvalidRequestError)
     async def handle_invalid_request(_request: Request, exc: InvalidRequestError) -> JSONResponse:
         return _error_response(status.HTTP_422_UNPROCESSABLE_CONTENT, "validation_error", str(exc))
@@ -490,6 +498,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         },
     )
     app.state.settings = settings
+    # Per app instance, not process-global: a test app gets fresh windows, and
+    # the limits come from this app's own settings.
+    app.state.request_limiter = SlidingWindowLimiter(settings.rate_limit_requests_per_minute)
+    app.state.login_limiter = SlidingWindowLimiter(settings.rate_limit_logins_per_minute)
+    deployed = settings.app_env in (AppEnv.STAGING, AppEnv.PRODUCTION)
+
+    # Registered before CORS so CORS stays outermost and a 429 still carries
+    # the CORS headers a browser needs to read it.
+    @app.middleware("http")
+    async def harden(request: Request, call_next: Any) -> Any:
+        path = request.url.path
+        if path.startswith("/api/") and path not in UNLIMITED_PATHS:
+            key = client_key(request, trust_forwarded_for=settings.trust_forwarded_for)
+            wait = app.state.request_limiter.hit(f"req:{key}")
+            if wait is not None:
+                response: Any = _error_response(
+                    status.HTTP_429_TOO_MANY_REQUESTS,
+                    "rate_limited",
+                    f"too many requests; retry in {int(wait)} s",
+                )
+                response.headers["Retry-After"] = str(int(wait))
+            else:
+                response = await call_next(request)
+        else:
+            response = await call_next(request)
+        for name, value in security_headers(path, deployed=deployed).items():
+            response.headers.setdefault(name, value)
+        return response
 
     app.add_middleware(
         CORSMiddleware,

@@ -15,6 +15,24 @@ const BACKEND_URL = (
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  // The API's own hardening headers, for the pages. No Content-Security-
+  // Policy yet: Next's inline bootstrap scripts need per-request nonces to be
+  // allowed safely, and a policy with 'unsafe-inline' would only look like
+  // protection. Recorded as a gap in docs/SECURITY.md.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     return [{ source: "/api/v1/:path*", destination: `${BACKEND_URL}/api/v1/:path*` }];
   },

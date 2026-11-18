@@ -211,6 +211,10 @@ def settings() -> Settings:
         auth_password_hash_log2_n=10,
         # No background recovery sweep in tests; it is exercised directly.
         pipeline_recovery_interval_seconds=0,
+        # Thousands of requests share one test client address; limits are
+        # exercised by apps built for that in test_hardening.py.
+        rate_limit_requests_per_minute=0,
+        rate_limit_logins_per_minute=0,
         _env_file=None,
     )
 

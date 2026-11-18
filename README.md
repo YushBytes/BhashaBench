@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 2989 tests across 66 modules
+│   ├── tests/                 3003 tests across 67 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -634,6 +634,8 @@ their phase lands.
 | `BOT_HTTP_MAX_ATTEMPTS` | Requests per turn, counting retries | `2` |
 | `PIPELINE_FIXTURE_AUDIO_PATH` | WAV the `scripted` adapter replays as every bot reply. Unset, a scripted audio run fails on turn 0 | _unset_ |
 | `PIPELINE_FIXTURE_BOT_TEXT_PATH` | Bot replies as text, one per line, for `offline_simulation` with the `scripted` adapter. Unset, such a run fails on its first bot turn | _unset_ |
+| `RATE_LIMIT_REQUESTS_PER_MINUTE` / `RATE_LIMIT_LOGINS_PER_MINUTE` | Per-client limits on `/api/` and on login (also per email); 429 with `Retry-After`; 0 disables | `600` / `10` |
+| `TRUST_FORWARDED_FOR` | Key rate limits by `X-Forwarded-For`; only behind a proxy that overwrites it | `false` |
 | `BOT_WS_URL` | ws:// or wss:// URL of a bot speaking `bhashabench-voice-bot/1` for the `ws_voice` adapter (token and host allowlist shared with `http`) | empty |
 | `PIPELINE_RECOVERY_INTERVAL_SECONDS` | How often the server closes runs left in flight with nothing executing them; 0 disables | `300` |
 | `PIPELINE_RUN_TIMEOUT_SECONDS` | Wall-clock ceiling on one run | `600.0` |
@@ -753,10 +755,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 2989 tests** across sixty-six modules.
-**2948 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3003 tests** across sixty-seven modules.
+**2962 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (2989) exceeds the number that run (2948):
+why the collected total (3003) exceeds the number that run (2962):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -769,6 +771,7 @@ why the collected total (2989) exceeds the number that run (2948):
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
+| `test_hardening.py` | 14 | Phase 14 part 2 hardening: the sliding-window limiter (limit, window, independent keys, 0 disables), 429 with `Retry-After` on the API, liveness never limited, login limited per email across addresses and checked before the right password is verified, `X-Forwarded-For` ignored unless trusted, and the security headers on responses and errors, HSTS only when deployed, no API CSP on the docs, `no-store` on auth
 | `test_streaming_voice.py` | 17 | Phase 9 streaming voice: framing and levels, latency from caller end to first voiced frame, end-of-turn silence, silence timeout, the deadline and barge-in on a simulated clock; then the `ws_voice` adapter against the reference bot over a real socket in real time - a prompt answer with measured latency, one socket across turns, end-pointing without a signal, a barge-in making the caller yield, a silent bot timing out with no audio, an endless bot cut off at the deadline, a wrong token and an off-allowlist host refused, no token in errors - and a whole `external_bot_test` run recording per-turn streaming evidence and a silent bot turn, with fixture mode refusing an external voice bot
 | `test_background_runs.py` | 8 | Phase 9 background execution: a run started with `background=true` answers 202 and completes after its request, a crash closes the run as `failed`/`abandoned` by the background worker with a redacted reason, a finished run and a run with no free slot are refused before the 202 with nothing started, the recovery sweep closing runs whose worker died while leaving recent and protected runs alone, a zero interval starting no loop, and the app never sweeping with the global settings
 | `test_telephony_calls.py` | 16 | Phase 8 telephony with the mock provider against PostgreSQL and the real webhook: a placed call stored masked and labelled mocked with the caller namespace untouched, placing alone setting no status, an off-list number refused before the provider is contacted, concurrent, per-run and per-day limits, signed events driving each of four outcomes through the call and its conversation (`DIALING` first, `BUSY`/`NO_ANSWER` only from events), unsigned, wrong-secret and tampered events changing nothing, duplicates and stale events recorded but not applied, unknown providers and calls 404, the webhook absent with telephony off, oversized events refused, calls deleted with their run, and an invalid allowlist failing at startup
@@ -853,7 +856,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2948 passed, 41 skipped ================
+================ 2962 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

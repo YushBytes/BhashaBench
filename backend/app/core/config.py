@@ -615,6 +615,27 @@ class Settings(BaseSettings):
             "own audio profile takes precedence."
         ),
     )
+    # -- HTTP hardening (Phase 14, part 2) -------------------------------------
+    rate_limit_requests_per_minute: int = Field(
+        default=600,
+        ge=0,
+        le=100_000,
+        description="Per client address, across /api/. 0 disables. Per process.",
+    )
+    rate_limit_logins_per_minute: int = Field(
+        default=10,
+        ge=0,
+        le=10_000,
+        description="Login attempts per client address and, separately, per email. 0 disables.",
+    )
+    trust_forwarded_for: bool = Field(
+        default=False,
+        description=(
+            "Key limits by the left-most X-Forwarded-For entry. Only behind a proxy that "
+            "overwrites the header; otherwise a client chooses its own key."
+        ),
+    )
+
     # -- Telephony (Phase 8): a mocked provider only ---------------------------
     telephony_provider: str = Field(
         default="",
