@@ -59,14 +59,13 @@ from app.core.config import Settings
 from app.db.session import get_session_factory
 from app.models.test_run import RunStatus, TestRun
 from app.pipeline.bots.registry import (
-    HTTP_ADAPTER,
     SCRIPTED_ADAPTER,
+    adapter_unavailable_reason,
     available_adapters,
     build_adapter,
     describe_adapters,
     fixture_replies_from_path,
     fixture_text_replies_from_path,
-    http_unavailable_reason,
 )
 from app.pipeline.concurrency import get_run_slots
 from app.pipeline.degradation import NoiseProfile
@@ -1125,12 +1124,8 @@ def list_adapters(settings: SettingsDep) -> BotAdapterListResponse:
                 requires_credentials=capabilities.requires_credentials,
                 accepts_containers=sorted(capabilities.accepts_containers),
                 notes=list(capabilities.notes),
-                available=(
-                    capabilities.name != HTTP_ADAPTER or http_unavailable_reason(settings) is None
-                ),
-                unavailable_reason=(
-                    http_unavailable_reason(settings) if capabilities.name == HTTP_ADAPTER else None
-                ),
+                available=adapter_unavailable_reason(capabilities.name, settings) is None,
+                unavailable_reason=adapter_unavailable_reason(capabilities.name, settings),
             )
             for capabilities in describe_adapters()
         ],

@@ -735,7 +735,12 @@ class TestAdapterListing:
         assert http["available"] is False
         assert "BOT_HTTP_BASE_URL" in http["unavailable_reason"]
         assert http["accepts_containers"] == []
-        others = [a for a in body["adapters"] if a["name"] != "http"]
+        # The streaming adapter is unconfigured too, and says so rather than
+        # claiming to be available (it once did, while BOT_WS_URL was unset).
+        voice = next(a for a in body["adapters"] if a["name"] == "ws_voice")
+        assert voice["available"] is False
+        assert "BOT_WS_URL" in voice["unavailable_reason"]
+        others = [a for a in body["adapters"] if a["name"] not in ("http", "ws_voice")]
         assert all(a["available"] and a["unavailable_reason"] is None for a in others)
 
     def test_the_default_adapter_is_the_one_that_sends_nowhere(

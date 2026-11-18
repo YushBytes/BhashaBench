@@ -147,6 +147,24 @@ def http_unavailable_reason(settings: Settings | None) -> str | None:
     return None
 
 
+def ws_voice_unavailable_reason(settings: Settings | None) -> str | None:
+    """Why the `ws_voice` adapter cannot be built, or `None`. Names settings only."""
+    if settings is None or not settings.bot_ws_url.strip():
+        return "BOT_WS_URL is not set"
+    return http_unavailable_reason(
+        settings.model_copy(update={"bot_http_base_url": settings.bot_ws_url})
+    )
+
+
+def adapter_unavailable_reason(name: str, settings: Settings | None) -> str | None:
+    """Why the named adapter cannot be used on this deployment, or `None`."""
+    if name == HTTP_ADAPTER:
+        return http_unavailable_reason(settings)
+    if name == "ws_voice":
+        return ws_voice_unavailable_reason(settings)
+    return None
+
+
 def _build_http(replies: Sequence[bytes] | None, settings: Settings | None) -> BotAdapter:
     if replies:
         raise PipelineConfigurationError("the http adapter takes no scripted replies")
@@ -173,14 +191,8 @@ def _build_ws_voice(replies: Sequence[bytes] | None, settings: Settings | None) 
 
     if replies:
         raise PipelineConfigurationError("the ws_voice adapter takes no scripted replies")
-    if settings is None or not settings.bot_ws_url.strip():
-        raise PipelineConfigurationError(
-            "the ws_voice bot adapter is not configured: BOT_WS_URL is not set"
-        )
-    reason = http_unavailable_reason(
-        settings.model_copy(update={"bot_http_base_url": settings.bot_ws_url})
-    )
-    if reason is not None:
+    reason = ws_voice_unavailable_reason(settings)
+    if reason is not None or settings is None:
         raise PipelineConfigurationError(f"the ws_voice bot adapter is not configured: {reason}")
     policy = OutboundPolicy.from_setting(
         settings.bot_http_allowed_hosts,
@@ -259,6 +271,7 @@ __all__ = [
     "MANUAL_ADAPTER",
     "SCRIPTED_ADAPTER",
     "WS_VOICE_ADAPTER",
+    "adapter_unavailable_reason",
     "available_adapters",
     "build_adapter",
     "describe_adapters",
