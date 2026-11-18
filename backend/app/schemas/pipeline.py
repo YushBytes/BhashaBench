@@ -311,11 +311,12 @@ class RunReportResponse(BaseModel):
     events: list[StageEventResponse]
     measurement_note: str = Field(
         default=(
-            "Factual measurements only. This phase records counts, durations, "
-            "sample rates, state transitions and stage outcomes. It computes no "
-            "accuracy score, no word error rate and no semantic judgement: "
-            "none of those is possible without a reviewed reference transcript, "
-            "and evaluation is a later phase."
+            "Factual measurements only. This report records counts, durations, "
+            "sample rates, state transitions and stage outcomes. It holds no "
+            "accuracy score, no word error rate and no semantic judgement: those "
+            "belong to the run's evaluations (/api/v1/test-runs/{id}/evaluations), "
+            "where WER and CER need a reviewed reference transcript per bot turn "
+            "and are not reported without one."
         ),
         description="Stated on the API surface so a consumer cannot mistake "
         "these counts for a quality score.",

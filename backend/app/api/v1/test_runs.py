@@ -1071,8 +1071,9 @@ def read_recording_audio(
         "State, artefacts, caller state transitions and every stage that ran, "
         "with its measured duration.\n\n"
         "**Measurements, not judgements.** There is no accuracy score, no word "
-        "error rate and no semantic verdict here: none is possible without a "
-        "reviewed reference transcript, and evaluation is a later phase."
+        "error rate and no semantic verdict here. Those are in the run's "
+        "evaluations (`/evaluations`), where WER and CER need a reviewed "
+        "reference transcript per bot turn."
     ),
     responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "No such run."}},
     dependencies=[RunAccess.VIEW],

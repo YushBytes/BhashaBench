@@ -216,8 +216,9 @@ def settings_not_enforced(
     add(
         "constraints.max_silence_seconds",
         constraints.get("max_silence_seconds", 5.0),
-        "There is no silence detection or re-prompt timer; a turn ends when its "
-        "audio or text is complete. Silence handling is Phase 9.",
+        "Nothing re-prompts after silence. A turn ends when its audio or text is "
+        "complete; the ws_voice adapter also ends a bot turn on its own silence "
+        "timeout (server settings), not on this value.",
     )
     if constraints.get("required_phrases"):
         add(

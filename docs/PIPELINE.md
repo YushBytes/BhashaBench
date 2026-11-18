@@ -637,7 +637,8 @@ provider error category, and each stage's duration.
 **Not computed, and not claimed:** accuracy, word error rate, semantic
 correctness, or conversation quality. None is possible without a reviewed
 reference transcript — the test fixtures contain tones and generated audio, not
-speech with known ground truth — and evaluation is a later phase. A successful
+speech with known ground truth. Scores belong to the evaluation engine
+(`docs/EVALUATION.md`), which reads what a run stored. A successful
 transcription means the pipeline worked, not that the bot answered well.
 
 `RunReportResponse.measurement_note` states this on the wire, so a consumer
