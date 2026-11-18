@@ -20,6 +20,7 @@ import { ApiError, api } from "@/lib/api/client";
 import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
 import type { ComparedRun, RunComparison } from "@/lib/api/types";
 import { humanise, shortId } from "@/lib/format";
+import { metricLabel } from "@/lib/evaluation";
 
 export const metadata = { title: "Compare runs" };
 
@@ -128,7 +129,7 @@ async function Comparison({ searchParams }: { searchParams: Promise<SearchParams
             <tbody>
               {result.metric_deltas.map((delta) => (
                 <tr key={delta.metric} className="border-t border-line">
-                  <Td className="font-medium text-text">{humanise(delta.metric)}</Td>
+                  <Td className="font-medium text-text">{metricLabel(delta.metric)}</Td>
                   <Td className="font-mono tabular-nums">{format(delta.baseline) ?? <NotReported />}</Td>
                   <Td className="font-mono tabular-nums">{format(delta.candidate) ?? <NotReported />}</Td>
                   <Td className="font-mono tabular-nums">{format(delta.delta) ?? "—"}</Td>

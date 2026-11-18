@@ -101,3 +101,17 @@ export function metricRows(metrics: Json): MetricRow[] {
   }
   return rows;
 }
+
+/** Display names for metric keys the comparison returns; others are shown as sent. */
+const METRIC_LABELS: Record<string, string> = {
+  wer: "Word error rate (WER)",
+  cer: "Character error rate (CER)",
+  bot_response_latency_p50_ms: "Bot response latency, p50 (ms)",
+  bot_response_latency_p90_ms: "Bot response latency, p90 (ms)",
+  expected_outcome_keyword_coverage: "Expected-outcome keyword coverage",
+  transcription_failure_rate: "Transcription failure rate (ours)",
+};
+
+export function metricLabel(key: string): string {
+  return METRIC_LABELS[key] ?? key.replaceAll("_", " ");
+}

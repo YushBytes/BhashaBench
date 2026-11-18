@@ -194,6 +194,12 @@ describe("metricRows", async () => {
     assert.equal(rows[1].detail, "0 of 4 bot turns not transcribed");
   });
 
+  it("names comparison metrics in words, and passes unknown keys through", async () => {
+    const { metricLabel } = await import("../lib/evaluation.ts");
+    assert.equal(metricLabel("wer"), "Word error rate (WER)");
+    assert.equal(metricLabel("some_new_metric"), "some new metric");
+  });
+
   it("labels keyword coverage as an indicator, not a judgement", () => {
     const [row] = metricRows({ expected_outcome_keyword_coverage: { value: 0.5, covered: 2, declared: 4 } });
     assert.equal(row.value, "50%");
