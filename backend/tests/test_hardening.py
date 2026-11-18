@@ -17,6 +17,7 @@ from app.db.session import get_db
 from app.main import create_app
 from app.services import auth_service
 from tests.auth_helpers import PASSWORD
+from tests.conftest import PRODUCTION_SAFE
 
 
 class TestLimiter:
@@ -133,6 +134,8 @@ class TestHeaders:
 
     @pytest.mark.parametrize("env", [AppEnv.STAGING, AppEnv.PRODUCTION])
     def test_a_deployed_app_sends_hsts(self, env: AppEnv) -> None:
-        app = create_app(settings=Settings(app_env=env, secret_key="x" * 40, _env_file=None))
+        app = create_app(
+            settings=Settings(app_env=env, secret_key="x" * 40, _env_file=None, **PRODUCTION_SAFE)
+        )
         with TestClient(app) as client:
             assert "strict-transport-security" in client.get("/health").headers

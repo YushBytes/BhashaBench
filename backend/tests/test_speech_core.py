@@ -49,6 +49,7 @@ from app.speech.providers.fake import (
 )
 from app.speech.registry import available_providers, build_provider, describe_providers
 from app.speech.service import SpeechService
+from tests.conftest import PRODUCTION_SAFE
 
 TAMIL_LINE = "வணக்கம், உங்கள் பயிர் காப்பீட்டு விண்ணப்பத்தின் நிலையைச் சரிபார்க்கிறேன்."
 """A real Tamil support-call line. Used because an ASCII placeholder would not
@@ -356,6 +357,7 @@ class TestRegistry:
                     app_env=AppEnv.PRODUCTION,
                     secret_key="a-real-production-secret-value",
                     speech_provider="fake",
+                    **PRODUCTION_SAFE,
                 )
             )
 

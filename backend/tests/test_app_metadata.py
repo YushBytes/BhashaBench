@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import AppEnv, Settings
 from app.main import create_app
+from tests.conftest import PRODUCTION_SAFE
 
 
 class TestApplicationMetadata:
@@ -150,7 +151,10 @@ class TestApplicationFactory:
 
     def test_production_app_hides_documentation(self) -> None:
         production_settings = Settings(
-            app_env=AppEnv.PRODUCTION, secret_key="a-real-looking-secret", _env_file=None
+            app_env=AppEnv.PRODUCTION,
+            secret_key="a-real-looking-secret",
+            _env_file=None,
+            **PRODUCTION_SAFE,
         )
 
         app = create_app(settings=production_settings)

@@ -111,7 +111,11 @@ captured live; the sweep is not scheduled).
 |------|--------|----|
 | Rate limits and security headers | `1ce0df6` | ✅ (with `60791b4`) |
 | Dependency audits and a full-history secret scan in CI | `78476d8` | ✅ |
-| Regression gate over the reference scenarios; Phase 14 closed | this commit | see log |
+| Regression gate over the reference scenarios; Phase 14 closed | `142d3dc` | ✅ |
+
+| Phase 15 unit | Commit | CI |
+|------|--------|----|
+| Production images, prod compose, startup refusals, backup/restore (rehearsed locally), deployment plan | this commit | see log |
 
 **Phase 13: complete** (no component tests; no deletion controls in the UI).
 

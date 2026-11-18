@@ -52,6 +52,7 @@ from app.transcription.registry import (
     describe_providers,
 )
 from app.transcription.retry import RetryPolicy, call_with_retry
+from tests.conftest import PRODUCTION_SAFE
 
 
 def _wav(*, sample_rate: int = 8000, channels: int = 1, frames: int = 800) -> bytes:
@@ -680,6 +681,7 @@ class TestRegistry:
                     app_env=AppEnv.PRODUCTION,
                     secret_key="a-real-production-secret-value",
                     transcription_provider="fake",
+                    **PRODUCTION_SAFE,
                 )
             )
 

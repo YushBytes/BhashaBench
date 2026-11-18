@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 3009 tests across 68 modules
+│   ├── tests/                 3013 tests across 68 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -755,15 +755,15 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 3009 tests** across sixty-eight modules.
-**2968 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3013 tests** across sixty-eight modules.
+**2972 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (3009) exceeds the number that run (2968):
+why the collected total (3013) exceeds the number that run (2972):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
 | `test_health.py` | 16 | Root, liveness and versioned health endpoints; the database probe reachable and unreachable; the error envelope; a check that no secret appears in a response |
-| `test_config.py` | 14 | Defaults, environment overrides, comma-separated list parsing, validation failures, production behaviour, settings caching |
+| `test_config.py` | 18 | Defaults, environment overrides, comma-separated list parsing, validation failures, production behaviour (including refusing the placeholder database password and a localhost-only CORS list), settings caching |
 | `test_app_metadata.py` | 9 | App title/summary/version, the generated OpenAPI document, the application factory |
 | `test_evaluation_api.py` | 13 | The evaluation endpoints through the real routes and PostgreSQL: the metric catalogue, the stateless error-rate scorer and its validation, evaluating, listing and re-evaluating a real run after a reference, appended corrections with history, caller turns refused, and 404s |
 | `test_evaluation_evaluator.py` | 25 | The run evaluator: every verdict path on synthetic evidence (pass, bot failures, our faults undetermined, unfinished, phrases), pooled error rates, excluded failed transcriptions, nearest-rank latency, fingerprint reproducibility, and real text-bot runs evaluated from what they stored, re-evaluated, and re-scored after a reference is added |
@@ -857,7 +857,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2968 passed, 41 skipped ================
+================ 2972 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
@@ -1123,7 +1123,7 @@ documentation. Full detail in
 | 12 | Reporting & analytics backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, components not) |
 | 14 | CI/CD & safety | ✅ Complete (auth, tenancy, rate limits, headers, dependency and secret scanning, regression gate; no nightly run) |
-| 15 | Production readiness & competition demo | 🟡 Partial — competition demo only |
+| 15 | Production readiness & competition demo | 🟡 Partial — production images, compose, startup refusals, backup/restore (rehearsed locally) and a priced plan; not deployed, no week unattended |
 
 > This is the **original** 15-phase numbering, restored after the competition.
 > The competition renumbered phases in flight; the roadmap's mapping table

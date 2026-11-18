@@ -1,0 +1,83 @@
+# Production composition (Phase 15). Nothing here is deployed by this
+# repository: it is the configuration a single host would run, validated in
+# CI with `docker compose -f docker-compose.prod.yml config`.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+#
+# Differences from docker-compose.yml, all deliberate:
+# - production image targets: no dev dependencies, no reload, non-root;
+# - the database publishes no port; only the frontend is exposed, on
+#   loopback, and a TLS reverse proxy in front of it is required
+#   (docs/DEPLOYMENT.md);
+# - migrations run once in their own service before the backend starts;
+# - every secret comes from the environment file, which is never committed.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: production
+    env_file: ${BHASHABENCH_ENV_FILE:-.env.production}
+    environment:
+      APP_ENV: production
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: production
+    restart: unless-stopped
+    env_file: ${BHASHABENCH_ENV_FILE:-.env.production}
+    environment:
+      APP_ENV: production
+      # Behind the frontend's proxy and the TLS terminator.
+      TRUST_FORWARDED_FOR: "true"
+    volumes:
+      - artefacts:/storage
+    expose:
+      - "8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+      args:
+        BACKEND_URL: http://backend:8000
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8000
+    ports:
+      # Loopback only: the host's TLS reverse proxy is the only client.
+      - "127.0.0.1:${FRONTEND_HOST_PORT:-3000}:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  artefacts:

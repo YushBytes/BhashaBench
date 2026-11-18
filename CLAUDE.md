@@ -32,7 +32,7 @@ work. Current progress and the next task are in
 | 12 | Reporting & analytics backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, components not) |
 | 14 | CI/CD & safety | ✅ Complete (auth, tenancy, rate limits, headers, dependency and secret scanning, regression gate; no nightly run) |
-| 15 | Production readiness & competition demo | 🟡 Partial — competition demo only |
+| 15 | Production readiness & competition demo | 🟡 Partial — production images, compose, startup refusals, backup/restore (rehearsed locally) and a priced plan; not deployed, no week unattended |
 
 The competition renumbered phases in flight. The roadmap's mapping table
 translates; historical reports keep the numbering they were written in.
@@ -565,7 +565,7 @@ below Python's recursion limit.
 ## Testing
 
 ```bash
-pytest                                  # 3009 collected; 2968 pass, 41 live ones skipped
+pytest                                  # 3013 collected; 2972 pass, 41 live ones skipped
 pytest backend/tests/test_database.py   # one module
 ruff check . && ruff format --check .   # from the repository root
 npm --prefix frontend test              # frontend unit tests (node --test)
@@ -665,6 +665,7 @@ npm --prefix frontend test              # frontend unit tests (node --test)
 | `docs/EVALUATION.md` | a metric, normalisation step, criterion or the evaluator version changes |
 | `docs/AUTH.md` | a credential, session, cookie, role, permission or tenancy rule changes |
 | `docs/TELEPHONY.md` | a telephony provider, guardrail, status rule or webhook rule changes |
+| `docs/DEPLOYMENT.md` | a deployment target, image, compose service, runbook or priced item changes |
 | `docs/STORAGE.md` | a storage backend, key rule, retention or deletion behaviour changes |
 | `docs/REPORTING.md` | an aggregate, statistical rule, export format or analytics endpoint changes |
 | `docs/SECURITY.md` | a security control, known gap or incident changes |

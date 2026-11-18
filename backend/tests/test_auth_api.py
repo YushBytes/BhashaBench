@@ -24,6 +24,7 @@ from app.core.config import Settings
 from app.models import AuthSession, Project, Role, User, Workspace, WorkspaceMembership
 from app.services import auth_service
 from app.utils.timing import utc_now
+from tests.conftest import PRODUCTION_SAFE
 
 AUTH = "/api/v1/auth"
 PASSWORD = "a long enough passphrase"
@@ -385,6 +386,7 @@ class TestCredentialHygiene:
                 secret_key="x" * 40,
                 auth_password_hash_log2_n=12,
                 _env_file=None,
+                **PRODUCTION_SAFE,
             )
 
 

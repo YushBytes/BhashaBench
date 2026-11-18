@@ -66,7 +66,7 @@ keep the numbering they were written in. Use this table to translate.
 | 12 | Reporting & Analytics Backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
 | 13 | Frontend Dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, components not) |
 | 14 | CI/CD & Safety | ✅ Complete (auth, tenancy, rate limits, headers, dependency and secret scanning, regression gate; no nightly run) |
-| 15 | Production Readiness & Competition Demo | 🟡 Partial — competition demo only |
+| 15 | Production Readiness & Competition Demo | 🟡 Partial — production images, compose, startup refusals, backup/restore (rehearsed locally) and a priced plan; not deployed, no week unattended |
 
 ---
 
@@ -892,11 +892,19 @@ GitHub Environments, and cost guardrails.
 
 Delivered: the competition demonstration and its materials.
 
-Remaining: authentication, authorisation and tenant isolation; rate limiting,
-cost accounting and budget alerts; structured logging with correlation IDs,
-metrics, tracing and alerting; production deployment manifests with TLS;
-backup and restore; a privacy and data-retention policy; a security review, a
-load test and a versioned `1.0.0` release.
+Delivered 2026-11-18 (`docs/DEPLOYMENT.md`): production images (non-root,
+health-checked, the frontend's backend address compiled in),
+`docker-compose.prod.yml` with a one-shot migration and no published database
+port, startup refusal of the placeholder secret, database password and a
+localhost-only CORS list, backup, restore and restore-rehearsal scripts (a
+rehearsal passed locally, 14 tables identical), runbooks, and a deployment
+plan with every paid item priced and left for the owner. Authentication,
+tenancy, rate limits and retention arrived with Phases 10 and 14.
+
+Remaining: a deployment (needs the owner's purchase), alerting and log
+shipping against it, a metrics endpoint, a load test, a restore rehearsed on
+the deployed host, and a versioned `1.0.0` release once the exit criterion
+holds. No `1.0.0` is cut before then.
 
 **Exit criteria.** The platform runs unattended for a week with alerting and
 no manual intervention, and a restore from backup has been rehearsed.

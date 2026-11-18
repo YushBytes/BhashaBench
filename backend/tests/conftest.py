@@ -53,6 +53,14 @@ from tests.db_gate import database_required, database_unreachable
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
+PRODUCTION_SAFE: dict[str, object] = {
+    "database_url": "postgresql+psycopg://bench:a-real-password@db:5432/bench",
+    "cors_origins": ["https://bench.example"],
+}
+"""What a production Settings must carry to boot at all: production refuses
+the placeholder database password and a localhost-only CORS list. Tests
+that build a production Settings to check something else start from this."""
+
 TEST_DB_NAME = "bhashabench_test"
 
 _SKIP_REASON: str | None = None

@@ -68,10 +68,26 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload
 FROM base AS production
 
 COPY backend/ /app/
+# The reference scenarios and benchmark live outside backend/; the CLI and
+# the regression gate read them, so a production image carries them too.
+COPY scenarios/ /scenarios/
 
-RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
+# REPO_ROOT resolves to / inside the image (app/core/config.py), so the
+# relative storage paths in settings land under /storage: created here,
+# owned by the app user, and mounted as a persistent volume in production.
+RUN useradd --create-home --uid 1000 appuser \
+    && mkdir -p /storage \
+    && chown -R appuser:appuser /app /storage
 USER appuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8000/health || exit 1
+
+# One worker by default: the rate-limit windows and the run concurrency
+# limiter are per process (docs/SECURITY.md, docs/PIPELINE.md), so more
+# workers multiply those limits. Raise UVICORN_WORKERS knowingly.
+# --proxy-headers so the client address is right behind the reverse proxy;
+# TRUST_FORWARDED_FOR must be set for the rate limiter to use it.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --workers ${UVICORN_WORKERS:-1}"]

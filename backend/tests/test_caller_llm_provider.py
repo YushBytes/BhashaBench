@@ -35,6 +35,7 @@ from app.caller.schemas import CallerContext, CallerDecision, CallerResourceUse
 from app.caller.state import CallerState
 from app.core.config import AppEnv, Settings
 from app.transcription.retry import RetryPolicy
+from tests.conftest import PRODUCTION_SAFE
 from tests.test_caller_llm_contract import PRICING, make_context, reply
 
 USAGE = LlmUsage(input_tokens=1000, output_tokens=100)
@@ -510,7 +511,10 @@ class TestTheFakeIsNotAProvider:
     @pytest.mark.parametrize("env", [AppEnv.DEVELOPMENT, AppEnv.TEST, AppEnv.PRODUCTION])
     def test_asking_for_it_by_name_is_refused_in_every_environment(self, env: AppEnv) -> None:
         settings = Settings(
-            app_env=env, secret_key="a-real-enough-secret-for-tests", _env_file=None
+            app_env=env,
+            secret_key="a-real-enough-secret-for-tests",
+            _env_file=None,
+            **PRODUCTION_SAFE,
         )
         with pytest.raises(CallerConfigurationError, match="not a known caller provider"):
             build_provider(settings, FAKE_PROVIDER)

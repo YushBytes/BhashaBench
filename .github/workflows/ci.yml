@@ -1,6 +1,6 @@
 # BhashaBench CI foundation (Phase 0; Phase 14 builds on it).
 #
-# Four independent jobs. No secrets are read and no live provider is called:
+# Five independent jobs. No secrets are read and no live provider is called:
 # both live suites are opt-in (TRANSCRIPTION_LIVE_TESTS / SPEECH_LIVE_TESTS)
 # and stay off, and the providers default to the offline fakes.
 
@@ -142,6 +142,31 @@ jobs:
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.24.2
           git /repo --config /repo/.gitleaks.toml --no-banner --redact=100
 
+  images:
+    name: production images (build only, nothing pushed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the backend production image
+        run: docker build -f backend/Dockerfile --target production -t bhashabench-backend:ci .
+
+      - name: Build the frontend production image
+        run: >
+          docker build -f frontend/Dockerfile --target production
+          --build-arg BACKEND_URL=http://backend:8000 -t bhashabench-frontend:ci frontend
+
+      # The image must run as a non-root user and carry a health check.
+      - name: Check both images
+        run: |
+          for image in bhashabench-backend:ci bhashabench-frontend:ci; do
+            user=$(docker inspect -f '{{.Config.User}}' "$image")
+            health=$(docker inspect -f '{{if .Config.Healthcheck}}yes{{end}}' "$image")
+            echo "$image user=$user healthcheck=$health"
+            [ -n "$user" ] && [ "$user" != "root" ] && [ "$health" = "yes" ]
+          done
+
   compose:
     name: compose (configuration)
     runs-on: ubuntu-latest
@@ -157,3 +182,13 @@ jobs:
 
       - name: Validate docker-compose.yml
         run: docker compose config --quiet
+
+      # Placeholder values only, to render the file; production refuses
+      # these same placeholders at startup (app/core/config.py).
+      - name: Validate docker-compose.prod.yml
+        env:
+          POSTGRES_DB: placeholder
+          POSTGRES_USER: placeholder
+          POSTGRES_PASSWORD: placeholder
+          BHASHABENCH_ENV_FILE: .env.example
+        run: docker compose -f docker-compose.prod.yml config --quiet

@@ -45,6 +45,12 @@ CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", "3000"]
 # -----------------------------------------------------------------------------
 FROM base AS builder
 
+# The /api/v1 rewrite is compiled into the build (next.config.ts), so the
+# backend's address must be known here, not only at runtime. In the
+# production compose file it is the backend service on the internal network.
+ARG BACKEND_URL=http://backend:8000
+ENV BACKEND_URL=${BACKEND_URL}
+
 COPY . .
 RUN npm run build
 
@@ -68,5 +74,9 @@ COPY --from=builder /app/next.config.ts ./
 USER node
 
 EXPOSE 3000
+
+# Liveness: the sign-in page is static, so it answers without the backend.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD wget -q -O /dev/null http://127.0.0.1:3000/login || exit 1
 
 CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]

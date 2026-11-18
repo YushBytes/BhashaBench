@@ -831,6 +831,30 @@ class Settings(BaseSettings):
         return build_blob_store(self.storage_backend, self.caller_audio_root)
 
     @model_validator(mode="after")
+    def _refuse_development_defaults_in_production(self) -> Settings:
+        """Production must not start on a value that only works on a laptop.
+
+        The placeholder database password is public in `.env.example`, and a
+        CORS list naming only localhost would make every cookie-authenticated
+        write from the real site fail with 403 - both better refused at boot
+        than discovered by the first user.
+        """
+        if self.app_env is not AppEnv.PRODUCTION:
+            return self
+        if "change-me" in self.database_url:
+            raise ValueError(
+                "DATABASE_URL still contains the placeholder password 'change-me' "
+                "while APP_ENV=production"
+            )
+        local = ("http://localhost", "http://127.0.0.1")
+        if not self.cors_origins or all(o.startswith(local) for o in self.cors_origins):
+            raise ValueError(
+                "CORS_ORIGINS names only localhost while APP_ENV=production; set it to the "
+                "site's public https:// origin, or every browser write is refused"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _require_full_password_cost_when_deployed(self) -> Settings:
         """A lowered scrypt cost is for tests; a deployment must not inherit it."""
         deployed = (AppEnv.PRODUCTION, AppEnv.STAGING)

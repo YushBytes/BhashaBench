@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import PLACEHOLDER_SECRET, AppEnv, Settings, get_settings
+from tests.conftest import PRODUCTION_SAFE
 
 
 class TestDefaults:
@@ -89,7 +90,10 @@ class TestProductionBehaviour:
 
     def test_docs_are_disabled_in_production(self) -> None:
         settings = Settings(
-            app_env=AppEnv.PRODUCTION, secret_key="a-real-looking-secret", _env_file=None
+            app_env=AppEnv.PRODUCTION,
+            secret_key="a-real-looking-secret",
+            _env_file=None,
+            **PRODUCTION_SAFE,
         )
 
         assert settings.is_production is True
@@ -111,3 +115,35 @@ class TestSettingsCache:
             assert get_settings().app_version == "7.7.7"
         finally:
             get_settings.cache_clear()
+
+
+class TestProductionRefusesDevelopmentDefaults:
+    """Phase 15: a production process must not boot on laptop values."""
+
+    def test_the_placeholder_database_password_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="change-me"):
+            Settings(
+                app_env=AppEnv.PRODUCTION,
+                secret_key="a-real-looking-secret",
+                _env_file=None,
+                **{**PRODUCTION_SAFE, "database_url": "postgresql+psycopg://u:change-me@db/x"},
+            )
+
+    def test_a_localhost_only_cors_list_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="CORS_ORIGINS"):
+            Settings(
+                app_env=AppEnv.PRODUCTION,
+                secret_key="a-real-looking-secret",
+                _env_file=None,
+                **{**PRODUCTION_SAFE, "cors_origins": ["http://localhost:3000"]},
+            )
+
+    def test_real_values_boot(self) -> None:
+        settings = Settings(
+            app_env=AppEnv.PRODUCTION, secret_key="a-real-looking-secret", _env_file=None,
+            **PRODUCTION_SAFE,
+        )  # fmt: skip
+        assert settings.is_production
+
+    def test_staging_is_not_held_to_it(self) -> None:
+        Settings(app_env=AppEnv.STAGING, secret_key="a-real-looking-secret", _env_file=None)
