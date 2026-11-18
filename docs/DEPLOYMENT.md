@@ -143,10 +143,32 @@ class, time spent, 429s, and runs by status. They are per process and reset
 on restart. Alert first on: `/health` failing, a rising 5xx class, and runs
 accumulating in `running`.
 
+## Load test
+
+`scripts/load_test.py` (no new dependency). Run on 2026-11-18 against one
+uvicorn process on the development laptop (Windows, repository on OneDrive,
+PostgreSQL in Docker Desktop), rate limits off, 2,000 requests per path at
+concurrency 50:
+
+| Path | Throughput | p50 | p95 | p99 | Non-2xx |
+|------|-----------|-----|-----|-----|---------|
+| `/health` | 990 req/s | 48 ms | 62 ms | 73 ms | 0 |
+| `/api/v1/languages` | 659 req/s | 72 ms | 97 ms | 148 ms | 0 |
+| `/api/v1/test-runs?limit=20` (authenticated) | 131 req/s | 373 ms | 598 ms | 675 ms | 0 |
+
+These describe that machine, not a server, and are not a capacity claim.
+The finding that carries over: **authenticated reads are the bottleneck**.
+Each one resolves the session, may write its activity time, scopes queries
+to the caller's projects and counts turns, on FastAPI's synchronous thread
+pool. Re-run on the chosen VM before sizing it; if the listing matters at
+load, cache the per-request project scope and make the turn counts one
+query before adding workers.
+
 ## Not done, and needed for Phase 15's exit criterion
 
 Phase 15 closes only when the platform has **run unattended for a week with
 alerting** and a restore has been rehearsed **on the deployment**. Neither
-can happen before a host exists. Still to do once one does: external uptime
+can happen before a host exists. A load test against the deployed host is part of that. Still to do once one
+does: external uptime
 alerting (a free uptime monitor is enough to start), log shipping, and a
 scraper for `/metrics` with alert rules.

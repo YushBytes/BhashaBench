@@ -117,19 +117,30 @@ captured live; the sweep is not scheduled).
 |------|--------|----|
 | Production images, prod compose, startup refusals, backup/restore (rehearsed locally), deployment plan | `84e5cd5` | see log |
 | Request ids and JSON logs | `ed82e3a` | ✅ |
-| Token-protected `/metrics` | this commit | see log |
+| Token-protected `/metrics` | `a9edb87` | see log |
+| Load test script and a recorded local run | this commit | see log |
 
 **Phase 13: complete** (no component tests; no deletion controls in the UI).
 
 **Phase 14: complete.**
 
+**Phase 15: everything buildable without spending is done.** It stays 🟡:
+its exit criterion (a week unattended with alerting, a restore rehearsed on
+the deployment) needs a host, which needs the owner's purchase.
+
 ## Next task
 
-Phase 15: production readiness. Production images for backend and
-frontend (non-root, pinned, health-checked), a production compose file,
-configuration validation at startup, runbooks (deploy, migrate, rotate
-secrets, restore, purge, recover), and a deployment plan with every paid
-item priced and left for the owner. Nothing is provisioned or bought.
+**Blocked on the owner.** Choose and pay for a VM and a domain
+(`docs/DEPLOYMENT.md` lists them with indicative prices), rotate the Gnani
+key, and create `.env.production` on the host. Then: deploy with the
+runbook, rehearse a restore there, add external uptime alerting and a
+`/metrics` scraper, re-run the load test on the VM, run a week unattended,
+and only then cut `1.0.0`.
+
+Not blocked, if wanted meanwhile: caller phrase tables for Bengali, Marathi
+and Telugu (three reference scenarios are not runnable), a frontend CSP with
+nonces, delete controls in the UI, and caching the per-request project scope
+(the load test's bottleneck).
 
 ## Outstanding issues
 
