@@ -430,7 +430,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 3025 tests across 69 modules
+│   ├── tests/                 3029 tests across 69 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -634,6 +634,7 @@ their phase lands.
 | `BOT_HTTP_MAX_ATTEMPTS` | Requests per turn, counting retries | `2` |
 | `PIPELINE_FIXTURE_AUDIO_PATH` | WAV the `scripted` adapter replays as every bot reply. Unset, a scripted audio run fails on turn 0 | _unset_ |
 | `PIPELINE_FIXTURE_BOT_TEXT_PATH` | Bot replies as text, one per line, for `offline_simulation` with the `scripted` adapter. Unset, such a run fails on its first bot turn | _unset_ |
+| `METRICS_TOKEN` | Bearer token for `GET /metrics` (Prometheus text); empty turns the endpoint off | empty |
 | `LOG_FORMAT` | `text`, or `json` for one object per line with the request id | `text` |
 | `RATE_LIMIT_REQUESTS_PER_MINUTE` / `RATE_LIMIT_LOGINS_PER_MINUTE` | Per-client limits on `/api/` and on login (also per email); 429 with `Retry-After`; 0 disables | `600` / `10` |
 | `TRUST_FORWARDED_FOR` | Key rate limits by `X-Forwarded-For`; only behind a proxy that overwrites it | `false` |
@@ -756,10 +757,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 3025 tests** across sixty-nine modules.
-**2984 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3029 tests** across sixty-nine modules.
+**2988 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (3025) exceeds the number that run (2984):
+why the collected total (3029) exceeds the number that run (2988):
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -772,7 +773,7 @@ why the collected total (3025) exceeds the number that run (2984):
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
-| `test_observability.py` | 12 | Phase 15 observability: a request id on every response and error, a safe caller id echoed and an unsafe one (too long, spaces, header injection, markup) replaced, log records carrying the current id, JSON log lines with the standard fields and structured extras, credentials redacted in message and extras, logging setup never removing another handler, and the format setting accepting only `text` or `json`
+| `test_observability.py` | 16 | Phase 15 observability: `/metrics` off without a token, refusing a missing or wrong token, counting responses by method and status class, and rendering valid Prometheus text with the run gauge; a request id on every response and error, a safe caller id echoed and an unsafe one (too long, spaces, header injection, markup) replaced, log records carrying the current id, JSON log lines with the standard fields and structured extras, credentials redacted in message and extras, logging setup never removing another handler, and the format setting accepting only `text` or `json`
 | `test_benchmark_gate.py` | 6 | The CI regression gate: every reference scenario run as a `text_bot_test` against the scripted reference bot and evaluated, compared with `benchmarks/baseline.json` so a worse verdict fails the build; the baseline matching `scenarios/` and containing passes worth guarding; a deliberately broken (refusing) bot tripping the gate on every baseline pass; and the comparison rules for worse, better, missing, new and unknown verdicts
 | `test_hardening.py` | 14 | Phase 14 part 2 hardening: the sliding-window limiter (limit, window, independent keys, 0 disables), 429 with `Retry-After` on the API, liveness never limited, login limited per email across addresses and checked before the right password is verified, `X-Forwarded-For` ignored unless trusted, and the security headers on responses and errors, HSTS only when deployed, no API CSP on the docs, `no-store` on auth
 | `test_streaming_voice.py` | 17 | Phase 9 streaming voice: framing and levels, latency from caller end to first voiced frame, end-of-turn silence, silence timeout, the deadline and barge-in on a simulated clock; then the `ws_voice` adapter against the reference bot over a real socket in real time - a prompt answer with measured latency, one socket across turns, end-pointing without a signal, a barge-in making the caller yield, a silent bot timing out with no audio, an endless bot cut off at the deadline, a wrong token and an off-allowlist host refused, no token in errors - and a whole `external_bot_test` run recording per-turn streaming evidence and a silent bot turn, with fixture mode refusing an external voice bot
@@ -859,7 +860,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 2984 passed, 41 skipped ================
+================ 2988 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

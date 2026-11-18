@@ -85,3 +85,51 @@ class TestJsonLogs:
     def test_the_setting_accepts_only_text_or_json(self) -> None:
         with pytest.raises(ValueError):
             Settings(log_format="xml", _env_file=None)
+
+
+class TestMetrics:
+    TOKEN = "metrics-token-for-tests-0123456789"
+
+    def _client(self, settings: Settings, token: str = "") -> TestClient:
+        from pydantic import SecretStr
+
+        from app.core.config import get_settings
+        from app.main import create_app
+        from tests.conftest import authenticate_without_database
+
+        configured = settings.model_copy(update={"metrics_token": SecretStr(token)})
+        app = create_app(settings=configured)
+        app.dependency_overrides[get_settings] = lambda: configured
+        authenticate_without_database(app)
+        return TestClient(app)
+
+    def test_off_unless_a_token_is_set(self, settings: Settings) -> None:
+        with self._client(settings) as client:
+            assert client.get("/metrics").status_code == 404
+
+    def test_the_token_is_required(self, settings: Settings) -> None:
+        with self._client(settings, self.TOKEN) as client:
+            assert client.get("/metrics").status_code == 401
+            wrong = client.get("/metrics", headers={"Authorization": "Bearer nope"})
+            assert wrong.status_code == 401
+
+    def test_requests_are_counted_by_method_and_status_class(self, settings: Settings) -> None:
+        with self._client(settings, self.TOKEN) as client:
+            client.get("/health")
+            client.get("/api/v1/no-such-route")
+            body = client.get("/metrics", headers={"Authorization": f"Bearer {self.TOKEN}"}).text
+        assert 'bhashabench_http_requests_total{method="GET",status_class="2xx"}' in body
+        assert 'bhashabench_http_requests_total{method="GET",status_class="4xx"}' in body
+        assert "bhashabench_http_request_seconds_count" in body
+        assert "bhashabench_rate_limited_total 0" in body
+
+    def test_the_render_is_valid_prometheus_text(self) -> None:
+        from app.core.metrics import Metrics
+
+        metrics = Metrics()
+        metrics.observe("POST", 429, 0.01)
+        text = metrics.render({"completed": 3, "failed": 1})
+        assert 'bhashabench_test_runs{status="completed"} 3' in text
+        assert "bhashabench_rate_limited_total 1" in text
+        for line in text.strip().splitlines():
+            assert line.startswith("#") or " " in line

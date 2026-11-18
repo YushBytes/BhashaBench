@@ -6,8 +6,10 @@ Run locally with:
 
 from __future__ import annotations
 
+import hmac
 import logging
 import re
+import time
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
@@ -15,7 +17,8 @@ from typing import Any
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from sqlalchemy import func, select
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.router import api_router
@@ -32,8 +35,10 @@ from app.core.config import AppEnv, Settings, get_settings
 from app.core.languages import UnsupportedLanguageError
 from app.core.logging import REQUEST_ID_HEADER, request_id_from, reset_request_id, set_request_id
 from app.core.logging import configure as configure_logging
+from app.core.metrics import Metrics
 from app.core.security import UNLIMITED_PATHS, SlidingWindowLimiter, client_key, security_headers
-from app.db.session import get_session_factory
+from app.db.session import get_session_factory, session_scope
+from app.models.test_run import TestRun
 from app.pipeline.errors import (
     AudioValidationError,
     BotAdapterError,
@@ -504,6 +509,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # the limits come from this app's own settings.
     app.state.request_limiter = SlidingWindowLimiter(settings.rate_limit_requests_per_minute)
     app.state.login_limiter = SlidingWindowLimiter(settings.rate_limit_logins_per_minute)
+    app.state.metrics = Metrics()
     deployed = settings.app_env in (AppEnv.STAGING, AppEnv.PRODUCTION)
 
     # Registered before CORS so CORS stays outermost and a 429 still carries
@@ -512,10 +518,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def harden(request: Request, call_next: Any) -> Any:
         request_id = request_id_from(request.headers.get(REQUEST_ID_HEADER))
         token = set_request_id(request_id)
+        started = time.perf_counter()
         try:
             response = await _harden(request, call_next)
         finally:
             reset_request_id(token)
+        app.state.metrics.observe(
+            request.method, response.status_code, time.perf_counter() - started
+        )
         response.headers[REQUEST_ID_HEADER] = request_id
         return response
 
@@ -579,6 +589,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def health() -> HealthResponse:
         """Report that the process is alive."""
         return HealthResponse(status="ok", version=settings.app_version)
+
+    @app.get("/metrics", include_in_schema=False)
+    def metrics(request: Request) -> Response:
+        """Prometheus text; see app/core/metrics.py. 404 unless METRICS_TOKEN is set."""
+        expected = settings.metrics_token.get_secret_value()
+        presented = request.headers.get("authorization", "")
+        if not expected:
+            return _error_response(status.HTTP_404_NOT_FOUND, "not_found", "Not Found")
+        if not hmac.compare_digest(presented.encode(), f"Bearer {expected}".encode()):
+            return _error_response(
+                status.HTTP_401_UNAUTHORIZED, "unauthenticated", "bad metrics token"
+            )
+        runs: dict[str, int] = {}
+        try:
+            with session_scope() as session:
+                rows = session.execute(
+                    select(TestRun.status, func.count()).group_by(TestRun.status)
+                )
+                runs = {status_.value: int(n) for status_, n in rows}
+        except Exception:  # a database outage must not take the metrics down
+            runs = {}
+        return Response(app.state.metrics.render(runs), media_type="text/plain; version=0.0.4")
 
     app.include_router(api_router, prefix=settings.api_v1_prefix)
 

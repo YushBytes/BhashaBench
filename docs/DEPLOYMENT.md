@@ -133,10 +133,20 @@ credentials redacted. Every response carries `X-Request-ID` (the caller's,
 when it is safe, otherwise a new one), so a user can quote the id of a
 failing request and it can be found in the logs at once.
 
+## Metrics
+
+Set `METRICS_TOKEN` and scrape `GET /metrics` with
+`Authorization: Bearer <token>` from inside the host (the backend is not
+published; scrape it on the compose network). Counters and gauges are
+documented in `backend/app/core/metrics.py`: responses by method and status
+class, time spent, 429s, and runs by status. They are per process and reset
+on restart. Alert first on: `/health` failing, a rising 5xx class, and runs
+accumulating in `running`.
+
 ## Not done, and needed for Phase 15's exit criterion
 
 Phase 15 closes only when the platform has **run unattended for a week with
 alerting** and a restore has been rehearsed **on the deployment**. Neither
-can happen before a host exists. Still to build once one does: external
-uptime alerting (a free uptime monitor is enough to start), log shipping,
-and a metrics endpoint scraped by a monitor.
+can happen before a host exists. Still to do once one does: external uptime
+alerting (a free uptime monitor is enough to start), log shipping, and a
+scraper for `/metrics` with alert rules.

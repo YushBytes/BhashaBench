@@ -615,6 +615,10 @@ class Settings(BaseSettings):
             "own audio profile takes precedence."
         ),
     )
+    metrics_token: SecretStr = Field(
+        default=SecretStr(""),
+        description="Bearer token for GET /metrics. Empty turns the endpoint off (404).",
+    )
     log_format: Literal["text", "json"] = Field(
         default="text",
         description="`json` writes one JSON object per log line, with the request id.",
