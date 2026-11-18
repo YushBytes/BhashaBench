@@ -25,7 +25,7 @@ import httpx2
 
 def percentile(values: list[float], p: float) -> float:
     ordered = sorted(values)
-    return ordered[max(int(round(p / 100 * len(ordered))) - 1, 0)]
+    return ordered[max(round(p / 100 * len(ordered)) - 1, 0)]
 
 
 async def run(base: str, path: str, total: int, concurrency: int, headers: dict[str, str]) -> None:
@@ -56,13 +56,14 @@ async def run(base: str, path: str, total: int, concurrency: int, headers: dict[
         await asyncio.gather(*(worker() for _ in range(concurrency)))
         elapsed = time.perf_counter() - started
     ok = sum(n for s, n in statuses.items() if 200 <= s < 300)
-    print(f"{path}: {total} requests, concurrency {concurrency}, {elapsed:.2f} s, "
-          f"{total / elapsed:.0f} req/s")
+    others = {s: n for s, n in statuses.items() if not 200 <= s < 300}
+    rate = total / elapsed
+    print(f"{path}: {total} requests, concurrency {concurrency}, {elapsed:.2f} s, {rate:.0f} req/s")
     if latencies:
-        print(f"  latency ms  p50 {percentile(latencies, 50):.1f}  p95 {percentile(latencies, 95):.1f}  "
-              f"p99 {percentile(latencies, 99):.1f}  mean {statistics.fmean(latencies):.1f}")
-    print(f"  2xx {ok}  other statuses {dict(s for s in statuses.items() if not 200 <= s[0] < 300)}"
-          f"  transport errors {dict(errors)}")
+        p50, p95, p99 = (percentile(latencies, p) for p in (50, 95, 99))
+        mean = statistics.fmean(latencies)
+        print(f"  latency ms  p50 {p50:.1f}  p95 {p95:.1f}  p99 {p99:.1f}  mean {mean:.1f}")
+    print(f"  2xx {ok}  other statuses {others}  transport errors {dict(errors)}")
 
 
 def main() -> None:
