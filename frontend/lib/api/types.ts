@@ -383,6 +383,7 @@ export interface DegradationRequested {
 
 export interface Run {
   run_id: string;
+  suite_id: string;
   conversation_id: string | null;
   scenario_name: string;
   language: string;

@@ -16,6 +16,7 @@ import {
   Td,
   Th,
 } from "@/components/ui/primitives";
+import { RunActions } from "@/components/domain/run-actions";
 import { ModeBadge, OutcomeBadge, RunStatusBadge } from "@/components/ui/status";
 import { ApiError, api, recordingAudioUrl } from "@/lib/api/client";
 import { EvaluateButton, RunAutoRefresh } from "@/components/domain/run-live";
@@ -135,6 +136,7 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
     typeof run.awaiting_bot_text_for_turn !== "number";
   const finished = ["completed", "failed", "cancelled", "timed_out"].includes(run.status);
   const latest = evaluations?.evaluations[0] ?? null;
+  const canDelete = finished ? await mayDelete(run.suite_id, auth) : false;
 
   return (
     <>
@@ -152,10 +154,13 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
           <span className="font-mono text-[12px] text-text-muted">{run.run_id}</span>
         }
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <ModeBadge mode={run.mode} />
-            <RunStatusBadge status={run.status} />
-            <OutcomeBadge outcome={run.outcome} />
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <div className="flex flex-wrap items-center gap-2">
+              <ModeBadge mode={run.mode} />
+              <RunStatusBadge status={run.status} />
+              <OutcomeBadge outcome={run.outcome} />
+            </div>
+            <RunActions runId={run.run_id} finished={finished} canDelete={canDelete} />
           </div>
         }
       />
@@ -460,4 +465,27 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
       </PageBody>
     </>
   );
+}
+
+/**
+ * Whether the caller is admin or owner of the workspace holding this run's
+ * suite - the role DELETE /test-runs/{id} requires. Only decides whether
+ * the control is shown; the server checks again. Any failure hides it.
+ */
+async function mayDelete(suiteId: string, headers: Record<string, string>): Promise<boolean> {
+  try {
+    const [suites, workspaces] = await Promise.all([
+      api.suites({ cache: "no-store", headers }),
+      api.workspaces({ cache: "no-store", headers }),
+    ]);
+    const suite = suites.items.find((item) => item.id === suiteId);
+    if (!suite) return false;
+    for (const workspace of workspaces.filter((w) => w.role === "owner" || w.role === "admin")) {
+      const projects = await api.projects(workspace.id, { cache: "no-store", headers });
+      if (projects.some((project) => project.id === suite.project_id)) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }

@@ -17,7 +17,7 @@ This file is the working reference.
 | `/` | Static | nothing — `lib/content.ts` |
 | `/app` | Partial prerender | health, 4 provider endpoints, run list |
 | `/app/runs` | Partial prerender | run list with filters |
-| `/app/runs/[runId]` | Partial prerender | run report, run turns, artefact audio |
+| `/app/runs/[runId]` | Partial prerender | run report, run turns, artefact audio; JSON/CSV export links; Delete (finished runs, shown to admins and owners of its workspace, confirmed in-page) |
 | `/app/new-test` | Partial prerender | scenarios, bot adapters |
 | `/app/scenarios` | Partial prerender | scenarios, languages |
 | `/app/providers` | Partial prerender | 4 provider endpoints, languages |

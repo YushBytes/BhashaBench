@@ -13,7 +13,7 @@ import {
   buttonClass,
   cx,
 } from "@/components/ui/primitives";
-import { ApiError, api } from "@/lib/api/client";
+import { ApiError, api, runsCsvUrl } from "@/lib/api/client";
 import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
 import type { Page as PageEnvelope, RunSummary } from "@/lib/api/types";
 
@@ -43,9 +43,14 @@ export default function RunsPage({
         title="Test runs"
         description="Every run this server has recorded, newest first. A run's mode says how much of the system it exercised; its outcome says what it found."
         actions={
-          <LinkButton href="/app/new-test" tone="primary" size="sm">
-            New test
-          </LinkButton>
+          <div className="flex flex-wrap gap-2">
+            <a href={runsCsvUrl()} download className={buttonClass("default", "sm")}>
+              Export CSV
+            </a>
+            <LinkButton href="/app/new-test" tone="primary" size="sm">
+              New test
+            </LinkButton>
+          </div>
         }
       />
       <PageBody>
