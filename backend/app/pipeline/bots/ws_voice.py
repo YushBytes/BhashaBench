@@ -352,6 +352,11 @@ def _barge_in_evidence(
         "interjection_ms": frames_ * FRAME_MS,
         "source": "the start of this turn's own caller audio, re-sent over the bot's speech",
         "yield_window_ms": policy.yield_window_ms,
+        "limitation": (
+            "A reply that would have ended within the window anyway looks the same as "
+            "yielding from outside. Compare with the same bot without barge-in, or use "
+            "a prompt that draws a long reply."
+        ),
     }
     began = interject["at"]
     if began is None or speech_started is None:

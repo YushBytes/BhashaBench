@@ -197,6 +197,7 @@ class TestAgainstTheReferenceBot:
         assert barge["sent_after_bot_speech_ms"] >= 400
         assert barge["bot_stopped_after_ms"] < 300  # real time, a real socket
         assert "re-sent" in barge["source"]
+        assert "looks the same as yielding" in barge["limitation"]
 
     @pytest.mark.parametrize("bot", [(VoiceTurn(speech_ms=2500),)], indirect=True)
     def test_a_bot_that_talks_on_is_recorded_as_not_yielding(self, bot: str) -> None:

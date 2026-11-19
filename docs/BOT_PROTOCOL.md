@@ -147,7 +147,9 @@ records which rule ended the turn:
   turn records `caller_barge_in`: `sent`, `sent_after_bot_speech_ms`,
   `bot_voiced_ms_after`, `bot_stopped_after_ms` (to the bot's last voiced
   frame after the interruption) and `bot_yielded` (stopped within
-  `yield_window_ms`, 1000 by default). If the bot's turn ends before it has
+  `yield_window_ms`, 500 by default). From outside, a reply that was about
+  to end anyway is indistinguishable from yielding; the evidence carries
+  that `limitation`, and the remedy is a comparison run without barge-in. If the bot's turn ends before it has
   spoken that long, nothing is sent and `not_sent_reason` says so. This
   tests whether the bot yields to speech, not whether it understands what
   was said. The reference bot's `yields_to_caller` option implements the

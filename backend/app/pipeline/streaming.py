@@ -80,9 +80,11 @@ class TurnPolicy:
     caller talks over it. `None` (the default) never interrupts."""
     caller_barge_in_ms: float = 600.0
     """How much caller audio the interruption carries."""
-    yield_window_ms: float = 1000.0
+    yield_window_ms: float = 500.0
     """The bot counts as having yielded if no voiced audio of its own
-    arrives later than this after the interruption began."""
+    arrives later than this after the interruption began. Short on purpose:
+    a reply that was about to end anyway is indistinguishable from yielding,
+    and a tight window makes that coincidence less likely."""
 
     def as_dict(self) -> dict[str, object]:
         return {
