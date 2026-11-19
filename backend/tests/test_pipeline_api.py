@@ -539,6 +539,9 @@ class TestTurnsAndReport:
     ) -> None:
         turns = pipeline_client.get(f"{BASE}/{executed}/turns").json()["turns"]
         assert turns[0]["intent"] == "open"
+        # The Tamil caller's text carries its writing-system segments.
+        assert turns[0]["script_segments"][0]["script"] == "Taml"
+        assert sum(s["words"] for s in turns[0]["script_segments"]) == len(turns[0]["text"].split())
         assert turns[0]["rule_ids"] == ["open.introduce"]
         assert turns[0]["state_before"] == "initial"
 

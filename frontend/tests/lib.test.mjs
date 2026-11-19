@@ -228,6 +228,27 @@ describe("metricRows", async () => {
     assert.equal(metricLabel("some_new_metric"), "some new metric");
   });
 
+  it("states WER per script, and its reason when there is none", () => {
+    const [measured] = metricRows({
+      wer_by_script: { value: { Taml: { value: 0 }, Latn: { value: 0.5 } }, scored_turns: 1 },
+    });
+    assert.equal(measured.value, "Taml 0.0% · Latn 50.0%");
+    const [missing] = metricRows({ wer_by_script: { value: null, reason: "no reference" } });
+    assert.equal(missing.value, null);
+    assert.equal(missing.detail, "no reference");
+  });
+
+  it("describes script switching as script, not language", () => {
+    const [row] = metricRows({
+      script_mixing: {
+        caller: { turns: 2, turns_with_switching: 1, switches: 4 },
+        bot: { turns: 4, turns_with_switching: 0, switches: 0 },
+      },
+    });
+    assert.equal(row.value, "caller 4 switches in 1 of 2 turns · bot 0 switches in 0 of 4 turns");
+    assert.match(row.detail, /not language/);
+  });
+
   it("labels keyword coverage as an indicator, not a judgement", () => {
     const [row] = metricRows({ expected_outcome_keyword_coverage: { value: 0.5, covered: 2, declared: 4 } });
     assert.equal(row.value, "50%");

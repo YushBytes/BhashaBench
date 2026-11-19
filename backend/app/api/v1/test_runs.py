@@ -57,6 +57,7 @@ from app.caller.schemas import Speaker
 from app.caller.service import CallerService
 from app.core.config import Settings
 from app.db.session import get_session_factory
+from app.evaluation import scripts
 from app.models.test_run import RunStatus, TestRun
 from app.pipeline.bots.registry import (
     SCRIPTED_ADAPTER,
@@ -101,6 +102,7 @@ from app.schemas.pipeline import (
     RunSummary,
     RunTurnResponse,
     RunTurnsResponse,
+    ScriptSegmentResponse,
     StageEventResponse,
 )
 from app.schemas.suite import Page
@@ -814,6 +816,10 @@ def read_turns(run_id: uuid.UUID, engine: ReadingEngineDep, session: DbSession) 
                     synthesis_error=metadata.get("synthesis_error"),
                     uses_language_model=metadata.get("uses_language_model"),
                     generation=metadata.get("generation"),
+                    script_segments=[
+                        ScriptSegmentResponse(script=s.script, words=s.words, text=s.text)
+                        for s in scripts.segments(turn.content or "")
+                    ],
                 )
             )
     return RunTurnsResponse(run_id=run_id, turns=turns)

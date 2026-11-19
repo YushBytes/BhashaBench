@@ -147,6 +147,17 @@ function TurnCard({
         <Transcript turn={turn} language={run.language} />
       </div>
 
+      {(turn.script_segments?.length ?? 0) > 1 ? (
+        <p
+          className="mt-1 font-mono text-[11px] text-text-muted"
+          title="Writing systems in this turn, in order. Script, not language: romanised Hindi is Latn, and Hindi and Marathi share Deva."
+        >
+          {turn.script_segments!.map((s) => s.script).join(" → ")} ·{" "}
+          {turn.script_segments!.length - 1} script switch
+          {turn.script_segments!.length === 2 ? "" : "es"}
+        </p>
+      ) : null}
+
       {!isCaller && references !== "hidden" ? (
         <ReferenceEditor
           runId={run.run_id}

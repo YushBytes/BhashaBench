@@ -56,6 +56,37 @@ export function metricRows(metrics: Json): MetricRow[] {
   if ("wer" in metrics) rows.push(errorRate("wer", "Word error rate", obj(metrics.wer)));
   if ("cer" in metrics) rows.push(errorRate("cer", "Character error rate", obj(metrics.cer)));
 
+  if ("wer_by_script" in metrics) {
+    const metric = obj(metrics.wer_by_script);
+    const perScript = metric.value === null ? null : obj(metric.value);
+    rows.push({
+      key: "wer_by_script",
+      label: "WER by script",
+      value: perScript
+        ? Object.entries(perScript)
+            .map(([script, entry]) => `${script} ${formatErrorRate(num(obj(entry).value)) ?? "—"}`)
+            .join(" · ")
+        : null,
+      detail: perScript
+        ? "Error rate over only the words written in each script: where code-mixed words were lost."
+        : reasonOf(metric),
+    });
+  }
+
+  if ("script_mixing" in metrics) {
+    const metric = obj(metrics.script_mixing);
+    const side = (name: string) => {
+      const s = obj(metric[name]);
+      return `${name} ${num(s.switches) ?? 0} switches in ${num(s.turns_with_switching) ?? 0} of ${num(s.turns) ?? 0} turns`;
+    };
+    rows.push({
+      key: "script_mixing",
+      label: "Script switching",
+      value: `${side("caller")} · ${side("bot")}`,
+      detail: "Writing-system switches, not language switches: romanised Hindi counts as Latin. Descriptive; part of no verdict.",
+    });
+  }
+
   if ("bot_response_latency_ms" in metrics) {
     const metric = obj(metrics.bot_response_latency_ms);
     const p50 = num(metric.p50);
@@ -105,6 +136,7 @@ export function metricRows(metrics: Json): MetricRow[] {
 /** Display names for metric keys the comparison returns; others are shown as sent. */
 const METRIC_LABELS: Record<string, string> = {
   wer: "Word error rate (WER)",
+  wer_by_script: "Word error rate by script",
   cer: "Character error rate (CER)",
   bot_response_latency_p50_ms: "Bot response latency, p50 (ms)",
   bot_response_latency_p90_ms: "Bot response latency, p90 (ms)",

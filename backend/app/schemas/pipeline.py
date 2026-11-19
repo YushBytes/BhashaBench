@@ -263,6 +263,12 @@ class RunResponse(BaseModel):
     error: str | None = None
 
 
+class ScriptSegmentResponse(BaseModel):
+    script: str = Field(description="ISO 15924 code, e.g. `Taml`, `Latn`, `Deva`.")
+    words: int = Field(ge=1)
+    text: str
+
+
 class RunTurnResponse(BaseModel):
     """One persisted utterance of a run's conversation."""
 
@@ -289,6 +295,14 @@ class RunTurnResponse(BaseModel):
         default=None,
         description="How a model-backed provider produced this turn, including "
         "any fallback to the rule engine and its reason. `null` otherwise.",
+    )
+    script_segments: list[ScriptSegmentResponse] = Field(
+        default_factory=list,
+        description=(
+            "The text split into runs of one writing system (ISO 15924), in order: "
+            "observable code-switching. Script, not language - romanised Hindi is "
+            "`Latn`. Empty when the turn has no text."
+        ),
     )
 
 

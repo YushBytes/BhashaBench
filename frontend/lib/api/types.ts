@@ -468,6 +468,8 @@ export interface RunTurn {
   audio_reference: string | null;
   transcription_error: string | null;
   synthesis_error: string | null;
+  /** Runs of one writing system (ISO 15924), in order. Script, not language. */
+  script_segments?: { script: string; words: number; text: string }[];
 }
 
 export interface RunTurns {

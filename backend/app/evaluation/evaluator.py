@@ -29,6 +29,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.evaluation import scripts
 from app.evaluation.metrics import character_error_rate, word_error_rate
 from app.evaluation.registry import EVALUATOR_VERSION
 from app.evaluation.text import normalise, words
@@ -77,6 +78,7 @@ def gather_evidence(session: Session, run_id: uuid.UUID) -> dict[str, Any]:
         "required_phrases": list(constraints.get("required_phrases") or []),
         "forbidden_phrases": list(constraints.get("forbidden_phrases") or []),
         "caller_turns": sum(1 for t in turns if t.speaker.value == "caller"),
+        "caller_texts": [t.content or "" for t in turns if t.speaker.value == "caller"],
         "bot_turns": [
             {
                 "turn_index": t.turn_index,
@@ -223,6 +225,48 @@ def evaluate_evidence(evidence: dict[str, Any]) -> Evaluated:
             "scored_turns": len(scored),
             "excluded_turns": excluded,
             "per_turn": per_turn,
+        }
+
+    # -- Script switching (observable code-mixing) ----------------------------
+    # Script, not language: see app/evaluation/scripts.py for what that misses.
+    metrics["script_mixing"] = {
+        "caller": scripts.summary(list(evidence.get("caller_texts") or [])),
+        "bot": scripts.summary([t["text"] for t in evidence["bot_turns"] if t["text"]]),
+        "measures": "script switching, not language switching",
+    }
+
+    # -- Error rates split by script --------------------------------------
+    # WER over only the reference words written in one script, against only
+    # the hypothesis words in that script: where code-mixed speech was lost,
+    # this says in which language's words.
+    if scored:
+        by_script: dict[str, dict[str, Any]] = {}
+        for t in scored:
+            present = {s.script for s in scripts.segments(t["reference"])}
+            for code in sorted(present):
+                ref = scripts.words_in_script(t["reference"], code)
+                hyp = scripts.words_in_script(t["text"], code)
+                rate = word_error_rate(ref, hyp, language=language).as_dict()
+                entry = by_script.setdefault(code, {"errors": 0, "reference_length": 0})
+                entry["errors"] += rate["substitutions"] + rate["deletions"] + rate["insertions"]
+                entry["reference_length"] += rate["reference_length"]
+        metrics["wer_by_script"] = {
+            "value": {
+                code: {
+                    "value": round(e["errors"] / e["reference_length"], 6)
+                    if e["reference_length"]
+                    else None,
+                    **e,
+                }
+                for code, e in by_script.items()
+            },
+            "scored_turns": len(scored),
+        }
+    else:
+        metrics["wer_by_script"] = {
+            "value": None,
+            "scored_turns": 0,
+            "reason": "no bot turn has a reviewed reference transcript",
         }
 
     # -- Latency ------------------------------------------------------------

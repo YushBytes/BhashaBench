@@ -120,7 +120,7 @@ class TestRegistry:
         for metric in METRICS:
             for field in ("definition", "formula", "evidence", "missing_data"):
                 assert getattr(metric, field).strip(), (metric.name, field)
-            assert metric.better in {"lower", "higher", "pass"}
+            assert metric.better in {"lower", "higher", "pass", "neither"}
             assert metric.limitations
 
     def test_names_are_unique(self) -> None:

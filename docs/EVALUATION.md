@@ -87,6 +87,39 @@ apply to the run:
 Keyword coverage, error rates, latency and transcription failures are
 reported beside the verdict and never move it.
 
+## Code-mixing: script switching — `bb-eval-2`
+
+What a transcript shows of code-mixed speech is the writing system of each
+word. `app/evaluation/scripts.py` gives each word the ISO 15924 script of
+most of its letters and joins consecutive words of one script into
+segments (`Taml → Latn → Taml`). Words without letters join their segment.
+Two metrics, both descriptive:
+
+- **`script_mixing`** — for the caller's turns and the bot's: turns that
+  switch script, total switches, words per script. Part of no verdict.
+- **`wer_by_script`** — WER over only the reference words in each script,
+  against only the transcript words in that script, pooled across scored
+  turns. A pooled WER of 25% can be 0% on the Tamil words and 50% on the
+  English ones; this says which. Null, with the reason, without references.
+
+**Script is not language.** Hindi and Marathi share Devanagari, romanised
+Hindi is Latin and indistinguishable from English, and a transcriber that
+writes an English loanword in Tamil script hides that switch. A word in the
+wrong script counts as a deletion in one script and an insertion in
+another. The run turns API also returns each turn's `script_segments`, and
+the conversation shows them; every surface repeats the caveat.
+
+`bb-eval-1 → bb-eval-2` added these two metrics and the caller's
+utterances to the evidence document, which changes its fingerprint. No
+existing formula changed, but evaluations are compared only within one
+version, so re-evaluate a run to compare it with a newer one.
+
+What is **not** measured: language identification (there is no model for
+it), whether the bot *understood* a mixed utterance beyond task completion
+and phrases, and code-mixed *generation* by the caller, whose phrase tables
+are monolingual; scenario text it quotes may be mixed, as in
+`scenarios/demo/tamil_crop_insurance.yaml`.
+
 ## Reproducibility
 
 The evaluator gathers everything it may read into one canonical evidence

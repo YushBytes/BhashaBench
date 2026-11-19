@@ -438,7 +438,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 3067 tests across 72 modules
+│   ├── tests/                 3076 tests across 73 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -772,10 +772,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 3067 tests** across seventy-two modules.
-**3026 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3076 tests** across seventy-three modules.
+**3035 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (3067) exceeds the number that run (3026). On
+why the collected total (3076) exceeds the number that run (3035). On
 Windows one more is skipped (a symlink test the OS refuses without
 developer mode), so a local run there reports 2989 passed, 42 skipped:
 
@@ -788,6 +788,7 @@ developer mode), so a local run there reports 2989 passed, 42 skipped:
 | `test_evaluation_evaluator.py` | 25 | The run evaluator: every verdict path on synthetic evidence (pass, bot failures, our faults undetermined, unfinished, phrases), pooled error rates, excluded failed transcriptions, nearest-rank latency, fingerprint reproducibility, and real text-bot runs evaluated from what they stored, re-evaluated, and re-scored after a reference is added |
 | `test_evaluation_judge.py` | 17 | The LLM judge contract with the scripted client: strict parsing that rejects invented citations, unscored or duplicate criteria and uncited scores; bounded retries; non-retryable failures stop; the live gate recorded as no request sent; and the information boundary |
 | `test_evaluation_metrics.py` | 25 | WER and CER on synthetic ground truth - perfect, partial, substitution, deletion, insertion, empty reference - a random cross-check against Levenshtein, code-mixed case, Indic numerals, dandas, nukta equivalence, ZWJ/ZWNJ, script mismatch and number words scored as errors, grapheme clusters, and that every metric documents itself |
+| `test_evaluation_scripts.py` | 9 | Script segmentation: a code-mixed Tamil sentence split where the script changes, letterless words joining their segment, romanised Hindi as Latin (the stated limit), every catalogue script recognised; `script_mixing` for both sides, `wer_by_script` isolating a lost English word that a pooled WER hides, null with a reason without references, older evidence still evaluating |
 | `test_evaluation_store.py` | 6 | The evaluation and reference tables against PostgreSQL: append-only history with the newest winning, the empty-text and verdict constraints, and cascades from turns and runs |
 | `test_analytics.py` | 33 | Phase 12 reporting: the Wilson interval and Fisher's exact test against published values, CSV formula-injection neutralisation, and against PostgreSQL the pass rate over decided runs only, a re-evaluated run counted once, grouping, mixed evaluator versions flagged, pooled WER, regressions refused on small samples, day trends, CSV export, and run comparison and JSON/CSV export of real text-bot runs |
 | `test_observability.py` | 18 | Phase 15 observability: `/metrics` off without a token, refusing a missing or wrong token, counting responses by method and status class, and rendering valid Prometheus text with the run gauge; a request id on every response and error, a safe caller id echoed and an unsafe one (too long, spaces, header injection, markup) replaced, log records carrying the current id, JSON log lines with the standard fields and structured extras, credentials redacted in message and extras, the text format redacting the whole line and traceback, wire-level loggers held at INFO under a DEBUG process, logging setup never removing another handler, and the format setting accepting only `text` or `json`
@@ -880,7 +881,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 3026 passed, 41 skipped ================
+================ 3035 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

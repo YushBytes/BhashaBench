@@ -19,9 +19,13 @@ from dataclasses import asdict, dataclass
 
 from app.evaluation.text import NORMALISATION_VERSION
 
-EVALUATOR_VERSION = "bb-eval-1"
+EVALUATOR_VERSION = "bb-eval-2"
 """Bumped whenever a definition, a formula or a criterion changes, so two
-evaluations are comparable only when their versions match."""
+evaluations are comparable only when their versions match.
+
+bb-eval-1 -> bb-eval-2 added `script_mixing` and `wer_by_script` and put the
+caller's utterances into the evidence (which changes its fingerprint). No
+existing metric's formula changed."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +37,8 @@ class MetricDefinition:
     evidence: str
     normalisation: str
     better: str
-    """`lower`, `higher`, or `pass` for a boolean criterion."""
+    """`lower`, `higher`, `pass` for a boolean criterion, or `neither` for a
+    descriptive measurement that is part of no verdict."""
     missing_data: str
     limitations: tuple[str, ...]
     unit: str
@@ -178,6 +183,52 @@ METRICS: tuple[MetricDefinition, ...] = (
         missing_data="Not evaluated in text modes, which transcribe nothing.",
         limitations=("Our failure, not the bot's: never part of the bot's verdict.",),
         unit="ratio",
+    ),
+    MetricDefinition(
+        name="script_mixing",
+        title="Script switching (observable code-mixing)",
+        definition=(
+            "For the caller's and the bot's turns: how many turns switch writing "
+            "system mid-utterance, how many switches there are, and words per script."
+        ),
+        formula=(
+            "Each word takes the ISO 15924 script of most of its letters; consecutive "
+            "words of one script form a segment; switches = segments - 1 per turn."
+        ),
+        evidence="Caller turn text and bot transcripts.",
+        normalisation="None; words are whitespace-separated.",
+        better="neither",
+        missing_data="Zero turns when a side said nothing; never a guessed value.",
+        limitations=(
+            "Script is not language: Hindi and Marathi share Devanagari, and "
+            "romanised Hindi is Latin, indistinguishable from English.",
+            "A transcriber writing an English loanword in an Indic script hides the switch.",
+            "Descriptive, not a score: it is part of no verdict.",
+        ),
+        unit="count",
+    ),
+    MetricDefinition(
+        name="wer_by_script",
+        title="Word error rate by script",
+        definition=(
+            "WER computed separately over the reference words written in each "
+            "script, against the hypothesis words in the same script."
+        ),
+        formula=(
+            "For each script in a turn's reference: WER(reference words in that "
+            "script, transcript words in that script); errors and reference "
+            "lengths pooled across scored turns."
+        ),
+        evidence="Reviewed reference transcripts and the bot transcripts they score.",
+        normalisation="bb-norm-1, as for WER.",
+        better="lower",
+        missing_data="Null, with the reason, when no bot turn has a reference.",
+        limitations=(
+            "A word transcribed in the wrong script counts as a deletion in one "
+            "script and an insertion in another.",
+            "Inherits every limitation of script_mixing.",
+        ),
+        unit="ratio per script",
     ),
 )
 

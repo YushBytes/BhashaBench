@@ -38,7 +38,7 @@ def _bot_turn_index(session: Session, run_id: uuid.UUID) -> int:
 class TestCatalogue:
     def test_every_metric_is_served_with_its_definition(self, api_client: TestClient) -> None:
         body = api_client.get(f"{BASE}/evaluation/metrics").json()
-        assert body["evaluator_version"] == "bb-eval-1"
+        assert body["evaluator_version"] == "bb-eval-2"
         assert body["normalisation_version"] == "bb-norm-1"
         assert body["composite_score"] is None
         names = {m["name"] for m in body["metrics"]}
