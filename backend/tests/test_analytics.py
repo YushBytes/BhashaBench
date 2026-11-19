@@ -332,6 +332,8 @@ class TestRealRuns:
         assert "attachment" in exported.headers["content-disposition"]
         document = json.loads(exported.text)
         assert document["export"]["format"] == "bhashabench.run-export/v1"
+        assert document["suite"]["id"] == document["run"]["suite_id"]
+        assert document["project"]["name"] and document["suite"]["name"]
         assert document["evaluation"]["verdict"] == "pass"
         assert len(document["evaluation"]["evidence_fingerprint"]) == 64
         assert document["turns"][0]["speaker"] == "caller"

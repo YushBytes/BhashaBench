@@ -291,3 +291,38 @@ dialog {
 .bb-live-dot {
   animation: bb-breathe 1.8s var(--ease) infinite;
 }
+
+/* ==========================================================================
+   Print: a run or comparison page saved as PDF from the browser.
+   Light palette for paper, chrome and controls hidden, evidence kept.
+   Nothing is re-rendered or summarised: the PDF is the page as measured.
+   ========================================================================== */
+@media print {
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --surface-inset: #f4f5f7;
+    --chrome: #ffffff;
+    --line: #d0d5dc;
+    --line-strong: #9aa3ae;
+    --text: #0b0d10;
+    --text-dim: #2a3038;
+    --text-muted: #4a525c;
+    --accent: #00665e;
+    --accent-alt: #0b5aa3;
+  }
+  body {
+    background: #ffffff;
+  }
+  nav,
+  button,
+  audio,
+  [data-print-hide] {
+    display: none !important;
+  }
+  a {
+    text-decoration: none;
+  }
+}

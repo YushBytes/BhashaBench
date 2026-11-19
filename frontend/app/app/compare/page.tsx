@@ -21,6 +21,7 @@ import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
 import type { ComparedRun, RunComparison } from "@/lib/api/types";
 import { humanise, shortId } from "@/lib/format";
 import { metricLabel } from "@/lib/evaluation";
+import { PrintButton } from "@/components/ui/print-button";
 
 export const metadata = { title: "Compare runs" };
 
@@ -38,6 +39,7 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<Se
       <PageHeader
         title="Compare runs"
         description="Two evaluated runs side by side. An observation, not a significant result - use the regression check on Analytics for groups of runs."
+        actions={<PrintButton />}
       />
       <PageBody>
         <Suspense fallback={<TableSkeleton />}>

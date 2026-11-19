@@ -52,7 +52,7 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 | WER / CER | 2: needs a reference transcript per bot turn; no way to enter one in the UI. And the Evaluation panel rendered criteria only, so a computed WER never appeared on the run page | fixed: references recorded per bot turn (`132572a`); the panel lists every metric, "not reported" with the evaluator's reason when unmeasured |
 | Analytics | 1 | — |
 | Comparison | 2: works, but needs two typed run ids | fixed: baseline and candidate are picked from the 100 most recent completed runs; ids remain the fallback |
-| Exports | 1 | — |
+| Exports | 1 | plus *Print / save as PDF* on run and comparison pages, and project and suite named in the run JSON export |
 | Run filters | 2: the "Created" status sent `created`, which the API refuses (422), so the history failed to load; `text_bot_test` and four outcomes were missing | fixed: values come from `lib/run-filters.ts`, tested against the backend enums |
 | Text bot runs | 2: `types.ts` lacked `text_bot_test` and the `bot_text_*` fields, so such a run was captioned "No external bot was contacted" | fixed: transcribed fields, own caveat and mislabel check |
 

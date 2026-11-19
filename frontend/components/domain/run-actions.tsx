@@ -14,6 +14,7 @@ import { useState } from "react";
 
 import { Button, buttonClass } from "@/components/ui/primitives";
 import { ApiError, api, runExportUrl } from "@/lib/api/client";
+import { PrintButton } from "@/components/ui/print-button";
 
 export function RunActions({
   runId,
@@ -51,6 +52,7 @@ export function RunActions({
       <a href={runExportUrl(runId, "csv")} download className={buttonClass("default", "sm")}>
         Export CSV
       </a>
+      <PrintButton />
       {finished && canDelete ? (
         confirming ? (
           <>

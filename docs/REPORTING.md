@@ -52,9 +52,16 @@ response.
   unaltered.
 - **Provenance.** A JSON export names its format version, export time, the
   current evaluator version, and the evaluation's version and fingerprint, so
-  a file can be shown to be current or stale against the stored run.
-- **Not implemented: PDF.** It needs a rendering dependency this project does
-  not carry. Export JSON or CSV and render from those.
+  a file can be shown to be current or stale against the stored run. It names
+  the `project` and `suite` (id and name) the run belongs to, and its
+  `run.pipeline` record carries the language, the accent (requested and
+  applied), the channel conditions and who set each, caller barge-in, every
+  stage's evidence and the settings not enforced.
+- **PDF, through the browser.** The run and comparison pages have *Print /
+  save as PDF*: a print stylesheet (`app/globals.css`) lightens the palette
+  and hides navigation and controls, and the browser renders the page as
+  shown. There is no server-side PDF renderer, deliberately - it would be a
+  second rendering of the same evidence that could drift from the page.
 
 ## Indexes
 

@@ -25,6 +25,8 @@ from app.api.access import RunAccess
 from app.api.deps import CurrentPrincipal, DbSession
 from app.auth.permissions import Permission
 from app.evaluation.registry import EVALUATOR_VERSION
+from app.models.identity import Project
+from app.models.suite import TestSuite
 from app.repositories import analytics as repo
 from app.repositories import caller_conversations as caller_repo
 from app.repositories import evaluations as eval_repo
@@ -209,6 +211,8 @@ def export_run(
     turns = caller_repo.list_turns(session, conversation.id) if conversation is not None else []
     references = eval_repo.latest_references(session, [t.id for t in turns])
     evaluation = eval_repo.latest_evaluation(session, run_id)
+    suite = session.get(TestSuite, run.suite_id)
+    project = None if suite is None else session.get(Project, suite.project_id)
     filename = f"bhashabench-run-{run_id}.{format}"
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     if format == "csv":
@@ -233,6 +237,10 @@ def export_run(
             "exported_at": utc_now().isoformat(),
             "current_evaluator_version": EVALUATOR_VERSION,
         },
+        # Where the run belongs, by name as well as id, so a report read
+        # outside the workspace still says which project and suite it is.
+        "project": None if project is None else {"id": str(project.id), "name": project.name},
+        "suite": None if suite is None else {"id": str(suite.id), "name": suite.name},
         "run": {
             "run_id": str(run.id),
             "suite_id": str(run.suite_id),
