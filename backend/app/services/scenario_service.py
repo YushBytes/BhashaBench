@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -81,7 +82,12 @@ def get_scenario(session: Session, scenario_id: uuid.UUID) -> Scenario:
 
 
 def list_scenarios(
-    session: Session, suite_id: uuid.UUID, *, limit: int, offset: int
+    session: Session,
+    suite_id: uuid.UUID,
+    *,
+    limit: int,
+    offset: int,
+    include_archived: bool = True,
 ) -> tuple[list[Scenario], int]:
     """Return a page of a suite's scenarios and the total count.
 
@@ -92,8 +98,10 @@ def list_scenarios(
         raise NotFoundError("suite", suite_id)
 
     return (
-        scenario_repo.list_for_suite(session, suite_id, limit=limit, offset=offset),
-        scenario_repo.count_for_suite(session, suite_id),
+        scenario_repo.list_for_suite(
+            session, suite_id, limit=limit, offset=offset, include_archived=include_archived
+        ),
+        scenario_repo.count_for_suite(session, suite_id, include_archived=include_archived),
     )
 
 
@@ -126,10 +134,51 @@ def replace_scenario(session: Session, scenario_id: uuid.UUID, *, content: str) 
 
 
 def delete_scenario(session: Session, scenario_id: uuid.UUID) -> None:
-    """Delete a scenario."""
+    """Delete a scenario that no recorded run uses.
+
+    A scenario with recorded runs cannot be deleted: their conversations
+    reference it (`call_sessions.scenario_id` is ON DELETE RESTRICT) and
+    their reports must stay readable. That used to surface as an unhandled
+    IntegrityError, a 500. It is now refused up front with the remedy -
+    archive it - and the IntegrityError path is still caught for a run
+    recorded concurrently.
+    """
     scenario = get_scenario(session, scenario_id)
-    scenario_repo.delete(session, scenario)
+    recorded = scenario_repo.count_recorded_runs(session, scenario_id)
+    if recorded:
+        raise ConflictError(_has_history(scenario.name, recorded))
+    try:
+        scenario_repo.delete(session, scenario)
+    except IntegrityError as exc:
+        session.rollback()
+        raise ConflictError(_has_history(scenario.name, None)) from exc
     session.commit()
+
+
+def _has_history(name: str, recorded: int | None) -> str:
+    count = "recorded runs" if recorded is None else f"{recorded} recorded run(s)"
+    return (
+        f"scenario '{name}' has {count}; deleting it would orphan their reports. "
+        "Archive it instead: it leaves listings and new runs, and its history stays readable"
+    )
+
+
+def archive_scenario(session: Session, scenario_id: uuid.UUID) -> Scenario:
+    """Hide a scenario from listings and new runs, keeping its history."""
+    scenario = get_scenario(session, scenario_id)
+    if scenario.archived_at is None:
+        scenario.archived_at = datetime.now(UTC)
+        session.commit()
+    return scenario
+
+
+def restore_scenario(session: Session, scenario_id: uuid.UUID) -> Scenario:
+    """Undo `archive_scenario`."""
+    scenario = get_scenario(session, scenario_id)
+    if scenario.archived_at is not None:
+        scenario.archived_at = None
+        session.commit()
+    return scenario
 
 
 def search_scenarios(
@@ -140,6 +189,7 @@ def search_scenarios(
     name_contains: str | None = None,
     tags: Sequence[str] | None = None,
     project_ids: Sequence[uuid.UUID] | None = None,
+    include_archived: bool = True,
     limit: int,
     offset: int,
 ) -> tuple[list[Scenario], int]:
@@ -168,6 +218,7 @@ def search_scenarios(
             name_contains=name_contains,
             tags=normalised_tags,
             project_ids=project_ids,
+            include_archived=include_archived,
             limit=limit,
             offset=offset,
         ),
@@ -178,6 +229,7 @@ def search_scenarios(
             name_contains=name_contains,
             tags=normalised_tags,
             project_ids=project_ids,
+            include_archived=include_archived,
         ),
     )
 

@@ -107,6 +107,13 @@ class ScenarioRead(BaseModel):
     spec_version: int = Field(description="Revision of the specification schema.")
     created_at: datetime
     updated_at: datetime
+    archived_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Set when archived: hidden from listings and refused for new runs; "
+            "its runs stay readable."
+        ),
+    )
 
 
 class ScenarioSummary(BaseModel):
@@ -121,6 +128,13 @@ class ScenarioSummary(BaseModel):
     language: str
     created_at: datetime
     updated_at: datetime
+    archived_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Set when archived: hidden from listings and refused for new runs; "
+            "its runs stay readable."
+        ),
+    )
 
 
 class ValidationFieldError(BaseModel):

@@ -55,6 +55,7 @@ erDiagram
         varchar language "BCP 47, indexed"
         jsonb spec "validated ScenarioSpec"
         integer spec_version
+        timestamptz archived_at "nullable: hidden, runs kept"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -123,6 +124,13 @@ document in `spec`.
 
 `spec` carries a **GIN index** (`ix_scenarios_spec_gin`) so the library's tag
 filter is an index scan rather than a sequential one. See below.
+
+`archived_at` is set when a scenario is archived. A scenario that recorded
+runs use cannot be deleted (`call_sessions.scenario_id` is `ON DELETE
+RESTRICT`, so their reports stay readable); `DELETE` answers 409 and names
+archival as the remedy. An archived scenario is left out of the API's
+listings unless `include_archived=true`, and refused for new runs, while
+`GET /scenarios/{id}` and every report that references it still work.
 
 ### `test_runs`, `call_sessions`, `conversation_turns`
 
@@ -370,6 +378,7 @@ target whatever the application itself would connect to.
 | `05f303520380` | Add `users`, `auth_sessions`, `workspaces`, `workspace_memberships` and `projects` (Phase 14) — five new tables, nothing existing touched |
 | `b588560f044d` | Add `test_suites.project_id` (NOT NULL, `ON DELETE RESTRICT`) and make suite names unique per project. Existing suites move to a member-less `legacy` workspace; downgrade refuses if two projects share a suite name |
 | `bcf146f6c696` | Add `telephony_calls` (Phase 8): one row per call attempt and its provider events; number stored masked (CHECK), cascades from its conversation |
+| `92a1fdd146b8` | Add nullable `scenarios.archived_at`: archival instead of deleting a scenario that recorded runs reference |
 
 All four are reversible. The initial migration's `downgrade()` drops everything in
 reverse dependency order and is exercised on every test run, so it is

@@ -64,6 +64,8 @@ class TestOpenApiDocument:
             "/api/v1/suites/{suite_id}/scenarios",
             "/api/v1/scenarios/validate",
             "/api/v1/scenario-library",
+            "/api/v1/scenarios/{scenario_id}/archive",
+            "/api/v1/scenarios/{scenario_id}/restore",
             "/api/v1/scenarios/{scenario_id}",
             # Phase 3
             "/api/v1/languages",

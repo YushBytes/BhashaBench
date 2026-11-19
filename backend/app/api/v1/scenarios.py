@@ -91,11 +91,20 @@ def create_scenario(
     dependencies=[SuiteAccess.VIEW],
 )
 def list_scenarios(
-    suite_id: uuid.UUID, session: DbSession, pagination: PaginationParams
+    suite_id: uuid.UUID,
+    session: DbSession,
+    pagination: PaginationParams,
+    include_archived: Annotated[
+        bool, Query(description="Also list archived scenarios. Off by default.")
+    ] = False,
 ) -> Page[ScenarioSummary]:
     """Return a page of the suite's scenarios."""
     scenarios, total = scenario_service.list_scenarios(
-        session, suite_id, limit=pagination.limit, offset=pagination.offset
+        session,
+        suite_id,
+        limit=pagination.limit,
+        offset=pagination.offset,
+        include_archived=include_archived,
     )
     return Page[ScenarioSummary](
         items=[ScenarioSummary.model_validate(scenario) for scenario in scenarios],
@@ -185,7 +194,10 @@ def update_scenario(
     "/{scenario_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a scenario",
-    description="Returns 204. Fails with 409 if a recorded call still references it.",
+    description=(
+        "Returns 204. Refused with 409 when recorded runs use the scenario: their "
+        "reports must stay readable, so archive it instead (`POST .../archive`)."
+    ),
     responses={
         status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Not found"},
         status.HTTP_409_CONFLICT: {
@@ -198,6 +210,33 @@ def update_scenario(
 def delete_scenario(scenario_id: uuid.UUID, session: DbSession) -> None:
     """Delete a scenario."""
     scenario_service.delete_scenario(session, scenario_id)
+
+
+@scenarios_router.post(
+    "/{scenario_id}/archive",
+    response_model=ScenarioRead,
+    summary="Archive a scenario",
+    description=(
+        "Hides it from listings and refuses new runs of it, while every recorded "
+        "run and report stays readable. Idempotent. Undo with `POST .../restore`."
+    ),
+    responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Not found"}},
+    dependencies=[ScenarioAccess.EDIT],
+)
+def archive_scenario(scenario_id: uuid.UUID, session: DbSession) -> ScenarioRead:
+    return ScenarioRead.model_validate(scenario_service.archive_scenario(session, scenario_id))
+
+
+@scenarios_router.post(
+    "/{scenario_id}/restore",
+    response_model=ScenarioRead,
+    summary="Restore an archived scenario",
+    description="Returns it to listings and allows new runs again. Idempotent.",
+    responses={status.HTTP_404_NOT_FOUND: {"model": ErrorResponse, "description": "Not found"}},
+    dependencies=[ScenarioAccess.EDIT],
+)
+def restore_scenario(scenario_id: uuid.UUID, session: DbSession) -> ScenarioRead:
+    return ScenarioRead.model_validate(scenario_service.restore_scenario(session, scenario_id))
 
 
 @scenarios_router.get(
@@ -239,6 +278,9 @@ def search_scenarios(
         list[str] | None,
         Query(description="Require this tag. Repeat the parameter to require several."),
     ] = None,
+    include_archived: Annotated[
+        bool, Query(description="Also list archived scenarios. Off by default.")
+    ] = False,
 ) -> Page[ScenarioSummary]:
     """Return a filtered page of scenarios."""
     if suite_id is not None:
@@ -250,6 +292,7 @@ def search_scenarios(
         language=language,
         name_contains=name,
         tags=tag,
+        include_archived=include_archived,
         limit=pagination.limit,
         offset=pagination.offset,
     )

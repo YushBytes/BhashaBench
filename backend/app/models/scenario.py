@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -69,6 +70,14 @@ class Scenario(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     spec: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     spec_version: Mapped[int] = mapped_column(nullable=False, default=1)
+
+    # Set when the scenario is archived: hidden from listings and refused for
+    # new runs, but kept, because recorded runs reference it
+    # (call_sessions.scenario_id is ON DELETE RESTRICT) and their reports must
+    # stay readable. Hard deletion is for scenarios no run has used.
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
     suite: Mapped[TestSuite] = relationship(back_populates="scenarios", lazy="joined")
 

@@ -28,7 +28,12 @@ from app.models.suite import TestSuite
 from app.models.test_run import TestRun
 from app.repositories import identity as repo
 from app.services.auth_service import Principal
-from app.services.errors import InvalidRequestError, NotFoundError, PermissionDeniedError
+from app.services.errors import (
+    ConflictError,
+    InvalidRequestError,
+    NotFoundError,
+    PermissionDeniedError,
+)
 
 
 def _deny(role: Role, permission: Permission) -> PermissionDeniedError:
@@ -177,6 +182,11 @@ def require_run_target(
     if scenario_suite != suite_id:
         raise InvalidRequestError(
             f"scenario {scenario_id} belongs to another suite; a run uses its own suite's scenario"
+        )
+    scenario = session.get(Scenario, scenario_id)
+    if scenario is not None and scenario.archived_at is not None:
+        raise ConflictError(
+            f"scenario '{scenario.name}' is archived; restore it before starting a new run"
         )
 
 

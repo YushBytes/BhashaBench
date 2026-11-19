@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
+from app.models.call_session import CallSession
 from app.models.scenario import Scenario
 from app.models.suite import TestSuite
 
@@ -28,25 +29,37 @@ def get_by_name_in_suite(session: Session, suite_id: uuid.UUID, name: str) -> Sc
 
 
 def list_for_suite(
-    session: Session, suite_id: uuid.UUID, *, limit: int, offset: int
+    session: Session,
+    suite_id: uuid.UUID,
+    *,
+    limit: int,
+    offset: int,
+    include_archived: bool = True,
 ) -> list[Scenario]:
     """Return a page of scenarios in one suite.
 
     Ordered by name, which is stable and is how a suite's contents are read.
     """
-    statement = (
-        select(Scenario)
-        .where(Scenario.suite_id == suite_id)
-        .order_by(Scenario.name.asc())
-        .limit(limit)
-        .offset(offset)
-    )
+    statement = select(Scenario).where(Scenario.suite_id == suite_id)
+    if not include_archived:
+        statement = statement.where(Scenario.archived_at.is_(None))
+    statement = statement.order_by(Scenario.name.asc()).limit(limit).offset(offset)
     return list(session.scalars(statement))
 
 
-def count_for_suite(session: Session, suite_id: uuid.UUID) -> int:
+def count_for_suite(session: Session, suite_id: uuid.UUID, *, include_archived: bool = True) -> int:
     """Return the number of scenarios in a suite, for pagination metadata."""
     statement = select(func.count()).select_from(Scenario).where(Scenario.suite_id == suite_id)
+    if not include_archived:
+        statement = statement.where(Scenario.archived_at.is_(None))
+    return session.scalar(statement) or 0
+
+
+def count_recorded_runs(session: Session, scenario_id: uuid.UUID) -> int:
+    """Recorded conversations (call sessions) that reference the scenario."""
+    statement = (
+        select(func.count()).select_from(CallSession).where(CallSession.scenario_id == scenario_id)
+    )
     return session.scalar(statement) or 0
 
 
@@ -70,6 +83,7 @@ def _search_statement(
     name_contains: str | None,
     tags: Sequence[str] | None,
     project_ids: Sequence[uuid.UUID] | None = None,
+    include_archived: bool = True,
 ) -> Select[tuple[Scenario]]:
     """Build the shared WHERE clause for searching and counting.
 
@@ -87,6 +101,9 @@ def _search_statement(
 
     if suite_id is not None:
         statement = statement.where(Scenario.suite_id == suite_id)
+
+    if not include_archived:
+        statement = statement.where(Scenario.archived_at.is_(None))
 
     if language is not None:
         statement = statement.where(Scenario.language == language)
@@ -116,6 +133,7 @@ def search(
     name_contains: str | None = None,
     tags: Sequence[str] | None = None,
     project_ids: Sequence[uuid.UUID] | None = None,
+    include_archived: bool = True,
     limit: int,
     offset: int,
 ) -> list[Scenario]:
@@ -131,6 +149,7 @@ def search(
             name_contains=name_contains,
             tags=tags,
             project_ids=project_ids,
+            include_archived=include_archived,
         )
         .order_by(Scenario.name.asc(), Scenario.id.asc())
         .limit(limit)
@@ -147,6 +166,7 @@ def count_search(
     name_contains: str | None = None,
     tags: Sequence[str] | None = None,
     project_ids: Sequence[uuid.UUID] | None = None,
+    include_archived: bool = True,
 ) -> int:
     """Return the total number of scenarios matching the same filters."""
     inner = _search_statement(
@@ -155,6 +175,7 @@ def count_search(
         name_contains=name_contains,
         tags=tags,
         project_ids=project_ids,
+        include_archived=include_archived,
     ).subquery()
     return session.scalar(select(func.count()).select_from(inner)) or 0
 
