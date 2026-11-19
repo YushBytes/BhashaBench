@@ -64,7 +64,7 @@ keep the numbering they were written in. Use this table to translate.
 | 10 | Recording & Transcription | ✅ Complete (local filesystem storage; recordings assembled from turn audio, not captured live) |
 | 11 | Evaluation & Judge Engine | ✅ Complete (deterministic; LLM judge offline-only, not validated against human labels) |
 | 12 | Reporting & Analytics Backend | ✅ Complete (comparison, regression, aggregates, export; signed artefact URLs moved to Phase 10; no PDF) |
-| 13 | Frontend Dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, components not) |
+| 13 | Frontend Dashboard | ✅ Complete (analytics, comparison, workspace, authoring and live run views on the real API; lib/ unit-tested, critical components tested in jsdom) |
 | 14 | CI/CD & Safety | ✅ Complete (auth, tenancy, rate limits, headers, dependency and secret scanning, regression gate; no nightly run) |
 | 15 | Production Readiness & Competition Demo | 🟡 Partial — production images, compose, startup refusals, backup/restore (rehearsed locally), a priced plan, and a zero-cost local stack verified end to end; not publicly deployed, no week unattended |
 

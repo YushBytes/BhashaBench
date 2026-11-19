@@ -272,8 +272,19 @@ cross-origin dev-resource block, which silently prevents hydration. Use
 ## Tests
 
 ```bash
-npm test     # node --test on tests/**/*.test.mjs; no test framework added
+npm test                  # node --test on tests/**/*.test.mjs: lib/ units
+npm run test:components   # vitest + jsdom + Testing Library: components
 ```
+
+**Component tests** (`tests/components/`, `vitest.config.mts`) render a
+component in jsdom and drive it as a user does, with `user-event` clicks and
+typing. Only the network boundary (`@/lib/api/client`'s `api`) and the
+router are mocked. Each asserts what the user sees and which request is
+sent: the reference editor's draft, save and refusal paths; the scenario
+manager's validate-then-save, delete refused with the server's 409 wording,
+confirm-before-delete, archive/restore and role-based controls; and a suite
+row's two-step delete that asks again before taking scenarios with it.
+Rendering-only assertions are deliberately absent.
 
 Node strips TypeScript types itself, so tests import `lib/` files directly.
 They cover the formatters (no "no data" ever rendered as a number), the
@@ -285,6 +296,6 @@ site's phase table to README.md's, row by row, and checks that the hero
 badge is derived from it, so the landing page cannot fall behind the project
 again. `tests/run-filters.test.mjs` reads the backend's `RunStatus`,
 `ExecutionMode` and `RunOutcome` and fails on a filter value the API would
-refuse, or a value it would accept that the filters do not offer. Components are not unit-tested; they are
-checked by typecheck, lint, the production build, and the end-to-end check
-against the running API.
+refuse, or a value it would accept that the filters do not offer. Components
+without a component test are checked by typecheck, lint, the production
+build, and the end-to-end check against the running API.

@@ -56,6 +56,9 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 | Run filters | 2: the "Created" status sent `created`, which the API refuses (422), so the history failed to load; `text_bot_test` and four outcomes were missing | fixed: values come from `lib/run-filters.ts`, tested against the backend enums |
 | Text bot runs | 2: `types.ts` lacked `text_bot_test` and the `bot_text_*` fields, so such a run was captioned "No external bot was contacted" | fixed: transcribed fields, own caveat and mislabel check |
 
+Component-level tests were absent at the audit. There are now 14, in
+`frontend/tests/components/`, run in CI (`npm run test:components`).
+
 ## Copy that contradicted the product
 
 - The landing page, as above.

@@ -116,6 +116,8 @@ jobs:
 
       - name: Unit tests (node --test)
         run: npm test
+      - name: Component tests (vitest, jsdom, Testing Library)
+        run: npm run test:components
 
       # Runtime dependencies only, at high severity: dev-only tooling
       # advisories are reviewed by hand (docs/SECURITY.md) rather than
