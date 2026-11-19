@@ -5,6 +5,16 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class AccentRead(BaseModel):
+    """An accent profile: a label for a speaker population, not a sound."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str = Field(description="Value for a scenario's `persona.accent`.")
+    name: str
+    description: str
+
+
 class LanguageRead(BaseModel):
     """One supported language."""
 
@@ -26,6 +36,13 @@ class LanguageRead(BaseModel):
     endonym: str = Field(description="The language's name in its own script.")
     script: str = Field(description="ISO 15924 script code.")
     locale: str = Field(description="Underscore locale form, for ICU-style consumers.")
+    accents: list[AccentRead] = Field(
+        default_factory=list,
+        description=(
+            "Accent profiles a scenario in this language may request. Listing one "
+            "does not mean any speech provider can render it; a run reports that."
+        ),
+    )
 
 
 class LanguageCatalogue(BaseModel):

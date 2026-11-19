@@ -94,6 +94,12 @@ async function ScenarioDetailView({ params }: { params: Promise<{ scenarioId: st
               <Fact label="Language" mono>
                 {scenario.language}
               </Fact>
+              <Fact
+                label="Accent"
+                hint="Requested from the speech provider. Each run says whether it was applied."
+              >
+                {scenario.spec.persona?.accent ?? "none"}
+              </Fact>
               <Fact label="Your role" mono>
                 {role ?? "unknown"}
               </Fact>

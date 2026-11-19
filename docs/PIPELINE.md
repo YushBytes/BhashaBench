@@ -262,7 +262,8 @@ value and the `reason` — and the API and inspector show it:
 | Setting | Listed when | Why |
 |---|---|---|
 | `constraints.allow_interruptions` | always | the caller never talks over the bot; only `ws_voice` detects the bot barging in |
-| `constraints.max_silence_seconds` | always | no silence detection or re-prompt timer (Phase 9) |
+| `persona.accent` | the speech provider does not render it (today: always) | no configured provider documents an accented voice. The run's `accent` object records `requested`, `applied: null`, the provider and the reason |
+| `constraints.max_silence_seconds` | always | nothing re-prompts after silence; `ws_voice` ends a bot turn on its own configured timeout, not this value |
 | `constraints.required_phrases`, `forbidden_phrases` | non-empty | nothing checks the bot's replies (Phase 11) |
 | `code_mixing` | `expected: true`, deterministic caller | the caller speaks monolingual phrase tables |
 | `persona.speaking_style`, `persona.traits` | deterministic caller | the phrase tables do not vary by them |

@@ -84,7 +84,7 @@ class TestLanguageCatalogueEndpoint:
     def test_each_entry_is_complete(self, client: TestClient) -> None:
         first = client.get("/api/v1/languages").json()["languages"][0]
 
-        assert set(first) == {"code", "name", "endonym", "script", "locale"}
+        assert set(first) == {"code", "name", "endonym", "script", "locale", "accents"}
         assert all(first.values())
 
     def test_needs_no_database(self, client: TestClient) -> None:

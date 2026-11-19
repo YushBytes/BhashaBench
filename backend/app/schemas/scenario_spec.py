@@ -31,9 +31,9 @@ from pydantic import (
     model_validator,
 )
 
-from app.core import languages
+from app.core import accents, languages
 
-SPEC_VERSION = 2
+SPEC_VERSION = 3
 """Revision of this schema. Stored on every persisted scenario.
 
 Bump this when a change to the models below would alter the meaning of an
@@ -43,6 +43,10 @@ v1 -> v2 (Phase 3) added the optional `tags` and `code_mixing` fields. Both
 are optional with defaults, so a stored v1 document still validates against
 this schema unchanged - no data migration is needed, and a v1 row keeps its
 recorded `spec_version` until it is next written.
+
+v2 -> v3 added the optional `persona.accent`, a key from `app.core.accents`
+that must be a variety of the scenario's language. Optional and absent from
+every older document, so nothing stored changes meaning.
 """
 
 # Language validation is delegated to `app.core.languages`, the single source
@@ -134,6 +138,15 @@ class Persona(SpecModel):
         default_factory=list,
         max_length=10,
         description="Behavioural traits, e.g. 'impatient'. Capped to keep personas coherent.",
+    )
+    accent: str | None = Field(
+        default=None,
+        max_length=64,
+        description=(
+            "Accent profile the caller should have, e.g. 'en-IN.south' (see "
+            "GET /api/v1/languages). Requested, not guaranteed: a run records "
+            "whether the speech provider could apply it."
+        ),
     )
 
     @field_validator("traits")
@@ -515,6 +528,16 @@ class ScenarioSpec(SpecModel):
     def _validate_language(cls, value: str) -> str:
         """Require a well-formed tag drawn from the catalogue."""
         return languages.validate_tag(value)
+
+    @model_validator(mode="after")
+    def _check_accent_against_language(self) -> ScenarioSpec:
+        """An accent is a variety of one language; it must be this scenario's."""
+        if self.persona.accent is not None:
+            try:
+                accents.validate(self.persona.accent, self.language)
+            except accents.UnknownAccentError as exc:
+                raise ValueError(f"persona.accent: {exc}") from exc
+        return self
 
     @model_validator(mode="after")
     def _check_code_mixing_against_primary(self) -> ScenarioSpec:

@@ -73,6 +73,11 @@ class SynthesisCapabilities:
     """False for this phase. Timbre documents SSE and WebSocket streaming;
     neither is implemented, because nothing consumes a stream until Phase 9."""
     max_text_chars: int | None = None
+    accents: frozenset[str] = frozenset()
+    """Accent profiles (`app.core.accents` keys) this provider can genuinely
+    render, each backed by a documented voice. Empty unless the vendor
+    documents it: Timbre's catalogue gives voices a gender and a use, nothing
+    regional, so a requested accent is recorded as not applied."""
     requires_credentials: bool = True
     serialises_requests: bool = False
     """Whether the adapter deliberately allows only one in-flight call."""

@@ -81,6 +81,7 @@ expected_outcomes:
 | `identity` | string | **yes** | — | Who the caller is. Max 500. |
 | `speaking_style` | enum | no | `neutral` | `polite`, `neutral`, `brusque`, `confused`, `hurried`, `elderly`. |
 | `traits` | list | no | `[]` | Max 10, no duplicates (case-insensitive). |
+| `accent` | string | no | — | An accent profile key such as `en-IN.south`, which must be a variety of the scenario's `language` (`GET /api/v1/languages` lists each language's profiles; `backend/app/core/accents.py` holds them). Added in spec v3. **Requested, not guaranteed:** a run applies it only if the speech provider declares it renders that profile, and no configured provider does today. Each run records `accent.requested`, `accent.applied` (null) and the reason, and lists `persona.accent` under settings not enforced. |
 
 ### `goal`
 

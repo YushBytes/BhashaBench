@@ -47,6 +47,7 @@ for Prisma recognition, one for Timbre synthesis.
 | Adapter end-to-end after the WAV header fix | ✅ **Verified live** | **Live call.** The full path - request, binary response, sentinel header, measurement - returns a valid `SpeechResult`. Confirmed after the fix |
 | Pronunciation / prosody / intelligibility | ⚠️ **Not evaluated** | Nobody has listened to the audio. No automated test can judge this |
 | Streaming synthesis (SSE / WebSocket) | ⬜ **Not implemented** | Documented by the vendor; nothing consumes a stream before Phase 9 |
+| Accent-specific voices | ⬜ **Not documented** | The voice catalogue gives each voice a gender and an intended use and says nothing regional, so `RENDERED_ACCENTS` is empty and a scenario's `persona.accent` is reported *requested, not applied*. Attributing an accent to a voice without vendor documentation would be invention |
 
 ### Caller — deterministic engine (Phase 6)
 

@@ -41,7 +41,7 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 | Scenario creation | 2: YAML paste only; the shipped reference scenarios cannot be loaded | fixed: "Start from a reference scenario" in the editor, served by `GET /api/v1/scenario-library` |
 | Bot adapter selection | 1 (reference bot only, by design) | — |
 | Language | 1, through the scenario's language | — |
-| Accent | 4: no accent parameter exists anywhere in the product | not in scope: no model for it |
+| Accent | 4: no accent parameter exists anywhere in the product | implemented as a requested dimension: `persona.accent` from a catalogue (`app/core/accents.py`), validated against the language, recorded per run with `applied` null and the reason, because no speech provider documents an accented voice. Shown on the run and scenario pages |
 | Noise profile and seed | 1 | — |
 | Channel conditions (codec, jitter, dropout, gain, clipping, truncation, silence) | 2: accepted by the API per run, absent from the UI; and the run response dropped `conditions`/`condition_sources`, so nobody could see what applied | fixed: a "Channel conditions" section on New test (bounds tested against the backend), returned by the API and shown on the run page with each value's source |
 | Interruptions | 2: bot barge-in detected only by `ws_voice`; the caller never interrupts | stated, not changed |

@@ -38,6 +38,9 @@ from app.speech.models import AudioContainer, AudioEncodingName, SpeechRequest, 
 
 PROVIDER_NAME = "fake"
 
+RENDERED_ACCENTS: frozenset[str] = frozenset()
+"""None: the fake emits a tone, which has no accent."""
+
 FAKE_VOICES: tuple[VoiceDescriptor, ...] = (
     VoiceDescriptor(name="Testa", gender="female", character="Offline test voice"),
     VoiceDescriptor(name="Testo", gender="male", character="Offline test voice"),
@@ -130,6 +133,7 @@ class FakeSynthesisProvider:
             extra_language_values=frozenset({"auto"}),
             voices=FAKE_VOICES,
             voices_are_exhaustive=True,
+            accents=RENDERED_ACCENTS,
             models=frozenset({"fake-tts-v1"}),
             default_model="fake-tts-v1",
             containers=frozenset(AudioContainer),

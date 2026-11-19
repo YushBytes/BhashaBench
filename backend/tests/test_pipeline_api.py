@@ -1703,3 +1703,42 @@ class TestOfflineManualTextReplies:
             real_factory_client.get(f"{BASE}/{run['run_id']}").json()["awaiting_bot_text_for_turn"]
             == 1
         )
+
+
+# ---------------------------------------------------------------------------
+# Accent evidence (tests/test_accents.py holds the rest)
+# ---------------------------------------------------------------------------
+
+
+def test_a_run_reports_the_accent_and_lists_it_as_not_enforced(
+    pipeline_client: TestClient, db_session: Session
+) -> None:
+    from app.schemas.scenario_spec import ScenarioSpec
+    from tests.test_accents import EN
+
+    suite = SuiteModel(name=f"accent-{uuid.uuid4().hex[:8]}")
+    db_session.add(suite)
+    db_session.flush()
+    scenario = Scenario(
+        suite_id=suite.id,
+        name="accented_english",
+        language="en-IN",
+        spec=ScenarioSpec.model_validate(EN).model_dump(mode="json"),
+        spec_version=3,
+    )
+    db_session.add(scenario)
+    db_session.flush()
+    body: dict[str, Any] = pipeline_client.post(
+        BASE,
+        json={
+            "suite_id": str(suite.id),
+            "scenario_id": str(scenario.id),
+            "mode": "audio_fixture_test",
+        },
+    ).json()
+    assert body["accent"]["requested"] == "en-IN.south"
+    assert body["accent"]["applied"] is None
+    assert body["accent"]["speech_provider"] == body["tts_provider"]
+    unenforced = {entry["setting"]: entry for entry in body["settings_not_enforced"]}
+    assert unenforced["persona.accent"]["declared"] == "en-IN.south"
+    assert unenforced["persona.accent"]["reason"].startswith("Requested, not applied")

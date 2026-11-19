@@ -482,6 +482,7 @@ def _run(report: RunReport) -> RunResponse:
         total_audio_seconds=report.total_audio_seconds,
         settings_not_enforced=report.settings_not_enforced,
         degradation_requested=report.degradation_requested,
+        accent=report.accent,
         awaiting_bot_text_for_turn=report.awaiting_bot_text_for_turn,
         awaiting_bot_audio_for_turn=report.awaiting_bot_audio_for_turn,
         started_at=report.started_at,

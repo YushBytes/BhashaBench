@@ -141,6 +141,18 @@ export interface Language {
   endonym: string;
   script: string;
   locale: string;
+  /** Profiles a scenario in this language may request; not a coverage claim. */
+  accents: { key: string; name: string; description: string }[];
+}
+
+/** A run's `accent`: what the scenario requested and what the audio carried. */
+export interface AccentEvidence {
+  requested: string;
+  requested_name: string;
+  /** Null unless the speech provider genuinely rendered it. */
+  applied: string | null;
+  speech_provider: string | null;
+  reason: string | null;
 }
 
 export interface LanguageCatalogue {
@@ -214,6 +226,8 @@ export interface ScenarioSpec {
     identity?: string;
     speaking_style?: string;
     traits?: string[];
+    /** An `app.core.accents` key; requested, not guaranteed. */
+    accent?: string | null;
   } | null;
   goal?: {
     objective?: string;
@@ -431,6 +445,8 @@ export interface Run {
   settings_not_enforced: SettingNotEnforced[] | null;
   /** `null` for runs that move no audio and for runs created before it was recorded. */
   degradation_requested: DegradationRequested | null;
+  /** Present when the scenario names an accent; `applied` is usually null. */
+  accent?: AccentEvidence | null;
   /** Offline run with the manual adapter, waiting for `POST /bot-text`. */
   awaiting_bot_text_for_turn: number | null;
   awaiting_bot_audio_for_turn: number | null;

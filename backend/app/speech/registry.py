@@ -19,6 +19,8 @@ from collections.abc import Callable
 from app.core.config import AppEnv, Settings
 from app.speech.base import SynthesisProvider
 from app.speech.errors import SpeechConfigurationError
+from app.speech.providers import fake as fake_module
+from app.speech.providers import timbre as timbre_module
 from app.speech.providers.fake import PROVIDER_NAME as FAKE_PROVIDER
 from app.speech.providers.fake import FakeSynthesisProvider
 from app.speech.providers.timbre import PROVIDER_NAME as TIMBRE_PROVIDER
@@ -121,6 +123,19 @@ def build_provider(settings: Settings, name: str | None = None) -> SynthesisProv
     return provider
 
 
+_RENDERED_ACCENTS: dict[str, frozenset[str]] = {
+    FAKE_PROVIDER: fake_module.RENDERED_ACCENTS,
+    TIMBRE_PROVIDER: timbre_module.RENDERED_ACCENTS,
+}
+"""Read from each adapter's own constant, which its capabilities also use,
+so no provider (and no HTTP client) is constructed just to ask."""
+
+
+def rendered_accents(name: str | None) -> frozenset[str]:
+    """Accent profiles provider `name` can render; empty when unknown."""
+    return _RENDERED_ACCENTS.get(name or "", frozenset())
+
+
 def describe_providers(settings: Settings) -> list[tuple[str, object | None, str | None]]:
     """Describe every registered provider, configured or not.
 
@@ -140,4 +155,10 @@ def describe_providers(settings: Settings) -> list[tuple[str, object | None, str
     return described
 
 
-__all__ = ["ProviderFactory", "available_providers", "build_provider", "describe_providers"]
+__all__ = [
+    "ProviderFactory",
+    "available_providers",
+    "build_provider",
+    "describe_providers",
+    "rendered_accents",
+]

@@ -53,6 +53,11 @@ logger = logging.getLogger("bhashabench.speech.timbre")
 
 PROVIDER_NAME = "timbre"
 
+RENDERED_ACCENTS: frozenset[str] = frozenset()
+"""None documented. The voice catalogue gives each voice a gender and an
+intended use, and says nothing regional, so no accent profile can be
+attributed to any voice without inventing it."""
+
 # Bytes per sample for the 8-bit G.711 codecs, used to derive a duration that
 # the container itself cannot report.
 _G711_BYTES_PER_SAMPLE = 1
@@ -142,6 +147,7 @@ class GnaniTimbreProvider:
                 {contract.AUTO_LANGUAGE_CODE, contract.HINGLISH_LANGUAGE_CODE}
             ),
             voices=voices,
+            accents=RENDERED_ACCENTS,
             # v3.0's 13 voices are fully documented. v2.5 has 42, of which only
             # nine were quoted, so its roster is not exhaustive and a name must
             # not be rejected for being absent from it.

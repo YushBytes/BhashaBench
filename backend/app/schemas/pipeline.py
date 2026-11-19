@@ -235,6 +235,13 @@ class RunResponse(BaseModel):
         "style the deterministic caller ignores. `null` for runs created before "
         "this was recorded, which means unknown, not fully enforced.",
     )
+    accent: AccentEvidenceResponse | None = Field(
+        default=None,
+        description=(
+            "Present when the scenario names a `persona.accent`. `applied` is null "
+            "unless the speech provider genuinely rendered it."
+        ),
+    )
     degradation_requested: DegradationRequestedResponse | None = Field(
         default=None,
         description="The SNR and packet loss requested for each degraded turn. "
@@ -331,6 +338,24 @@ class SettingNotEnforcedResponse(BaseModel):
     )
     declared: Any = Field(description="The value the scenario declares.")
     reason: str = Field(description="Why it was not enforced, and which phase would.")
+
+
+class AccentEvidenceResponse(BaseModel):
+    """The scenario's requested accent and what this run could do with it."""
+
+    requested: str = Field(description="The `persona.accent` key, e.g. `en-IN.south`.")
+    requested_name: str
+    applied: str | None = Field(
+        description=(
+            "The accent the caller's audio genuinely carried, or null. Set only when "
+            "the speech provider declares it renders that profile; never inferred "
+            "from the label."
+        )
+    )
+    speech_provider: str | None = Field(
+        description="The provider that spoke the caller's lines; null when no audio moved."
+    )
+    reason: str | None = Field(description="Why it was not applied; null when it was.")
 
 
 class DegradationRequestedResponse(BaseModel):

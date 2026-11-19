@@ -438,7 +438,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 3056 tests across 71 modules
+│   ├── tests/                 3067 tests across 72 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -772,10 +772,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 3056 tests** across seventy-one modules.
-**3015 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3067 tests** across seventy-two modules.
+**3026 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (3056) exceeds the number that run (3015). On
+why the collected total (3067) exceeds the number that run (3026). On
 Windows one more is skipped (a symlink test the OS refuses without
 developer mode), so a local run there reports 2989 passed, 42 skipped:
 
@@ -814,6 +814,7 @@ developer mode), so a local run there reports 2989 passed, 42 skipped:
 | `test_api_suites_scenarios.py` | 63 | The Phase 2 endpoints, pagination, duplicates, unknown ids, malformed UUIDs, oversized bodies, error-envelope shape |
 | `test_languages.py` | 89 | Catalogue invariants (unique codes and locales, endonym scripts), tag shape and membership rejection, and that the schema and the API read from this one source |
 | `test_bundle.py` | 39 | Bundle parsing and building: per-entry error collection, duplicate rejection, the 500-entry cap, byte-identical round-trips, no ids or timestamps in output |
+| `test_accents.py` | 10 | Accent profiles: every profile a variety of a catalogue language with a unique key, each language's profiles listed by `/languages` and none invented, a scenario's accent validated against its language, no provider today rendering any accent, evidence saying why it was not applied (provider or no audio), applied only when a provider declares the profile |
 | `test_api_library.py` | 74 | Search, filters, pagination and ordering; suite `PATCH` and guarded `DELETE`; copy and move; import dry-run and atomicity; export round-trip |
 | `test_database_gate.py` | 16 | `BHASHABENCH_REQUIRE_DATABASE`: an unreachable test database skips by default and fails when required - including a real pytest subprocess against a closed port |
 | `test_pipeline_recovery.py` | 20 | `bhashabench runs recover-stale` through the real Typer app: eligibility, the dry-run default, the timeout floor, `--apply` closing a stuck run as status `failed`, outcome `abandoned`, without deleting turns, events or artefacts, and the two protected historical runs staying excluded and unchanged with or without `--apply` |
@@ -841,7 +842,7 @@ developer mode), so a local run there reports 2989 passed, 42 skipped:
 | `test_pipeline_http_bot.py` | 31 | The HTTP text bot adapter over real localhost sockets: a whole conversation with the reference bot, wrong credentials, concurrent sessions, bounded and idempotent retries, malformed and oversized replies, timeouts, redirects not followed, path-segment escaping, unreachable and disallowed hosts, SSRF and rebinding refusals, and that the token reaches no log or error |
 | `test_pipeline_text_bot.py` | 12 | `text_bot_test` end to end against real PostgreSQL and the reference bot on a real socket: a goal-achieving conversation, per-turn provenance, unreachable and credential-refused bots, a bot that hangs up early, mode/adapter mismatches refused, and the same run through the real API with no engine override |
 | `test_pipeline_engine.py` | 72 | Multi-turn audio runs against real PostgreSQL: the full workflow, every failure path, cancellation, the manual flow, reproducibility, declared scenario audio measured from the stored bytes (achieved SNR, realised packet loss, operator precedence), and settings declared but not enforced |
-| `test_pipeline_api.py` | 114 | The test-run operations, plus the run's recorded bot adapter honoured on every route and offline simulation reaching a terminal state (text fixture, manual `/bot-text`): creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, the 503 at the concurrency limit, OpenAPI, plus the Phase 8 run listing (filters, pagination window, ILIKE wildcard escape, caller-only exclusion) and artefact audio (range handling, traversal through the turn index, served to an authorised viewer in every environment and refused without a credential), operator channel conditions returned with their source and none reported as null |
+| `test_pipeline_api.py` | 115 | The test-run operations, plus the run's recorded bot adapter honoured on every route and offline simulation reaching a terminal state (text fixture, manual `/bot-text`): creation, execution, artefacts, reports, bot-audio submission, cancellation, path-traversal rejection, the 503 at the concurrency limit, OpenAPI, plus the Phase 8 run listing (filters, pagination window, ILIKE wildcard escape, caller-only exclusion) and artefact audio (range handling, traversal through the turn index, served to an authorised viewer in every environment and refused without a credential), operator channel conditions returned with their source and none reported as null, a run reporting a requested accent as not applied |
 | `test_pipeline_fixture_audio.py` | 9 | The fixture audio an API-started scripted run replays: the file read and repeated per turn, a missing/empty/directory path refused, the real engine factory wiring it to the scripted adapter, the reply still marked as not received from a bot, and the unset setting leaving the turn-0 failure intact |
 | `test_pipeline_concurrency.py` | 41 | The admission limiter: the configured maximum is never exceeded, capacity frees up for the next run, and exceptions, cancellation and timeouts all release it |
 | `test_pipeline_conditions.py` | 33 | Jitter, dropouts, truncation, silence padding and measured gain, each alone and combined: achieved values measured from the bytes, shortfalls noted, seeded reproducibility, range validation, fixed order, and the original never modified |
@@ -879,7 +880,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 3015 passed, 41 skipped ================
+================ 3026 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

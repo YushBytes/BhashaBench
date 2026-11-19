@@ -52,6 +52,7 @@ from app.caller.orchestrator import ConversationOrchestrator
 from app.caller.schemas import Speaker, TerminationReason
 from app.caller.state import CallerState
 from app.caller.state import is_terminal as caller_state_is_terminal
+from app.core import accents
 from app.core.config import Settings
 from app.models.call_session import CallSession
 from app.models.test_run import RunStatus, TestRun
@@ -88,6 +89,7 @@ from app.schemas.scenario import ScenarioSpec
 from app.schemas.scenario_spec import CONDITION_FIELDS
 from app.services.errors import NotFoundError
 from app.speech.errors import SpeechError
+from app.speech.registry import rendered_accents
 from app.transcription import audio as audio_tools
 from app.transcription.errors import TranscriptionError
 from app.transcription.models import AudioEncoding, AudioMetadata
@@ -178,6 +180,40 @@ class RunConfig:
     def uses_audio(self) -> bool:
         """Whether this run moves audio at all."""
         return self.mode not in TEXT_MODES
+
+
+def accent_evidence(
+    spec: ScenarioSpec, *, uses_audio: bool, tts_provider: str | None
+) -> dict[str, Any] | None:
+    """What happened to the scenario's requested accent in this run.
+
+    `applied` is set only when the caller's speech comes from a provider that
+    declares it renders that profile. Otherwise it is `None`, with the reason:
+    renaming a label does not make a voice sound regional, and a run that
+    implied otherwise would report accent robustness it never tested.
+    """
+    key = spec.persona.accent
+    if key is None:
+        return None
+    profile = accents.BY_KEY[key]
+    applied: str | None = None
+    reason: str | None
+    if not uses_audio:
+        reason = "this mode moves no audio, so no accent can be heard"
+    elif key in rendered_accents(tts_provider):
+        applied, reason = key, None
+    else:
+        reason = (
+            f"the '{tts_provider}' speech provider documents no voice with this accent; "
+            "the caller speaks in its default voice"
+        )
+    return {
+        "requested": key,
+        "requested_name": profile.name,
+        "applied": applied,
+        "speech_provider": tts_provider if uses_audio else None,
+        "reason": reason,
+    }
 
 
 def settings_not_enforced(
@@ -389,6 +425,10 @@ class RunReport:
     """Scenario settings declared but not enforced by this run, each with
     `setting`, `declared` and `reason`. `None` for runs created before this
     was recorded - unknown, not "everything enforced"."""
+    accent: dict[str, Any] | None
+    """The scenario's `persona.accent`: `requested`, `applied` (`None` unless
+    the speech provider genuinely renders it) and `reason`. `None` when the
+    scenario names no accent, or for runs created before this was recorded."""
     degradation_requested: dict[str, Any] | None
     """`source` (`scenario` or `operator`), `snr_db` and
     `packet_loss_percent` each degraded turn was asked for. The achieved
@@ -584,6 +624,22 @@ class RunEngine:
         run.status = RunStatus.PENDING
         run.started_at = None
 
+        tts_name = self._tts_provider if config.uses_audio else None
+        accent = accent_evidence(spec, uses_audio=config.uses_audio, tts_provider=tts_name)
+        unenforced = settings_not_enforced(
+            spec,
+            uses_audio=config.uses_audio,
+            caller_provider=caller_meta.get("provider"),
+            degrades=config.degrade_caller_audio,
+        )
+        if accent is not None and accent["applied"] is None:
+            unenforced.append(
+                {
+                    "setting": "persona.accent",
+                    "declared": accent["requested"],
+                    "reason": f"Requested, not applied: {accent['reason']}.",
+                }
+            )
         metadata: dict[str, Any] = {
             "status": PipelineStatus.CREATED.value,
             "mode": config.mode.value,
@@ -603,12 +659,8 @@ class RunEngine:
             # Read back per turn; a run created before this existed has no
             # entry and keeps its preset exactly.
             "degradation_requested": requested,
-            "settings_not_enforced": settings_not_enforced(
-                spec,
-                uses_audio=config.uses_audio,
-                caller_provider=caller_meta.get("provider"),
-                degrades=config.degrade_caller_audio,
-            ),
+            "accent": accent,
+            "settings_not_enforced": unenforced,
             "degrade_caller_audio": config.degrade_caller_audio and config.uses_audio,
             "degradation_seed": self._resolve_seed(config),
             "turn_budget": budget,
@@ -1953,6 +2005,7 @@ class RunEngine:
             scenario_noise_profile=meta.get("scenario_noise_profile"),
             degradation_seed=meta.get("degradation_seed"),
             degradation_requested=meta.get("degradation_requested"),
+            accent=meta.get("accent"),
             settings_not_enforced=meta.get("settings_not_enforced"),
             awaiting_bot_text_for_turn=meta.get("awaiting_bot_text_for_turn"),
             awaiting_bot_audio_for_turn=meta.get("awaiting_bot_audio_for_turn"),

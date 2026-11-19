@@ -336,6 +336,16 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
               {describeRequested(run.degradation_requested) ?? humanise(run.noise_profile)}
             </Fact>
             <Fact
+              label="Accent"
+              hint={run.accent?.reason ?? "The scenario names no accent."}
+            >
+              {run.accent
+                ? run.accent.applied
+                  ? `${run.accent.requested_name} · applied`
+                  : `${run.accent.requested_name} · requested, not applied`
+                : "none requested"}
+            </Fact>
+            <Fact
               label="Channel conditions"
               mono
               hint="Requested, field by field, with who set each: the scenario or the operator. Each degraded artefact records what was achieved."
