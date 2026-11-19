@@ -281,6 +281,33 @@ export const api = {
   scenario: (id: string, o?: RequestOptions) =>
     request<ScenarioDetail>(`/api/v1/scenarios/${id}`, o),
 
+  updateScenario: (id: string, yaml: string, o?: RequestOptions) =>
+    request<ScenarioDetail>(`/api/v1/scenarios/${id}`, { ...o, method: "PUT", body: { yaml } }),
+
+  /** 409 when recorded runs use the scenario; archive it instead. */
+  deleteScenario: (id: string, o?: RequestOptions) =>
+    request<void>(`/api/v1/scenarios/${id}`, { ...o, method: "DELETE" }),
+
+  archiveScenario: (id: string, o?: RequestOptions) =>
+    request<ScenarioDetail>(`/api/v1/scenarios/${id}/archive`, { ...o, method: "POST" }),
+
+  restoreScenario: (id: string, o?: RequestOptions) =>
+    request<ScenarioDetail>(`/api/v1/scenarios/${id}/restore`, { ...o, method: "POST" }),
+
+  copyScenario: (id: string, targetSuiteId: string, newName: string, o?: RequestOptions) =>
+    request<ScenarioDetail>(`/api/v1/scenarios/${id}/copy`, {
+      ...o,
+      method: "POST",
+      body: { target_suite_id: targetSuiteId, new_name: newName },
+    }),
+
+  renameSuite: (id: string, name: string, o?: RequestOptions) =>
+    request<SuiteSummary>(`/api/v1/suites/${id}`, { ...o, method: "PATCH", body: { name } }),
+
+  /** Without `cascade`, a suite holding scenarios is refused (409). */
+  deleteSuite: (id: string, cascade: boolean, o?: RequestOptions) =>
+    request<void>(`/api/v1/suites/${id}`, { ...o, method: "DELETE", query: { cascade } }),
+
   transcriptionProviders: (o?: RequestOptions) =>
     request<TranscriptionProviders>("/api/v1/transcription/providers", o),
 

@@ -99,6 +99,34 @@ describe("request", () => {
     assert.deepEqual(JSON.parse(calls[0].init.body), { email: "a@b.test", password: "pw", session_type: "cookie" });
   });
 
+  it("manages scenarios and suites through their own routes and methods", async () => {
+    const cases = [
+      [() => api.updateScenario("s1", "name: x"), "PUT", "/api/v1/scenarios/s1"],
+      [() => api.deleteScenario("s1"), "DELETE", "/api/v1/scenarios/s1"],
+      [() => api.archiveScenario("s1"), "POST", "/api/v1/scenarios/s1/archive"],
+      [() => api.restoreScenario("s1"), "POST", "/api/v1/scenarios/s1/restore"],
+      [() => api.copyScenario("s1", "u1", "copy"), "POST", "/api/v1/scenarios/s1/copy"],
+      [() => api.renameSuite("u1", "New"), "PATCH", "/api/v1/suites/u1"],
+    ];
+    for (const [call, method, path] of cases) {
+      const calls = stub(new Response(JSON.stringify({}), { status: 200 }));
+      await call();
+      assert.equal(calls[0].init.method, method, path);
+      assert.equal(new URL(calls[0].url).pathname, path);
+    }
+    const copied = stub(new Response(JSON.stringify({}), { status: 201 }));
+    await api.copyScenario("s1", "u1", "copy");
+    assert.deepEqual(JSON.parse(copied[0].init.body), { target_suite_id: "u1", new_name: "copy" });
+  });
+
+  it("deletes a suite without its scenarios unless cascade is asked for", async () => {
+    for (const cascade of [false, true]) {
+      const calls = stub(new Response(null, { status: 204 }));
+      await api.deleteSuite("u1", cascade);
+      assert.equal(new URL(calls[0].url).searchParams.get("cascade"), String(cascade));
+    }
+  });
+
   it("reads the shipped scenario library from its own route", async () => {
     const calls = stub(new Response(JSON.stringify({ scenarios: [], total: 0 }), { status: 200 }));
     await api.scenarioLibrary();

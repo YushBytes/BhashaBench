@@ -201,6 +201,8 @@ export interface ScenarioSummary {
   language: string;
   created_at: string;
   updated_at: string;
+  /** Set when archived: hidden from listings, refused for new runs, runs kept. */
+  archived_at: string | null;
 }
 
 /** The parts of a scenario specification the UI reads. */

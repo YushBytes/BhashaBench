@@ -3,6 +3,7 @@ import { Suspense } from "react";
 
 import {
   AddScenario,
+  SuiteRow,
   CreateSuite,
   type ProjectChoice,
 } from "@/components/domain/scenario-authoring";
@@ -70,6 +71,7 @@ async function Library({
   const params = await searchParams;
   const language = one(params.language);
   const search = one(params.q);
+  const showArchived = one(params.archived) === "1";
 
   let scenarios: PageEnvelope<ScenarioSummary> | null = null;
   let languages: LanguageCatalogue | null = null;
@@ -83,7 +85,7 @@ async function Library({
         // `name`, as the search endpoint declares it. A misspelled filter
         // is not rejected - it is ignored, and the page would quietly show
         // every scenario while appearing to have searched.
-        query: { limit: 100, language, name: search },
+        query: { limit: 100, language, name: search, include_archived: showArchived || undefined },
       }),
       api.languages({ revalidate: 3600 }),
     ]);
@@ -141,10 +143,20 @@ async function Library({
                 ))}
               </select>
             </div>
+            <label className="flex h-9 items-center gap-2 text-[13px] text-text-dim">
+              <input
+                type="checkbox"
+                name="archived"
+                value="1"
+                defaultChecked={showArchived}
+                className="size-4 accent-[var(--accent)]"
+              />
+              Show archived
+            </label>
             <button type="submit" className={buttonClass("default", "sm")}>
               Apply
             </button>
-            {language || search ? (
+            {language || search || showArchived ? (
               <Link href="/app/scenarios" className={buttonClass("quiet", "sm")}>
                 Clear
               </Link>
@@ -190,9 +202,15 @@ async function Library({
                           className="border-b border-line transition-colors last:border-0 hover:bg-surface-raised"
                         >
                           <Td className="max-w-[20rem]">
-                            <span className="block truncate font-medium text-text">
+                            <Link
+                              href={`/app/scenarios/${scenario.id}`}
+                              className="block truncate font-medium text-text hover:text-accent"
+                            >
                               {scenario.name}
-                            </span>
+                            </Link>
+                            {scenario.archived_at ? (
+                              <span className="text-[11px] text-warn">Archived · </span>
+                            ) : null}
                             <span className="font-mono text-[11px] text-text-muted">
                               {scenario.id.slice(0, 8)}
                             </span>
@@ -279,7 +297,9 @@ async function Authoring() {
         />
         <ul className="divide-y divide-line">
           {suites.items.map((suite) => (
-            <li key={suite.id} className="px-4 py-2.5 text-[13px] text-text sm:px-5">{suite.name}</li>
+            <li key={suite.id} className="px-4 py-2.5 text-[13px] text-text sm:px-5">
+              <SuiteRow id={suite.id} name={suite.name} canEdit={projects.some((p) => p.id === suite.project_id)} />
+            </li>
           ))}
         </ul>
         <div className="border-t border-line p-4 sm:p-5">

@@ -36,7 +36,8 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 | Overview, health, configured providers | 1 | — |
 | Workspaces, projects, members, roles | 1 | — |
 | Sign-up, sign-in, tenant isolation | 1 | — |
-| Suites | 1 (no delete in the UI) | — |
+| Suites | 1 (no delete in the UI) | fixed: rename and delete per suite; a suite holding scenarios asks again before deleting them too, and one whose scenarios have runs is refused |
+| Scenario edit, duplicate, delete | 4: API only; and DELETE of a scenario with runs was a 500 | fixed: `/app/scenarios/[id]`; delete-with-history is a 409 and archival is offered |
 | Scenario creation | 2: YAML paste only; the shipped reference scenarios cannot be loaded | fixed: "Start from a reference scenario" in the editor, served by `GET /api/v1/scenario-library` |
 | Bot adapter selection | 1 (reference bot only, by design) | — |
 | Language | 1, through the scenario's language | — |

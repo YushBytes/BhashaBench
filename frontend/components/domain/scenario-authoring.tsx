@@ -73,6 +73,90 @@ export function CreateSuite({ projects }: { projects: ProjectChoice[] }) {
   );
 }
 
+/**
+ * One suite in the list, with rename and delete for a member and above.
+ * Delete first asks plainly; a suite still holding scenarios is refused by
+ * the server, and the page then offers to delete them with it, saying so.
+ * A scenario that recorded runs use blocks that too, so history is never
+ * lost to a suite deletion.
+ */
+export function SuiteRow({ id, name, canEdit }: { id: string; name: string; canEdit: boolean }) {
+  const router = useRouter();
+  const [mode, setMode] = useState<"idle" | "rename" | "delete" | "cascade">("idle");
+  const [draft, setDraft] = useState(name);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(action: () => Promise<void>) {
+    setPending(true);
+    setError(null);
+    try {
+      await action();
+      setMode("idle");
+      router.refresh();
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 409 && mode === "delete") {
+        setMode("cascade");
+        setError(cause.message);
+      } else {
+        setError(message(cause, "The suite was not changed."));
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {mode === "rename" ? (
+          <input
+            aria-label={`New name for ${name}`}
+            value={draft}
+            maxLength={200}
+            onChange={(e) => setDraft(e.target.value)}
+            className="h-8 min-w-0 flex-1 rounded-md border border-line-strong bg-surface-raised px-2 text-[13px] text-text"
+          />
+        ) : (
+          <span>{name}</span>
+        )}
+        {canEdit ? (
+          <span className="flex flex-wrap gap-1.5">
+            {mode === "rename" ? (
+              <>
+                <Button size="sm" tone="primary" disabled={pending || !draft.trim()} onClick={() => run(() => api.renameSuite(id, draft.trim()).then(() => undefined))}>
+                  Save
+                </Button>
+                <Button size="sm" disabled={pending} onClick={() => setMode("idle")}>Cancel</Button>
+              </>
+            ) : mode === "idle" ? (
+              <>
+                <Button size="sm" tone="quiet" onClick={() => { setDraft(name); setMode("rename"); }}>Rename</Button>
+                <Button size="sm" tone="quiet" onClick={() => setMode("delete")}>Delete…</Button>
+              </>
+            ) : null}
+          </span>
+        ) : null}
+      </div>
+      {mode === "delete" ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[12px] text-text-muted">Delete this suite?</span>
+          <Button size="sm" tone="danger" disabled={pending} onClick={() => run(() => api.deleteSuite(id, false))}>Delete</Button>
+          <Button size="sm" disabled={pending} onClick={() => setMode("idle")}>Keep it</Button>
+        </div>
+      ) : null}
+      {mode === "cascade" ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[12px] text-text-muted">Delete it and every scenario in it? Not reversible.</span>
+          <Button size="sm" tone="danger" disabled={pending} onClick={() => run(() => api.deleteSuite(id, true))}>Delete all</Button>
+          <Button size="sm" disabled={pending} onClick={() => { setMode("idle"); setError(null); }}>Keep it</Button>
+        </div>
+      ) : null}
+      {error ? <p role="alert" className="text-[12px] text-bad">{error}</p> : null}
+    </div>
+  );
+}
+
 export function AddScenario({
   suites,
   library,

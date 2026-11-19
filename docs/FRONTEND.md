@@ -19,7 +19,8 @@ This file is the working reference.
 | `/app/runs` | Partial prerender | run list with filters |
 | `/app/runs/[runId]` | Partial prerender | run report, run turns, artefact audio, evaluations with every measured metric, channel conditions with their source; reference transcripts per bot turn (read; added by members and above); JSON/CSV export links; Delete (finished runs, shown to admins and owners of its workspace, confirmed in-page) |
 | `/app/new-test` | Partial prerender | scenarios, bot adapters; per-run channel conditions (`lib/conditions.ts`) |
-| `/app/scenarios` | Partial prerender | scenarios, languages, the shipped reference library (`/scenario-library`) |
+| `/app/scenarios` | Partial prerender | scenarios (archived on request), languages, the shipped reference library (`/scenario-library`); suite rename and delete |
+| `/app/scenarios/[scenarioId]` | Partial prerender | one scenario: edit (validated, then `PUT`), duplicate, archive/restore, delete (refused with the server's reason when runs use it); controls by role |
 | `/app/providers` | Partial prerender | 4 provider endpoints, languages |
 | `/app/analytics` | Partial prerender | analytics summary (grouped), daily trend, regression check; recent completed runs for the comparison pickers |
 | `/app/compare` | Partial prerender | `GET /analytics/compare` for two run ids |
