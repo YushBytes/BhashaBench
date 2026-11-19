@@ -344,6 +344,8 @@ export interface BotAdapter {
   /** Which setting is missing when unavailable. Names settings, never values. */
   unavailable_reason: string | null;
   supports_sessions: boolean;
+  /** Whether the caller can genuinely talk over the bot (a live audio stream). */
+  supports_caller_barge_in?: boolean;
   requires_credentials: boolean;
   accepts_containers: string[];
   notes: string[];
@@ -530,6 +532,8 @@ export interface CreateRunBody {
   degrade_caller_audio?: boolean;
   /** Channel-condition overrides; see lib/conditions.ts. */
   audio_conditions?: Record<string, number | string> | null;
+  /** Talk over the bot this far into each reply; needs a capable adapter. */
+  caller_barge_in_after_ms?: number | null;
   bot_adapter?: string | null;
 }
 

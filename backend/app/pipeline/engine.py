@@ -151,6 +151,9 @@ class RunConfig:
     """Operator values for `AudioConditions` fields. Each one present wins over
     the scenario's declaration for that field, and the run records which
     source every applied condition came from."""
+    caller_barge_in_after_ms: int | None = None
+    """Talk over the bot this far into each of its turns. Only an adapter that
+    `supports_caller_barge_in` can; any other is refused at creation."""
     degrade_caller_audio: bool = True
     """Whether to degrade before sending. False keeps the original on the wire.
 
@@ -425,6 +428,9 @@ class RunReport:
     """Scenario settings declared but not enforced by this run, each with
     `setting`, `declared` and `reason`. `None` for runs created before this
     was recorded - unknown, not "everything enforced"."""
+    caller_barge_in_after_ms: int | None
+    """Set when the caller talked over the bot; per-turn results are in each
+    bot_exchange stage's `caller_barge_in` evidence."""
     accent: dict[str, Any] | None
     """The scenario's `persona.accent`: `requested`, `applied` (`None` unless
     the speech provider genuinely renders it) and `reason`. `None` when the
@@ -572,6 +578,15 @@ class RunEngine:
         """
         config.validate()
         self._check_adapter_fits_mode(config.mode)
+        if (
+            config.caller_barge_in_after_ms is not None
+            and not self._bot.capabilities.supports_caller_barge_in
+        ):
+            raise PipelineConfigurationError(
+                f"the '{self._bot.capabilities.name}' adapter cannot interrupt the bot: "
+                "caller barge-in needs a live, full-duplex audio stream (ws_voice). "
+                "Sequential turns would only simulate it."
+            )
 
         if config.uses_audio and self._stt_provider is None:
             raise PipelineConfigurationError(
@@ -632,6 +647,12 @@ class RunEngine:
             caller_provider=caller_meta.get("provider"),
             degrades=config.degrade_caller_audio,
         )
+        if config.caller_barge_in_after_ms is not None:
+            # The caller does talk over the bot in this run, so the generic
+            # "never interrupts" entry would be false. Say what happens instead.
+            unenforced = [
+                e for e in unenforced if e["setting"] != "constraints.allow_interruptions"
+            ]
         if accent is not None and accent["applied"] is None:
             unenforced.append(
                 {
@@ -660,6 +681,7 @@ class RunEngine:
             # entry and keeps its preset exactly.
             "degradation_requested": requested,
             "accent": accent,
+            "caller_barge_in_after_ms": config.caller_barge_in_after_ms,
             "settings_not_enforced": unenforced,
             "degrade_caller_audio": config.degrade_caller_audio and config.uses_audio,
             "degradation_seed": self._resolve_seed(config),
@@ -1207,6 +1229,10 @@ class RunEngine:
         # -- Bot exchange ---------------------------------------------------
         started = monotonic_seconds()
         try:
+            barge_in = meta.get("caller_barge_in_after_ms")
+            setter = getattr(self._bot, "set_caller_barge_in", None)
+            if barge_in is not None and setter is not None:
+                setter(barge_in)
             reply = await self._bot.send_turn(
                 outbound,
                 run_id=run_id,
@@ -2006,6 +2032,7 @@ class RunEngine:
             degradation_seed=meta.get("degradation_seed"),
             degradation_requested=meta.get("degradation_requested"),
             accent=meta.get("accent"),
+            caller_barge_in_after_ms=meta.get("caller_barge_in_after_ms"),
             settings_not_enforced=meta.get("settings_not_enforced"),
             awaiting_bot_text_for_turn=meta.get("awaiting_bot_text_for_turn"),
             awaiting_bot_audio_for_turn=meta.get("awaiting_bot_audio_for_turn"),

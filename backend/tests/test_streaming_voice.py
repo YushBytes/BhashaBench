@@ -186,6 +186,37 @@ class TestAgainstTheReferenceBot:
         assert 1.0 <= reply.stream["bot_speaking_wall_seconds"] <= 2.5
         assert 0 < reply.stream["bot_audio_seconds"] <= reply.stream["bot_speaking_wall_seconds"]
 
+    @pytest.mark.parametrize(
+        "bot", [(VoiceTurn(speech_ms=3000, yields_to_caller=True),)], indirect=True
+    )
+    def test_a_bot_that_yields_stops_soon_after_the_caller_barges_in(self, bot: str) -> None:
+        adapter = _adapter(bot)
+        adapter.set_caller_barge_in(400)
+        barge = asyncio.run(_turns(adapter, 1))[0].stream["caller_barge_in"]
+        assert barge["sent"] is True and barge["bot_yielded"] is True
+        assert barge["sent_after_bot_speech_ms"] >= 400
+        assert barge["bot_stopped_after_ms"] < 300  # real time, a real socket
+        assert "re-sent" in barge["source"]
+
+    @pytest.mark.parametrize("bot", [(VoiceTurn(speech_ms=2500),)], indirect=True)
+    def test_a_bot_that_talks_on_is_recorded_as_not_yielding(self, bot: str) -> None:
+        adapter = _adapter(bot)
+        adapter.set_caller_barge_in(400)
+        barge = asyncio.run(_turns(adapter, 1))[0].stream["caller_barge_in"]
+        assert barge["sent"] is True and barge["bot_yielded"] is False
+        assert barge["bot_stopped_after_ms"] > barge["yield_window_ms"]
+
+    @pytest.mark.parametrize("bot", [(VoiceTurn(speech_ms=200),)], indirect=True)
+    def test_a_turn_shorter_than_the_interruption_point_sends_nothing(self, bot: str) -> None:
+        adapter = _adapter(bot)
+        adapter.set_caller_barge_in(1500)
+        barge = asyncio.run(_turns(adapter, 1))[0].stream["caller_barge_in"]
+        assert barge["sent"] is False and barge["bot_yielded"] is None
+        assert "ended before" in barge["not_sent_reason"]
+
+    def test_without_a_request_there_is_no_barge_in_evidence(self, bot: str) -> None:
+        assert "caller_barge_in" not in asyncio.run(_turns(_adapter(bot), 1))[0].stream
+
     def test_a_wrong_token_is_refused_at_the_handshake(self, bot: str) -> None:
         with pytest.raises(BotUnavailableError):
             asyncio.run(_turns(_adapter(bot, token="not-the-token-0123456789"), 1))
@@ -315,3 +346,75 @@ class TestAStreamingRun:
         )
         assert response.status_code == 422
         assert "external_bot_test" in response.json()["error"]["message"]
+
+    @pytest.mark.parametrize(
+        "bot", [(VoiceTurn(speech_ms=2000, yields_to_caller=True),)], indirect=True
+    )
+    def test_a_run_with_caller_barge_in_records_it_on_every_exchange(
+        self,
+        bot: str,
+        pipeline_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(pipeline_tests, "build_adapter", lambda *a, **k: None)
+        pipeline_client.pipeline_state["adapter"] = _adapter(bot)
+        run = pipeline_tests._create(
+            pipeline_client,
+            scenario_ids,
+            mode="external_bot_test",
+            max_turns=2,
+            caller_barge_in_after_ms=300,
+        )
+        assert run["caller_barge_in_after_ms"] == 300
+        pipeline_client.post(f"{pipeline_tests.BASE}/{run['run_id']}/start")
+        report = pipeline_client.get(f"{pipeline_tests.BASE}/{run['run_id']}/report").json()
+        exchanges = [
+            e for e in report["events"] if e["stage"] == "bot_exchange" and e["status"] == "ok"
+        ]
+        assert exchanges
+        for exchange in exchanges:
+            barge = exchange["evidence"]["caller_barge_in"]
+            assert barge["sent"] is True and barge["bot_yielded"] is True
+
+    def test_an_adapter_without_a_live_stream_refuses_caller_barge_in(
+        self, pipeline_client: TestClient, scenario_ids: tuple[uuid.UUID, uuid.UUID]
+    ) -> None:
+        suite_id, scenario_id = scenario_ids
+        response = pipeline_client.post(
+            pipeline_tests.BASE,
+            json={
+                "suite_id": str(suite_id),
+                "scenario_id": str(scenario_id),
+                "mode": "audio_fixture_test",
+                "caller_barge_in_after_ms": 500,
+            },
+        )
+        assert response.status_code == 422
+        assert "cannot interrupt the bot" in response.json()["error"]["message"]
+
+    def test_the_adapter_listing_says_which_adapters_can_barge_in(
+        self, pipeline_client: TestClient
+    ) -> None:
+        listing = pipeline_client.get(f"{pipeline_tests.BASE}/bot-adapters/available").json()
+        capable = {a["name"]: a["supports_caller_barge_in"] for a in listing["adapters"]}
+        assert capable["ws_voice"] is True
+        assert capable["scripted"] is False and capable["http"] is False
+
+    @pytest.mark.parametrize("bot", [(VoiceTurn(),)], indirect=True)
+    def test_a_barge_in_run_no_longer_claims_the_caller_never_interrupts(
+        self,
+        bot: str,
+        pipeline_client: TestClient,
+        scenario_ids: tuple[uuid.UUID, uuid.UUID],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(pipeline_tests, "build_adapter", lambda *a, **k: None)
+        pipeline_client.pipeline_state["adapter"] = _adapter(bot)
+        plain = pipeline_tests._create(pipeline_client, scenario_ids, mode="external_bot_test")
+        barging = pipeline_tests._create(
+            pipeline_client, scenario_ids, mode="external_bot_test", caller_barge_in_after_ms=300
+        )
+        listed = [{e["setting"] for e in run["settings_not_enforced"]} for run in (plain, barging)]
+        assert "constraints.allow_interruptions" in listed[0]
+        assert "constraints.allow_interruptions" not in listed[1]

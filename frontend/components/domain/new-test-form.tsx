@@ -172,6 +172,9 @@ export function NewTestForm({
   const built = buildAudioConditions(conditions);
   const declared = built.body ? Object.keys(built.body).length : 0;
   const [adapter, setAdapter] = useState<string>(() => preferredAdapter(mode, adapters));
+  const [bargeIn, setBargeIn] = useState<string>("");
+  const canBargeIn =
+    adapters.adapters.find((item) => item.name === adapter)?.supports_caller_barge_in === true;
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -221,6 +224,7 @@ export function NewTestForm({
         max_turns: maxTurns.trim() === "" ? null : Number(maxTurns),
         degrade_caller_audio: degrade,
         audio_conditions: built.body,
+        caller_barge_in_after_ms: canBargeIn && bargeIn.trim() !== "" ? Number(bargeIn) : null,
         bot_adapter: adapter || null,
       });
       runId = created.run_id;
@@ -564,6 +568,27 @@ export function NewTestForm({
               </label>
             ))}
           </div>
+
+          <label className="mt-4 block text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted">
+            Caller interrupts the bot after (ms)
+            <input
+              type="number"
+              inputMode="numeric"
+              min={100}
+              max={10000}
+              step={50}
+              disabled={!canBargeIn}
+              value={canBargeIn ? bargeIn : ""}
+              onChange={(event) => setBargeIn(event.target.value)}
+              placeholder={canBargeIn ? "Off" : "Not supported by this adapter"}
+              className={cx(field, "mt-1 normal-case tracking-normal")}
+            />
+            <span className="mt-1 block text-[12px] font-normal normal-case tracking-normal text-text-muted">
+              {canBargeIn
+                ? "Each bot reply: once the bot has spoken this long, the caller talks over it, and the run records whether and how fast the bot stopped. The interruption re-sends the start of the caller's own turn audio: it tests yielding, not understanding."
+                : "Only an adapter with a live audio stream (ws_voice) can genuinely talk over the bot. Sequential turns cannot, so it is not offered rather than simulated."}
+            </span>
+          </label>
         </Step>
 
         <Step index={6} title="Review and start" done={Boolean(scenario)}>

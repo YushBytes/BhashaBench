@@ -1,6 +1,7 @@
 import { cx } from "@/components/ui/primitives";
 import { formatMs } from "@/lib/format";
 import type { StageEvent } from "@/lib/api/types";
+import { describeBargeIn } from "@/lib/streaming";
 
 /**
  * Every stage the pipeline ran, with its measured duration.
@@ -102,6 +103,11 @@ export function StageTimeline({ events }: { events: StageEvent[] }) {
                     {event.detail ? (
                       <span className="col-span-3 text-[12px] leading-relaxed text-text-dim">
                         {event.detail}
+                      </span>
+                    ) : null}
+                    {describeBargeIn(event.evidence) ? (
+                      <span className="col-span-3 text-[12px] leading-relaxed text-accent">
+                        {describeBargeIn(event.evidence)}
                       </span>
                     ) : null}
                   </li>

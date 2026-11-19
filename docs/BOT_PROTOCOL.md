@@ -139,6 +139,19 @@ records which rule ended the turn:
 - **Barge-in**: a voiced bot frame before `caller_turn_end`. The caller then
   yields - its remaining frames are not sent - and the turn records
   `barge_in: true` and `caller_truncated: true`.
+- **Caller barge-in** (opt-in per run, `caller_barge_in_after_ms`): once the
+  bot has spoken that long after `caller_turn_end`, BhashaBench sends more
+  caller frames over the bot's speech - the start of the caller's own turn
+  audio, re-sent, 600 ms by default - **without** another `caller_turn_end`.
+  A bot that handles barge-in stops its audio and may send `turn_end`. The
+  turn records `caller_barge_in`: `sent`, `sent_after_bot_speech_ms`,
+  `bot_voiced_ms_after`, `bot_stopped_after_ms` (to the bot's last voiced
+  frame after the interruption) and `bot_yielded` (stopped within
+  `yield_window_ms`, 1000 by default). If the bot's turn ends before it has
+  spoken that long, nothing is sent and `not_sent_reason` says so. This
+  tests whether the bot yields to speech, not whether it understands what
+  was said. The reference bot's `yields_to_caller` option implements the
+  well-behaved side.
 - **Voice activity is energy-based** (RMS ≥ -45 dBFS by default). A loud
   non-speech noise counts as speech; the threshold is recorded with every
   turn so a reader can tell a silent bot from a deaf detector.

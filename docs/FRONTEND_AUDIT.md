@@ -44,7 +44,7 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 | Accent | 4: no accent parameter exists anywhere in the product | implemented as a requested dimension: `persona.accent` from a catalogue (`app/core/accents.py`), validated against the language, recorded per run with `applied` null and the reason, because no speech provider documents an accented voice. Shown on the run and scenario pages |
 | Noise profile and seed | 1 | — |
 | Channel conditions (codec, jitter, dropout, gain, clipping, truncation, silence) | 2: accepted by the API per run, absent from the UI; and the run response dropped `conditions`/`condition_sources`, so nobody could see what applied | fixed: a "Channel conditions" section on New test (bounds tested against the backend), returned by the API and shown on the run page with each value's source |
-| Interruptions | 2: bot barge-in detected only by `ws_voice`; the caller never interrupts | stated, not changed |
+| Interruptions | 2: bot barge-in detected only by `ws_voice`; the caller never interrupts | caller barge-in implemented on `ws_voice` (per run, from New test): the caller talks over the bot and the run measures whether and how fast it stopped; shown on the stage timeline. Other adapters refuse it |
 | Code-mixing | 2: authorable; the deterministic caller does not honour it and the run says so | measured: each turn's script segments shown in the conversation; `script_mixing` and `wer_by_script` in evaluations (`bb-eval-2`). Script, not language, stated everywhere. Caller generation is still monolingual |
 | Execution and live progress | 1 | — |
 | Recordings and playback | 1 | — |

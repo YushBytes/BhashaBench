@@ -79,6 +79,10 @@ class BotCapabilities:
     accepts_containers: frozenset[str]
     notes: tuple[str, ...]
     """Honest limitations, in the same spirit as the speech providers'."""
+    supports_caller_barge_in: bool = False
+    """Whether the caller can genuinely talk over the bot: only an adapter
+    with a live, full-duplex audio stream can. A run that asks for caller
+    interruptions on any other adapter is refused, not simulated."""
 
 
 @runtime_checkable

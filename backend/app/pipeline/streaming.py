@@ -75,6 +75,14 @@ class TurnPolicy:
     yield_on_barge_in: bool = True
     """Stop streaming the caller's remaining audio when the bot talks over it,
     as a person would. Recorded either way."""
+    caller_barge_in_after_ms: float | None = None
+    """The reverse barge-in: once the bot has been speaking this long, the
+    caller talks over it. `None` (the default) never interrupts."""
+    caller_barge_in_ms: float = 600.0
+    """How much caller audio the interruption carries."""
+    yield_window_ms: float = 1000.0
+    """The bot counts as having yielded if no voiced audio of its own
+    arrives later than this after the interruption began."""
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -83,6 +91,9 @@ class TurnPolicy:
             "silence_timeout_seconds": self.silence_timeout_seconds,
             "max_turn_seconds": self.max_turn_seconds,
             "yield_on_barge_in": self.yield_on_barge_in,
+            "caller_barge_in_after_ms": self.caller_barge_in_after_ms,
+            "caller_barge_in_ms": self.caller_barge_in_ms,
+            "yield_window_ms": self.yield_window_ms,
         }
 
 

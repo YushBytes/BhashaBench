@@ -485,6 +485,7 @@ def _run(report: RunReport) -> RunResponse:
         settings_not_enforced=report.settings_not_enforced,
         degradation_requested=report.degradation_requested,
         accent=report.accent,
+        caller_barge_in_after_ms=report.caller_barge_in_after_ms,
         awaiting_bot_text_for_turn=report.awaiting_bot_text_for_turn,
         awaiting_bot_audio_for_turn=report.awaiting_bot_audio_for_turn,
         started_at=report.started_at,
@@ -597,6 +598,7 @@ def create_run(
                 bot_adapter=payload.bot_adapter or "scripted",
                 max_turns=payload.max_turns,
                 degrade_caller_audio=payload.degrade_caller_audio,
+                caller_barge_in_after_ms=payload.caller_barge_in_after_ms,
                 audio_overrides=(
                     payload.audio_conditions.model_dump(exclude_none=True)
                     if payload.audio_conditions is not None
@@ -1130,6 +1132,7 @@ def list_adapters(settings: SettingsDep) -> BotAdapterListResponse:
                 selected=capabilities.name == selected,
                 contacts_external_system=capabilities.contacts_external_system,
                 supports_sessions=capabilities.supports_sessions,
+                supports_caller_barge_in=capabilities.supports_caller_barge_in,
                 requires_credentials=capabilities.requires_credentials,
                 accepts_containers=sorted(capabilities.accepts_containers),
                 notes=list(capabilities.notes),

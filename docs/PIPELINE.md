@@ -261,7 +261,7 @@ value and the `reason` — and the API and inspector show it:
 
 | Setting | Listed when | Why |
 |---|---|---|
-| `constraints.allow_interruptions` | always | the caller never talks over the bot; only `ws_voice` detects the bot barging in |
+| `constraints.allow_interruptions` | unless the run sets `caller_barge_in_after_ms` | the caller does not talk over the bot. With that setting (only on `ws_voice`, which `supports_caller_barge_in`; any other adapter is refused with 422) it does, every bot turn, and each `bot_exchange` records `caller_barge_in` (see `docs/BOT_PROTOCOL.md`) |
 | `persona.accent` | the speech provider does not render it (today: always) | no configured provider documents an accented voice. The run's `accent` object records `requested`, `applied: null`, the provider and the reason |
 | `constraints.max_silence_seconds` | always | nothing re-prompts after silence; `ws_voice` ends a bot turn on its own configured timeout, not this value |
 | `constraints.required_phrases`, `forbidden_phrases` | non-empty | nothing checks the bot's replies (Phase 11) |

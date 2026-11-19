@@ -438,7 +438,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 3076 tests across 73 modules
+│   ├── tests/                 3084 tests across 73 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -772,10 +772,10 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 3076 tests** across seventy-three modules.
-**3035 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3084 tests** across seventy-three modules.
+**3043 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (3076) exceeds the number that run (3035). On
+why the collected total (3084) exceeds the number that run (3043). On
 Windows one more is skipped (a symlink test the OS refuses without
 developer mode), so a local run there reports 2989 passed, 42 skipped:
 
@@ -794,7 +794,7 @@ developer mode), so a local run there reports 2989 passed, 42 skipped:
 | `test_observability.py` | 18 | Phase 15 observability: `/metrics` off without a token, refusing a missing or wrong token, counting responses by method and status class, and rendering valid Prometheus text with the run gauge; a request id on every response and error, a safe caller id echoed and an unsafe one (too long, spaces, header injection, markup) replaced, log records carrying the current id, JSON log lines with the standard fields and structured extras, credentials redacted in message and extras, the text format redacting the whole line and traceback, wire-level loggers held at INFO under a DEBUG process, logging setup never removing another handler, and the format setting accepting only `text` or `json`
 | `test_benchmark_gate.py` | 6 | The CI regression gate: every reference scenario run as a `text_bot_test` against the scripted reference bot and evaluated, compared with `benchmarks/baseline.json` so a worse verdict fails the build; the baseline matching `scenarios/` and containing passes worth guarding; a deliberately broken (refusing) bot tripping the gate on every baseline pass; and the comparison rules for worse, better, missing, new and unknown verdicts
 | `test_hardening.py` | 14 | Phase 14 part 2 hardening: the sliding-window limiter (limit, window, independent keys, 0 disables), 429 with `Retry-After` on the API, liveness never limited, login limited per email across addresses and checked before the right password is verified, `X-Forwarded-For` ignored unless trusted, and the security headers on responses and errors, HSTS only when deployed, no API CSP on the docs, `no-store` on auth
-| `test_streaming_voice.py` | 18 | Phase 9 streaming voice: framing and levels, latency from caller end to first voiced frame, end-of-turn silence, silence timeout, the deadline and barge-in on a simulated clock; then the `ws_voice` adapter against the reference bot over a real socket in real time - a prompt answer with measured latency, one socket across turns, end-pointing without a signal, a barge-in making the caller yield, a silent bot timing out with no audio, an endless bot cut off at the deadline, a wrong token and an off-allowlist host refused, no token in errors, a redirect refused without the token reaching its target - and a whole `external_bot_test` run recording per-turn streaming evidence and a silent bot turn, with fixture mode refusing an external voice bot
+| `test_streaming_voice.py` | 26 | Phase 9 streaming voice: framing and levels, latency from caller end to first voiced frame, end-of-turn silence, silence timeout, the deadline and barge-in on a simulated clock; then the `ws_voice` adapter against the reference bot over a real socket in real time - a prompt answer with measured latency, one socket across turns, end-pointing without a signal, a barge-in making the caller yield, a silent bot timing out with no audio, an endless bot cut off at the deadline, a wrong token and an off-allowlist host refused, no token in errors, a redirect refused without the token reaching its target - and a whole `external_bot_test` run recording per-turn streaming evidence and a silent bot turn, with fixture mode refusing an external voice bot; caller barge-in against the real reference bot in real time - a yielding bot stopping within 300 ms, one that talks on recorded as not yielding, a turn too short to interrupt sending nothing with its reason, no evidence unless requested - a whole run recording it per exchange, non-streaming adapters refused, the listing naming capable adapters, and the false 'never interrupts' caveat dropped |
 | `test_background_runs.py` | 8 | Phase 9 background execution: a run started with `background=true` answers 202 and completes after its request, a crash closes the run as `failed`/`abandoned` by the background worker with a redacted reason, a finished run and a run with no free slot are refused before the 202 with nothing started, the recovery sweep closing runs whose worker died while leaving recent and protected runs alone, a zero interval starting no loop, and the app never sweeping with the global settings
 | `test_telephony_calls.py` | 16 | Phase 8 telephony with the mock provider against PostgreSQL and the real webhook: a placed call stored masked and labelled mocked with the caller namespace untouched, placing alone setting no status, an off-list number refused before the provider is contacted, concurrent, per-run and per-day limits, signed events driving each of four outcomes through the call and its conversation (`DIALING` first, `BUSY`/`NO_ANSWER` only from events), unsigned, wrong-secret and tampered events changing nothing, duplicates and stale events recorded but not applied, unknown providers and calls 404, the webhook absent with telephony off, oversized events refused, calls deleted with their run, and an invalid allowlist failing at startup
 | `test_telephony_core.py` | 44 | Phase 8 telephony core, offline: E.164 normalisation and refusal, masking, every guardrail refusing before dialling and never naming the full number, an empty allowlist allowing nothing, webhook signatures refusing edits, missing headers, bad timestamps, replays and an unconfigured secret, every provider status mapped and calls only moving forward, `telephony_test` still unimplemented, the mock labelled mocked with four scripted outcomes and strict event parsing, and the registry refusing the mock in production and any provider that does not exist
@@ -881,7 +881,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 3035 passed, 41 skipped ================
+================ 3043 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

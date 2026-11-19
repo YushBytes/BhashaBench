@@ -25,7 +25,7 @@ import io
 import json
 import uuid
 import wave
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import websockets
@@ -49,6 +49,7 @@ from app.pipeline.streaming import (
     EndedBy,
     TurnPolicy,
     frames,
+    level_dbfs,
 )
 from app.transcription.redaction import redact
 from app.utils.timing import monotonic_seconds
@@ -69,7 +70,11 @@ CAPABILITIES = BotCapabilities(
         "Voice activity is energy-based; its threshold is recorded with every turn.",
         "Bot latency is caller end to first voiced bot frame, on our monotonic clock.",
         "Speaks the project's own protocol, not any vendor's.",
+        "Caller barge-in re-sends the start of the caller's own turn audio over the "
+        "bot's speech: it tests whether the bot yields to speech, not whether it "
+        "understands the interruption.",
     ),
+    supports_caller_barge_in=True,
 )
 
 
@@ -136,6 +141,13 @@ class WebSocketVoiceBotAdapter:
     def capabilities(self) -> BotCapabilities:
         return CAPABILITIES
 
+    def set_caller_barge_in(self, after_ms: float | None) -> None:
+        """Interrupt the bot once it has spoken `after_ms`; `None` never does."""
+        self._config = replace(
+            self._config,
+            turn_policy=replace(self._config.turn_policy, caller_barge_in_after_ms=after_ms),
+        )
+
     async def _connect(self, run_id: uuid.UUID, language: str) -> Any:
         if self._socket is not None and self._run == run_id:
             return self._socket
@@ -199,6 +211,9 @@ class WebSocketVoiceBotAdapter:
         tracker = BotTurnTracker(policy=policy, caller_started_at=monotonic_seconds())
         ended: asyncio.Future[EndedBy] = asyncio.get_running_loop().create_future()
         sent = 0
+        # Caller barge-in: when it began, and the bot's voiced audio after it.
+        interject: dict[str, Any] = {"at": None, "last_bot_voice": None, "bot_frames": 0}
+        interjection = caller[: max(int(policy.caller_barge_in_ms // FRAME_MS), 1)]
 
         async def stream_caller() -> None:
             nonlocal sent
@@ -210,6 +225,30 @@ class WebSocketVoiceBotAdapter:
                 await asyncio.sleep(FRAME_MS / 1000)
             await socket.send(json.dumps({"type": "caller_turn_end", "turn_index": turn_index}))
             tracker.caller_ended_at = monotonic_seconds()
+
+        async def interrupt() -> None:
+            """Talk over the bot once it has spoken for `caller_barge_in_after_ms`."""
+            after = policy.caller_barge_in_after_ms
+            if after is None:
+                return
+            while not ended.done():
+                now = monotonic_seconds()
+                started = tracker.speech_started_at
+                if (
+                    started is not None
+                    and tracker.caller_ended_at is not None
+                    and (now - started) * 1000 >= after
+                ):
+                    break
+                await asyncio.sleep(FRAME_MS / 1000)
+            else:
+                return
+            interject["at"] = monotonic_seconds()
+            for frame in interjection:
+                if ended.done():
+                    break
+                await socket.send(frame)
+                await asyncio.sleep(FRAME_MS / 1000)
 
         async def listen() -> None:
             while not ended.done():
@@ -225,7 +264,14 @@ class WebSocketVoiceBotAdapter:
                         raise BotAdapterError(
                             "the bot sent an oversized audio frame", adapter=PROVIDER_NAME
                         )
-                    reason = tracker.observe(message, monotonic_seconds())
+                    at = monotonic_seconds()
+                    if (
+                        interject["at"] is not None
+                        and level_dbfs(message) >= policy.voice_threshold_dbfs
+                    ):
+                        interject["last_bot_voice"] = at
+                        interject["bot_frames"] += 1
+                    reason = tracker.observe(message, at)
                 elif (
                     json.loads(message).get("type") == "turn_end"
                     and tracker.speech_started_at is not None
@@ -240,6 +286,7 @@ class WebSocketVoiceBotAdapter:
 
         sender = asyncio.create_task(stream_caller())
         listener = asyncio.create_task(listen())
+        interrupter = asyncio.create_task(interrupt())
         try:
             async with asyncio.timeout(timeout_seconds):
                 await sender
@@ -253,9 +300,10 @@ class WebSocketVoiceBotAdapter:
                 "the voice bot closed the connection mid-turn", adapter=PROVIDER_NAME
             ) from exc
         finally:
-            listener.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await listener
+            for task in (listener, interrupter):
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
             if not sender.done():
                 sender.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -267,6 +315,10 @@ class WebSocketVoiceBotAdapter:
             caller_frames_total=len(caller),
             ended_at=monotonic_seconds(),
         )
+        if policy.caller_barge_in_after_ms is not None:
+            evidence["caller_barge_in"] = _barge_in_evidence(
+                policy, interject, tracker.speech_started_at, len(interjection)
+            )
         bot_audio = b"" if tracker.speech_started_at is None else _wav(bytes(tracker.audio))
         return BotReply(
             audio=bot_audio,
@@ -283,6 +335,43 @@ class WebSocketVoiceBotAdapter:
                 await self._socket.send(json.dumps({"type": "hangup", "reason": "run_finished"}))
                 await self._socket.close()
         self._socket, self._run = None, None
+
+
+def _barge_in_evidence(
+    policy: TurnPolicy, interject: dict[str, Any], speech_started: float | None, frames_: int
+) -> dict[str, Any]:
+    """What happened when the caller tried to talk over the bot.
+
+    `bot_stopped_after_ms` is measured: the time from the interruption's
+    start to the bot's last voiced frame after it (0 when none arrived).
+    `bot_yielded` compares it with `yield_window_ms`. Nothing here is set
+    when the interruption was not sent, and the reason says why.
+    """
+    base: dict[str, Any] = {
+        "requested_after_ms": policy.caller_barge_in_after_ms,
+        "interjection_ms": frames_ * FRAME_MS,
+        "source": "the start of this turn's own caller audio, re-sent over the bot's speech",
+        "yield_window_ms": policy.yield_window_ms,
+    }
+    began = interject["at"]
+    if began is None or speech_started is None:
+        return {
+            **base,
+            "sent": False,
+            "not_sent_reason": "the bot's turn ended before it had spoken that long",
+            "bot_stopped_after_ms": None,
+            "bot_yielded": None,
+        }
+    last = interject["last_bot_voice"]
+    stopped_after = 0.0 if last is None else round((last - began) * 1000, 1)
+    return {
+        **base,
+        "sent": True,
+        "sent_after_bot_speech_ms": round((began - speech_started) * 1000, 1),
+        "bot_voiced_ms_after": interject["bot_frames"] * FRAME_MS,
+        "bot_stopped_after_ms": stopped_after,
+        "bot_yielded": stopped_after <= policy.yield_window_ms,
+    }
 
 
 __all__ = ["CAPABILITIES", "PROTOCOL", "VoiceBotConfig", "WebSocketVoiceBotAdapter"]

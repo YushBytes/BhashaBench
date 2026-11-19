@@ -38,6 +38,9 @@ class VoiceTurn:
     speech_ms: int = 600
     signal_end: bool = True
     """Send `turn_end` after speaking. Without it the caller must end-point."""
+    yields_to_caller: bool = False
+    """For `answer`: stop speaking as soon as voiced caller audio arrives
+    mid-reply, as a well-behaved bot should when the caller barges in."""
 
 
 DEFAULT_VOICE_SCRIPT: tuple[VoiceTurn, ...] = (VoiceTurn(),)
@@ -54,6 +57,43 @@ def _tone_frame(index: int, amplitude: int = 8000) -> bytes:
 
 
 SILENT_FRAME = b"\x00\x00" * FRAME_SAMPLES
+
+
+VOICED_RMS = 300
+"""Root-mean-square amplitude above which a caller frame counts as speech."""
+
+
+def _voiced(frame: bytes) -> bool:
+    count = len(frame) // 2
+    if count == 0:
+        return False
+    samples = struct.unpack(f"<{count}h", frame[: count * 2])
+    return math.sqrt(sum(s * s for s in samples) / count) >= VOICED_RMS
+
+
+async def _speak_until_interrupted(socket: WebSocket, milliseconds: int) -> bool:
+    """Speak, listening at the same time; stop on voiced caller audio.
+
+    Returns True if the caller interrupted. Caller frames read here are
+    consumed: they were spoken over this reply, not into the next turn.
+    """
+    speaking = asyncio.create_task(_speak(socket, milliseconds))
+    try:
+        while not speaking.done():
+            try:
+                message = await asyncio.wait_for(socket.receive(), timeout=FRAME_MS / 1000)
+            except TimeoutError:
+                continue
+            if message.get("type") == "websocket.disconnect":
+                raise WebSocketDisconnect()
+            frame = message.get("bytes")
+            if frame is not None and _voiced(frame):
+                speaking.cancel()
+                return True
+        return False
+    finally:
+        if not speaking.done():
+            speaking.cancel()
 
 
 async def _speak(socket: WebSocket, milliseconds: int) -> None:
@@ -114,7 +154,10 @@ def register_voice(app: FastAPI, *, token: str, script: tuple[VoiceTurn, ...]) -
                     continue
                 if plan.behaviour == "answer":
                     await asyncio.sleep(plan.delay_ms / 1000)
-                    await _speak(socket, plan.speech_ms)
+                    if plan.yields_to_caller:
+                        await _speak_until_interrupted(socket, plan.speech_ms)
+                    else:
+                        await _speak(socket, plan.speech_ms)
                     if plan.signal_end:
                         await socket.send_json({"type": "turn_end", "turn_index": turn})
                 elif plan.behaviour == "endless":

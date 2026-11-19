@@ -255,3 +255,31 @@ describe("metricRows", async () => {
     assert.match(row.detail, /not a judgement/);
   });
 });
+
+describe("describeBargeIn", async () => {
+  const { describeBargeIn } = await import("../lib/streaming.ts");
+
+  it("says nothing when no interruption was requested", () => {
+    assert.equal(describeBargeIn({ ended_by: "bot_signal" }), null);
+    assert.equal(describeBargeIn(null), null);
+  });
+
+  it("states the measured yield, or the failure to yield", () => {
+    const base = { sent: true, sent_after_bot_speech_ms: 412.4, yield_window_ms: 1000 };
+    assert.equal(
+      describeBargeIn({ caller_barge_in: { ...base, bot_yielded: true, bot_stopped_after_ms: 80 } }),
+      "Caller talked over the bot 412 ms into its reply; the bot stopped within 80 ms.",
+    );
+    assert.match(
+      describeBargeIn({ caller_barge_in: { ...base, bot_yielded: false, bot_stopped_after_ms: 1700 } }),
+      /kept talking for 1700 ms \(did not yield within 1000 ms\)/,
+    );
+  });
+
+  it("gives the reason instead of a result when nothing was sent", () => {
+    assert.equal(
+      describeBargeIn({ caller_barge_in: { sent: false, not_sent_reason: "the bot's turn ended first" } }),
+      "Caller barge-in not sent: the bot's turn ended first.",
+    );
+  });
+});

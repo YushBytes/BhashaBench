@@ -61,6 +61,17 @@ class CreateRunRequest(BaseModel):
         "original - distinct from a `clean` profile, which is a deliberate "
         "choice of condition rather than a stage that did not run.",
     )
+    caller_barge_in_after_ms: int | None = Field(
+        default=None,
+        ge=100,
+        le=10000,
+        description=(
+            "Make the caller talk over the bot once the bot has spoken this many "
+            "milliseconds, every turn, and measure whether it yields. Needs an "
+            "adapter with `supports_caller_barge_in` (today `ws_voice`); refused "
+            "otherwise rather than simulated."
+        ),
+    )
     audio_conditions: AudioConditions | None = Field(
         default=None,
         description=(
@@ -205,6 +216,13 @@ class RunResponse(BaseModel):
     bot_greeting: str | None = Field(
         default=None,
         description="The greeting the bot returned when the session opened. Not a turn.",
+    )
+    caller_barge_in_after_ms: int | None = Field(
+        default=None,
+        description=(
+            "When set, the caller talked over the bot this far into each bot turn. "
+            "Each bot_exchange stage's evidence has `caller_barge_in` with what happened."
+        ),
     )
     noise_profile: NoiseProfile
     scenario_noise_profile: str | None = Field(
@@ -448,6 +466,13 @@ class BotAdapterResponse(BaseModel):
         description="Which setting is missing, when unavailable. Names settings, never values.",
     )
     supports_sessions: bool
+    supports_caller_barge_in: bool = Field(
+        default=False,
+        description=(
+            "Whether the caller can genuinely talk over the bot. Only a live, "
+            "full-duplex audio stream can; a run asking for it elsewhere is refused."
+        ),
+    )
     requires_credentials: bool
     accepts_containers: list[str]
     notes: list[str] = Field(description="Honest limitations.")
