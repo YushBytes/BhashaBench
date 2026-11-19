@@ -172,6 +172,39 @@ many backend files are cloud placeholders that Docker reports as
 its exit criterion (a week unattended with alerting, a restore rehearsed on
 the deployment) needs a host, which needs the owner's purchase.
 
+| Completion round (2026-11-19) | Commit | CI |
+|------|--------|----|
+| Scenario archival; DELETE with recorded runs was a 500, now a 409 (migration `92a1fdd146b8`) | `729f50a` | ✅ |
+| Scenario edit/duplicate/archive/delete and suite rename/delete in the UI | `075d332` | ✅ 44470765603 |
+| Accent as a requested dimension, recorded as applied or not (spec v3) | `d26d720` | ✅ 44472010431 |
+| Code-mixing as script switching; `wer_by_script`; evaluator `bb-eval-2` | `1ce426e` | ✅ 44473994594 |
+| Caller barge-in on `ws_voice`; yield window 500 ms with its stated limit | `50f21ea`, `df91c7c` | ✅ 44475965436 |
+| PDF via print stylesheet; project and suite in run exports | `39888ce` | ✅ 44477267229 |
+| Component tests (vitest, jsdom, Testing Library) in CI | `200ee49` | ✅ 44477876319 |
+
+Measured at `200ee49`: backend 3084 collected, 3042 passed, 42 skipped on
+Windows (41 opt-in live, 1 symlink); frontend 50 unit + 14 component tests,
+typecheck, lint and build pass; `local_e2e.py --restart` 74/74 from a fresh
+clone with an empty database (all 8 migrations) on 3100/8100, and on the
+running stack. On the running stack an accented scenario recorded
+`applied: null` with its reason, and a `ws_voice` run with caller barge-in
+recorded the interruption (the reference bot's 600 ms reply ended within the
+500 ms window - the case the evidence's `limitation` names).
+
+Not done in this round, each for the reason given:
+- **Comparing more than two runs** at once: comparison is pairwise; groups
+  are compared by the regression check on Analytics.
+- **Accent actually rendered**: no speech provider documents an accented
+  voice; the architecture is ready for one that does.
+- **Code-mixed caller generation**: the caller's phrase tables are
+  monolingual; writing mixed tables needs a reviewer fluent in each pair.
+- **Semantic correctness, context retention, response relevance, language
+  quality**: need the LLM judge, which is offline-only and not validated
+  against human labels; reported as unavailable, never scored.
+- **Live provider, telephony and public deployment verification**: need the
+  owner's authorisation, credentials and spending. Unchanged below.
+- **Load testing at scale**: only the recorded local run exists.
+
 ## Next task
 
 **Blocked on the owner.** Choose and pay for a VM and a domain
