@@ -59,7 +59,9 @@ from app.core.config import Settings
 from app.db.session import get_session_factory
 from app.evaluation import scripts
 from app.models.test_run import RunStatus, TestRun
+from app.pipeline.bots.protocol import BotAdapter
 from app.pipeline.bots.registry import (
+    INTEGRATION_PREFIX,
     SCRIPTED_ADAPTER,
     adapter_unavailable_reason,
     available_adapters,
@@ -106,7 +108,7 @@ from app.schemas.pipeline import (
     StageEventResponse,
 )
 from app.schemas.suite import Page
-from app.services import access_service, retention_service
+from app.services import access_service, integration_service, retention_service
 from app.services.errors import ConflictError, NotFoundError
 from app.services.transcription_service import TranscriptionService
 from app.speech.registry import build_provider as build_speech_provider
@@ -159,9 +161,18 @@ def get_engine_factory(
                 settings.pipeline_fixture_audio_path,
                 count=settings.caller_max_turns,
             )
-        adapter = build_adapter(
-            resolved_adapter or settings.pipeline_bot_adapter, replies=replies, settings=settings
-        )
+        adapter: BotAdapter
+        if resolved_adapter.startswith(INTEGRATION_PREFIX):
+            # A connected bot: configured from its own row, not from settings.
+            adapter = integration_service.adapter_for(
+                session, settings, uuid.UUID(resolved_adapter[len(INTEGRATION_PREFIX) :])
+            )
+        else:
+            adapter = build_adapter(
+                resolved_adapter or settings.pipeline_bot_adapter,
+                replies=replies,
+                settings=settings,
+            )
         # The scripted bot's side of an offline_simulation, as text. Only the
         # scripted adapter reads it; the manual adapter waits for /bot-text.
         text_replies: tuple[str, ...] | None = None
@@ -220,7 +231,7 @@ class BackgroundExecutor:
         try:
             run = pipeline_repo.get_run(session, run_id)
             adapter = (
-                None if run is None else pipeline_repo.pipeline_metadata_of(run).get("bot_adapter")
+                None if run is None else _adapter_spec(pipeline_repo.pipeline_metadata_of(run))
             )
             built = get_engine_factory(self._settings, session)(adapter)
             engine = next(built)
@@ -245,6 +256,20 @@ EngineFactoryDep = Annotated[
 ]
 
 
+def _adapter_spec(meta: dict[str, object]) -> str | None:
+    """What to ask the engine factory for, from a run's recorded metadata.
+
+    A run that used a connected bot recorded `bot_integration`; its adapter is
+    rebuilt from that integration's row (`integration:<id>`), never from the
+    server's settings for the same protocol, which describe a different bot.
+    """
+    integration = meta.get("bot_integration")
+    if isinstance(integration, dict) and integration.get("id"):
+        return f"{INTEGRATION_PREFIX}{integration['id']}"
+    name = meta.get("bot_adapter")
+    return str(name) if name else None
+
+
 def _recorded_adapter(session: DbSession, run_id: uuid.UUID) -> str | None:
     """The bot adapter this run recorded when it was created, if any.
 
@@ -254,8 +279,7 @@ def _recorded_adapter(session: DbSession, run_id: uuid.UUID) -> str | None:
     run = pipeline_repo.get_run(session, run_id)
     if run is None:
         return None
-    name = pipeline_repo.pipeline_metadata_of(run).get("bot_adapter")
-    return str(name) if name else None
+    return _adapter_spec(pipeline_repo.pipeline_metadata_of(run))
 
 
 def get_engine(
@@ -301,6 +325,8 @@ def get_reading_engine(
     and cancellable rather than locking its own evidence away.
     """
     recorded = _recorded_adapter(session, run_id)
+    # A connected bot is never contacted on these paths, and it may have been
+    # deleted or demoted since: such a run is read with the default adapter.
     usable = recorded if recorded in available_adapters() else None
     yield from factory(usable)
 
@@ -582,10 +608,27 @@ def create_run(
     factory: EngineFactoryDep,
     principal: CurrentPrincipal,
     session: DbSession,
+    settings: SettingsDep,
 ) -> RunResponse:
     """Open a run for one scenario."""
     access_service.require_run_target(session, principal, payload.suite_id, payload.scenario_id)
-    engine_iter = factory(payload.bot_adapter)
+    integration = (
+        None
+        if payload.bot_integration_id is None
+        else integration_service.for_new_run(
+            session,
+            principal,
+            settings,
+            payload.bot_integration_id,
+            payload.suite_id,
+            payload.bot_adapter,
+        )
+    )
+    engine_iter = factory(
+        payload.bot_adapter
+        if integration is None
+        else f"{INTEGRATION_PREFIX}{integration.integration_id}"
+    )
     engine = next(engine_iter)
     try:
         run = engine.create(
@@ -595,7 +638,9 @@ def create_run(
                 mode=payload.mode,
                 noise_profile=payload.noise_profile or NoiseProfile.CLEAN,
                 seed=payload.seed,
-                bot_adapter=payload.bot_adapter or "scripted",
+                bot_adapter=(
+                    integration.protocol if integration else payload.bot_adapter or "scripted"
+                ),
                 max_turns=payload.max_turns,
                 degrade_caller_audio=payload.degrade_caller_audio,
                 caller_barge_in_after_ms=payload.caller_barge_in_after_ms,
@@ -606,6 +651,10 @@ def create_run(
                 ),
             ),
         )
+        if integration is not None:
+            meta = pipeline_repo.pipeline_metadata_of(run)
+            meta["bot_integration"] = integration.as_metadata()
+            pipeline_repo.update_pipeline_metadata(session, run, meta)
         session.commit()
         return _run(engine.report(run.id))
     finally:

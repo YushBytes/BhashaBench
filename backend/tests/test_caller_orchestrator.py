@@ -463,14 +463,16 @@ class TestPersistence:
         nothing about Phases 1-5 moves."""
         from sqlalchemy import inspect
 
-        # Phases 8, 11 and 14 are the only phases since 2 to add tables, and
-        # they name them; anything else appearing would be an unannounced change.
+        # Phases 8, 11 and 14 and bring-your-own-bot are the only work since
+        # Phase 2 to add tables, and they name them; anything else appearing
+        # would be an unannounced change.
         announced = {"run_evaluations", "transcript_references", "telephony_calls"} | {
             "users",
             "auth_sessions",
             "workspaces",
             "workspace_memberships",
             "projects",
+            "bot_integrations",
         }
         tables = set(inspect(db_session.get_bind()).get_table_names())
         assert announced <= tables

@@ -115,7 +115,11 @@ the production host after the first backup.
 
 - `SECRET_KEY`: replace in `.env.production`, `up -d`. Signed audio links
   stop working at once (that is the point); sessions are stored server-side
-  and survive.
+  and survive. **Connected bots' tokens are encrypted with a key derived from
+  `SECRET_KEY`**, so after a rotation every integration's check and runs
+  answer 409 "the stored token cannot be read"; each workspace re-enters its
+  bot's token (Bots -> the integration -> Replace token), which also resets it
+  to `unverified` until it is checked again.
 - A provider key: replace and restart; nothing is cached.
 - A user's sessions: change their password (`POST /auth/password` revokes
   every other session), or deactivate the account.

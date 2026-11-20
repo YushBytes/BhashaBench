@@ -7,6 +7,7 @@ missing from this list silently disappears from migrations.
 """
 
 from app.db.base import Base
+from app.models.bot_integration import BotIntegration, CheckStatus, IntegrationProtocol
 from app.models.call_session import CallSession, CallStatus
 from app.models.conversation_turn import ConversationTurn, Speaker
 from app.models.evaluation import RunEvaluation, TranscriptReference, Verdict
@@ -19,9 +20,12 @@ from app.models.test_run import RunStatus, TestRun
 __all__ = [
     "AuthSession",
     "Base",
+    "BotIntegration",
     "CallSession",
     "CallStatus",
+    "CheckStatus",
     "ConversationTurn",
+    "IntegrationProtocol",
     "Project",
     "Role",
     "RunEvaluation",

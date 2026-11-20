@@ -180,6 +180,20 @@ creating a second account. `password_hash` is a self-describing scrypt string
 credentials. Sessions carry an absolute `expires_at`, a `last_seen_at` for the
 idle timeout, and `revoked_at` for logout; they cascade from their user.
 
+### `bot_integrations` (bring your own bot)
+
+A chatbot a workspace connected, cascading from its project. `(project_id,
+name)` is unique. `protocol` is CHECK-constrained to `http` or `ws_voice`.
+`credential_sealed` is the AES-256-GCM ciphertext of the bearer token
+(`app/core/secretbox.py`), with the row's id as associated data so a
+ciphertext copied to another row does not decrypt; `credential_hint` holds the
+last four characters and is all any response shows. `check_status`
+(`unverified`, `connected`, `failed`) is set only by a connection check and
+reset to `unverified` by any change of URL or token; `last_check` is that
+check's outcome and verified capabilities. Runs reference an integration by
+id inside their own metadata, not by foreign key, so a deleted integration
+leaves the runs' evidence intact.
+
 `workspace_memberships` holds one CHECK-constrained `role` (`owner`, `admin`,
 `member`, `viewer`) per user per workspace. `projects` reference workspaces
 with `ON DELETE RESTRICT`: there is no workspace deletion, and if one is
@@ -379,6 +393,7 @@ target whatever the application itself would connect to.
 | `b588560f044d` | Add `test_suites.project_id` (NOT NULL, `ON DELETE RESTRICT`) and make suite names unique per project. Existing suites move to a member-less `legacy` workspace; downgrade refuses if two projects share a suite name |
 | `bcf146f6c696` | Add `telephony_calls` (Phase 8): one row per call attempt and its provider events; number stored masked (CHECK), cascades from its conversation |
 | `92a1fdd146b8` | Add nullable `scenarios.archived_at`: archival instead of deleting a scenario that recorded runs reference |
+| `59b9983c8f1e` | Add `bot_integrations` (bring your own bot): protocol, URL, sealed token and last check per connected bot; cascades from its project |
 
 All four are reversible. The initial migration's `downgrade()` drops everything in
 reverse dependency order and is exercised on every test run, so it is

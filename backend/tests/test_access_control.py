@@ -55,6 +55,15 @@ telephony webhook, whose credential is the provider's signature over the
 body rather than a session (tested in test_telephony_calls.py)."""
 
 
+INTEGRATION_BODY = {
+    "name": "sweep bot",
+    "protocol": "http",
+    "url": "https://bot.example.com",
+    "token": "sweep-token-0123456789abcdef",
+}
+"""A connected bot for the sweep. Saving contacts nothing, so no bot is needed."""
+
+
 READ_ONLY_POSTS = {("post", "/api/v1/test-runs/{run_id}/audio-links")}
 """POSTs that need only `view` and change nothing: minting a signed link to
 audio the caller can already play. Compared against the owner like a GET."""
@@ -99,7 +108,7 @@ class TestEveryPrivateRouteNeedsACredential:
         ids = {
             name: uuid.uuid4()
             for name in ("suite_id", "scenario_id", "run_id", "conversation_id",
-                         "workspace_id", "user_id", "project_id")
+                         "workspace_id", "user_id", "project_id", "integration_id")
         }  # fmt: skip
         ids["turn_index"] = 0
         ids["provider"] = "mock"
@@ -168,6 +177,10 @@ def world(
         db_session, settings, pipeline_client, workspace=workspace, role=Role.MEMBER
     )
     outsider, _ = make_user(db_session, settings, pipeline_client)
+    integration = pipeline_client.post(
+        f"{API}/projects/{project.id}/bot-integrations", json=INTEGRATION_BODY
+    )
+    assert integration.status_code == 201, integration.text
     return {
         "client": pipeline_client,
         "ids": {
@@ -177,6 +190,7 @@ def world(
             "conversation_id": conversation.json()["conversation_id"],
             "workspace_id": workspace.id,
             "project_id": project.id,
+            "integration_id": integration.json()["id"],
             "user_id": owner.id,
             "turn_index": 1,
             "provider": "mock",
@@ -195,6 +209,10 @@ def _bodies(ids: dict[str, Any]) -> dict[tuple[str, str], Any]:
         ("post", f"{ws}/members"): {"email": "x@example.test", "role": "viewer"},
         ("patch", f"{ws}/members/{{user_id}}"): {"role": "viewer"},
         ("post", f"{ws}/projects"): {"name": "intruder"},
+        ("post", "/api/v1/projects/{project_id}/bot-integrations"): {
+            **INTEGRATION_BODY,
+            "name": "intruder",
+        },
         ("patch", "/api/v1/projects/{project_id}"): {"name": "renamed"},
         ("post", f"{scenario}/copy"): {"target_suite_id": target, "new_name": "c"},
         ("post", f"{scenario}/move"): {"target_suite_id": target},

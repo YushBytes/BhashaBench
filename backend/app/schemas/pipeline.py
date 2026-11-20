@@ -87,6 +87,15 @@ class CreateRunRequest(BaseModel):
         description="Which bot adapter to use. Omit for the configured "
         "default, which sends audio nowhere.",
     )
+    bot_integration_id: uuid.UUID | None = Field(
+        default=None,
+        description=(
+            "A connected bot from this suite's project (`/projects/{id}/bot-integrations`). "
+            "Its protocol picks the adapter (`http` -> `text_bot_test`, `ws_voice` -> "
+            "`external_bot_test`) and its own URL and encrypted token configure it. The "
+            "integration must be `connected`; the run records its id, name and host."
+        ),
+    )
 
 
 class StageEventResponse(BaseModel):

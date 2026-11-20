@@ -54,3 +54,9 @@ python-multipart~=0.0.20
 # the validation in one place rather than duplicating argument parsing. It is
 # a thin layer over Click, already an indirect dependency via uvicorn.
 typer~=0.27.0
+
+# -- Stored bot credentials (bring your own bot) -------------------------------
+# AES-256-GCM for the bearer token a workspace stores with a bot integration.
+# The standard, audited implementation rather than anything written here;
+# ships abi3 wheels, so no compiler is needed on new CPython releases.
+cryptography~=50.0

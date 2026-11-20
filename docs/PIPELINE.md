@@ -457,14 +457,35 @@ Generated audio is never committed; `storage/` is git-ignored.
 
 ## Bot adapters
 
-How the pipeline obtains the bot's side. Three ship; **only `http` opens a
-socket, and it carries text, never audio**.
+How the pipeline obtains the bot's side. Four ship; **only `http` and
+`ws_voice` open a socket**: `http` carries text, never audio, and `ws_voice`
+streams audio in real time.
 
 | Adapter | Does | `contacts_external_system` |
 |---------|------|---------------------------|
 | `scripted` | Replays fixture audio, one payload per turn. Deterministic | `false` |
 | `manual` | Stores the caller's audio and waits for an operator to post the reply | `false` |
 | `http` | Exchanges text with a bot speaking `bhashabench-text-bot/1` (`docs/BOT_PROTOCOL.md`). Usable only in `text_bot_test` | `true` |
+| `ws_voice` | Streams 16 kHz PCM to a bot speaking `bhashabench-voice-bot/1` over a WebSocket and records its audio reply (`docs/BOT_PROTOCOL.md`). Usable in `external_bot_test` | `true` |
+
+### Connected bots (`bot_integration_id`)
+
+The four adapters above are configured by the operator. A workspace can also
+connect its **own** bot (`/projects/{id}/bot-integrations`, guide in
+`docs/CONNECT_YOUR_BOT.md`). Such a bot uses the same `http` or `ws_voice`
+adapter, built from the integration's own URL and decrypted token rather than
+from `BOT_HTTP_*`/`BOT_WS_URL`, with an allowlist of exactly that URL's host.
+
+A run names it with `bot_integration_id`. The run records `bot_adapter` as the
+protocol (`http` or `ws_voice`, what the adapter *is*) and
+`bot_integration: {id, name, protocol, host, connection_checked_at}` in its
+metadata. The engine factory is asked for `integration:<id>` when such a run
+is started, so it is never executed by the server's own adapter for the same
+protocol, which describes a different bot. The integration must be
+`connected` both when the run is created and when it is started; a deleted
+or demoted integration stops the run with 409 and leaves its evidence
+readable. Mode rules are unchanged: an `http` integration is a
+`text_bot_test`, a `ws_voice` one an `external_bot_test`.
 
 ### The http adapter
 

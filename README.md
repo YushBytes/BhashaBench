@@ -948,9 +948,9 @@ Full reference: [`docs/CLI.md`](docs/CLI.md).
 
 ## API endpoints
 
-The API exposes **66 paths and 83 HTTP operations**, plus one WebSocket route
-that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), for 63
-documented paths in total.
+The API exposes **69 paths and 89 HTTP operations**, plus one WebSocket route
+that OpenAPI 3.1 cannot describe (`/api/v1/transcription/stream`), which is
+counted separately.
 
 Those figures come from the generated OpenAPI document, never from a hand
 count and never from walking `app.routes` — the installed FastAPI mounts
@@ -996,6 +996,21 @@ A workspace the caller is not a member of answers 404. Roles and rules: [docs/AU
 | `PATCH` / `DELETE` | `/api/v1/workspaces/{id}/members/{user_id}` | Change a role / remove a member or leave. The last owner is kept (409) |
 | `GET` / `POST` | `/api/v1/workspaces/{id}/projects` | Projects / create one (admin or owner) |
 | `GET` / `PATCH` / `DELETE` | `/api/v1/projects/{id}` | One project / rename or describe it / delete it while empty (admin or owner) |
+
+### Connected bots (bring your own bot)
+
+A workspace connects a chatbot it already runs, over one of the two published
+protocols ([docs/BOT_PROTOCOL.md](docs/BOT_PROTOCOL.md)); the guide is
+[docs/CONNECT_YOUR_BOT.md](docs/CONNECT_YOUR_BOT.md). The token is stored
+AES-GCM-encrypted and never returned. Saving contacts nothing; only a
+successful check makes an integration `connected`, and only a connected one
+can be named by a run (`bot_integration_id`).
+
+| Method | Path | Returns |
+|--------|------|---------|
+| `GET` / `POST` | `/api/v1/projects/{id}/bot-integrations` | The project's connected bots / save one (`unverified`; member or above) |
+| `GET` / `PATCH` / `DELETE` | `/api/v1/bot-integrations/{id}` | One / change it (a new URL or token resets it to `unverified`) / remove it (admin or owner) |
+| `POST` | `/api/v1/bot-integrations/{id}/check` | Contacts the bot through the run's own adapter and records the outcome: `connected`, `authentication_failed`, `target_refused`, `unreachable`, `timeout`, `protocol_error` or `session_rejected`, with each capability verified, failed or not exercised |
 
 ### Telephony (mocked provider only)
 

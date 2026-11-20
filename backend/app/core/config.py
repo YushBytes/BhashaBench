@@ -512,6 +512,19 @@ class Settings(BaseSettings):
             "reaches it."
         ),
     )
+    # -- Bring your own bot ---------------------------------------------------
+    bot_integrations_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether workspace members may connect their own bots (stored "
+            "integrations with an encrypted token). Each integration may reach "
+            "only its own URL's host, under the same address rules and pinning "
+            "as the operator-configured adapters, so loopback and private "
+            "networks stay refused when deployed. Set false to forbid every "
+            "user-supplied bot URL on this deployment; existing integrations "
+            "then cannot be checked or used, and say why."
+        ),
+    )
     # -- HTTP text bot (early Phase 9) ---------------------------------------
     # Everything the `http` adapter needs. Nothing is reachable until
     # BOT_HTTP_ALLOWED_HOSTS names the bot's host: the allowlist is empty by

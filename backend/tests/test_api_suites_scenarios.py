@@ -710,6 +710,9 @@ class TestOpenApiSurface:
             "/api/v1/workspaces/{workspace_id}/members/{user_id}",
             "/api/v1/workspaces/{workspace_id}/projects",
             "/api/v1/projects/{project_id}",
+            "/api/v1/projects/{project_id}/bot-integrations",
+            "/api/v1/bot-integrations/{integration_id}",
+            "/api/v1/bot-integrations/{integration_id}/check",
             # Phase 10: the full-conversation recording.
             "/api/v1/test-runs/{run_id}/recording",
             "/api/v1/test-runs/{run_id}/recording/audio",

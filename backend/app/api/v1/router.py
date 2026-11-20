@@ -15,6 +15,7 @@ from app.api.v1 import (
     caller,
     evaluation,
     health,
+    integrations,
     languages,
     scenario_library,
     scenarios,
@@ -31,6 +32,7 @@ api_router.include_router(health.router)
 # Phase 14. Authentication; every other private route depends on it.
 api_router.include_router(auth.router)
 api_router.include_router(workspaces.router)
+api_router.include_router(integrations.router)
 api_router.include_router(languages.router)
 api_router.include_router(suites.router)
 

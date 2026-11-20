@@ -116,6 +116,27 @@ adapter's base URL and the `ws_voice` adapter's WebSocket URL.
 | Pinning | The socket is opened to an address the check approved (`app/core/pinned.py`), never by resolving the name again. HTTP: a network backend that refuses any host or port it was not pinned to. WebSocket: a socket pre-connected to the pinned address, passed as `sock=`; TLS still verifies the certificate against the hostname |
 | Proxies | Environment proxies (`HTTPS_PROXY` and friends) are ignored by both clients, because a proxy would resolve the host itself |
 
+**User-supplied bot URLs (bring your own bot).** A connected bot's URL is
+typed by a workspace member, not an operator, so its policy is built per
+integration (`integration_policy` in `app/pipeline/bots/registry.py`): the
+allowlist is that URL's own host and nothing else, and the address rules are
+the deployment's `BOT_HTTP_ALLOW_*` settings, which the settings refuse in
+staging and production. A deployed BhashaBench therefore reaches only
+publicly routable addresses on a user's behalf, pinned as below. Saving an
+integration contacts nothing; only an explicit check or a run does.
+`BOT_INTEGRATIONS_ENABLED=false` forbids every user-supplied URL.
+
+**Stored bot tokens.** The one user-supplied secret that must be read back
+(it is sent to the bot), so it cannot be hashed. `app/core/secretbox.py` seals
+it with AES-256-GCM under a key derived from `SECRET_KEY` by HKDF-SHA256 with a
+purpose label, and binds the ciphertext to its row's id as associated data.
+No response carries it: the API returns `credential_hint` (last four
+characters) only; the request field is a `SecretStr` named `token`, which the
+422 handler never echoes; the adapters send it only in the `Authorization`
+header and redact it from every error. Tests assert it appears in no
+response, log line or run metadata. Consequence: rotating `SECRET_KEY` makes
+stored tokens unreadable, and each integration asks for its token again.
+
 **DNS rebinding (closed 2026-11-20).** Before pinning, resolution happened
 immediately before each request and again inside the connect, so a hostile
 resolver could approve a public address and then answer the connect with

@@ -212,6 +212,62 @@ def _build_ws_voice(replies: Sequence[bytes] | None, settings: Settings | None) 
 
 WS_VOICE_ADAPTER = "ws_voice"
 
+
+INTEGRATION_PREFIX = "integration:"
+"""How an engine factory is asked for a stored integration's adapter:
+`integration:<uuid>`. Never a run's recorded `bot_adapter` - that stays the
+protocol name (`http` or `ws_voice`), which is what the adapter *is*."""
+
+
+def integration_policy(url: str, settings: Settings) -> OutboundPolicy:
+    """The outbound policy for one user-supplied bot URL.
+
+    The allowlist is that URL's own host and nothing else, so the adapter can
+    never be steered to another host. The address rules are the deployment's:
+    loopback and private ranges stay refused unless the operator's own
+    `BOT_HTTP_ALLOW_*` settings opt in, and the settings refuse those in
+    staging and production. Pinning (`app/core/pinned.py`) closes rebinding.
+    """
+    from urllib.parse import urlsplit
+
+    host = (urlsplit(url.strip()).hostname or "").lower().rstrip(".")
+    return OutboundPolicy(
+        frozenset({host}) if host else frozenset(),
+        allow_loopback=settings.bot_http_allow_loopback,
+        allow_private=settings.bot_http_allow_private,
+        allow_plain_private=settings.bot_http_allow_plain_private,
+    )
+
+
+def build_integration_adapter(
+    protocol: str, *, url: str, token: SecretStr, settings: Settings
+) -> BotAdapter:
+    """The adapter for a stored integration, configured from its own row.
+
+    Raises:
+        PipelineConfigurationError: unknown protocol.
+        BotTargetRefusedError: the URL fails the outbound guard.
+    """
+    from app.pipeline.bots.ws_voice import VoiceBotConfig, WebSocketVoiceBotAdapter
+
+    policy = integration_policy(url, settings)
+    if protocol == HTTP_ADAPTER:
+        return HttpTextBotAdapter(  # type: ignore[return-value] - a TextBotAdapter
+            HttpBotConfig(
+                base_url=url.strip(),
+                token=token,
+                policy=policy,
+                timeout_seconds=settings.bot_http_timeout_seconds,
+                max_attempts=settings.bot_http_max_attempts,
+            )
+        )
+    if protocol == WS_VOICE_ADAPTER:
+        return WebSocketVoiceBotAdapter(  # type: ignore[return-value]
+            VoiceBotConfig(url=url.strip(), token=token, policy=policy)
+        )
+    raise PipelineConfigurationError(f"'{protocol}' is not a protocol an integration can use")
+
+
 _FACTORIES: dict[str, Callable[[Sequence[bytes] | None, Settings | None], BotAdapter]] = {
     SCRIPTED_ADAPTER: _build_scripted,
     MANUAL_ADAPTER: _build_manual,
@@ -270,13 +326,16 @@ def describe_adapters() -> tuple[BotCapabilities, ...]:
 __all__ = [
     "DEFAULT_ADAPTER",
     "HTTP_ADAPTER",
+    "INTEGRATION_PREFIX",
     "MANUAL_ADAPTER",
     "SCRIPTED_ADAPTER",
     "WS_VOICE_ADAPTER",
     "adapter_unavailable_reason",
     "available_adapters",
     "build_adapter",
+    "build_integration_adapter",
     "describe_adapters",
     "fixture_replies_from_path",
     "http_unavailable_reason",
+    "integration_policy",
 ]

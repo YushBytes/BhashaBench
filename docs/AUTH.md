@@ -123,7 +123,8 @@ Rules enforced by the service, not trusted to a client:
 | Transcription, speech, scenario validation, error-rate, provider and adapter lists | Authenticated (they hold no tenant data, but spend provider credit or describe configuration) |
 | `/suites/{suite_id}...`, `/scenarios/{scenario_id}...`, `/test-runs/{run_id}...`, `/caller/conversations/{conversation_id}...` | A route dependency from `app/api/access.py` resolves the resource to its workspace before the handler runs: `view` to read, `edit` to change or drive, `delete` to delete |
 | Lists and aggregates (`GET /suites`, `/scenarios`, `/test-runs`, `/analytics/*`) | Scoped to the caller's visible projects in SQL; a `suite_id` filter naming a suite the caller cannot see is 404, not an empty page |
-| `POST /test-runs`, `POST /caller/conversations` | `edit` on the suite, `view` on the scenario, and the scenario must belong to that suite (422 otherwise) |
+| `POST /test-runs`, `POST /caller/conversations` | `edit` on the suite, `view` on the scenario, and the scenario must belong to that suite (422 otherwise). A `bot_integration_id` needs `edit` on the integration's project, which must be the suite's own (422 otherwise), and the integration must be `connected` (409 otherwise) |
+| `/projects/{project_id}/bot-integrations`, `/bot-integrations/{integration_id}...` | Checked in `app/services/integration_service.py` through the integration's project: `view` to read, `edit` to save, change or check, `delete` to remove. An integration in a workspace the caller is not in is 404 |
 | Copy and move a scenario | `view` (copy) or `edit` (move) on the source, and `edit` on the destination suite |
 | The transcription WebSocket | Authenticated at the handshake (cookie with an `Origin` check, or a bearer header); refused with close code 1008 |
 
