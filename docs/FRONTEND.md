@@ -49,6 +49,16 @@ Three rules:
 2. **A status hue never means two things.**
 3. **No status is colour alone.** Every badge carries a word, most a glyph.
 
+### Public-site layout
+
+The header, every section of `/` and the footer all use one container,
+`.wrap` in `app/globals.css`. It holds 1280px of content, which leaves an
+80px margin at 1440px, with 20px of padding on narrow screens and 32px from
+640px up. Two-column sections share a 12-column grid with a 5/7 split. From
+`lg` each section is at least one viewport tall and its content is centred
+vertically. The header switches to the menu button below `lg`, because its
+four links and two buttons do not fit on one line at `md`.
+
 ### Charts
 
 `components/charts/`: the verdict trend (stacked bars) and pass rate by

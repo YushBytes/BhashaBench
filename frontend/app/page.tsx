@@ -85,7 +85,7 @@ export default function HomePage() {
             aria-hidden="true"
             className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,var(--line)_1px,transparent_1px),linear-gradient(to_bottom,var(--line)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_at_top,black_20%,transparent_70%)] opacity-60"
           />
-          <div className="relative mx-auto max-w-6xl px-5 pb-16 pt-14 sm:px-8 sm:pt-20 lg:pb-24">
+          <div className="wrap relative pb-16 pt-14 sm:pt-20 lg:pb-24">
             <p className="bb-enter inline-flex items-center gap-2 rounded-full border border-line bg-bg px-3 py-1 font-mono text-[12px] text-text-2">
               <span className="size-1.5 rounded-full bg-accent" aria-hidden="true" />
               13 Indian languages · G.711 line conditions · WER per script
@@ -113,10 +113,10 @@ export default function HomePage() {
         </section>
 
         {/* 2. Languages */}
-        <section aria-labelledby="languages-title" className="on-night bg-night text-night-text">
-          <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-28">
-            <div className="grid gap-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
-              <div>
+        <section aria-labelledby="languages-title" className="on-night bg-night text-night-text lg:flex lg:min-h-[100svh] lg:items-center">
+          <div className="wrap w-full py-20 lg:py-28">
+            <div className="grid gap-10 lg:grid-cols-12 lg:gap-x-6">
+              <div className="lg:col-span-5">
                 <h2 id="languages-title" className="text-[clamp(1.9rem,3.6vw,2.75rem)] font-medium leading-[1.08] tracking-[-0.035em]">
                   Thirteen languages, each in its own script.
                 </h2>
@@ -126,9 +126,9 @@ export default function HomePage() {
                   Odia and Assamese can be authored but no provider transcribes them yet.
                 </p>
               </div>
-              <ul className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-night-line bg-night-line sm:grid-cols-3">
+              <ul className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-night-line bg-night-line sm:grid-cols-3 lg:col-span-7">
                 {languages.map((language) => (
-                  <li key={language.code} className="bg-night px-4 py-5">
+                  <li key={language.code} className="bg-night px-4 py-5 last:col-span-2 sm:last:col-span-3">
                     <p lang={language.code} className="text-[22px] leading-tight text-night-text sm:text-[24px]">
                       {language.endonym}
                     </p>
@@ -145,8 +145,8 @@ export default function HomePage() {
         </section>
 
         {/* 3. Features */}
-        <section id="features" aria-labelledby="features-title" className="border-b border-line">
-          <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-28">
+        <section id="features" aria-labelledby="features-title" className="border-b border-line lg:flex lg:min-h-[100svh] lg:items-center">
+          <div className="wrap w-full py-20 lg:py-28">
             <div className="max-w-2xl">
               <h2 id="features-title" className="text-[clamp(1.9rem,3.6vw,2.75rem)] font-medium leading-[1.08] tracking-[-0.035em]">
                 What a test run measures.
@@ -188,8 +188,8 @@ export default function HomePage() {
         </section>
 
         {/* 4. How it works */}
-        <section id="how-it-works" aria-labelledby="how-title" className="border-b border-line bg-bg-soft">
-          <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-28">
+        <section id="how-it-works" aria-labelledby="how-title" className="border-b border-line bg-bg-soft lg:flex lg:min-h-[100svh] lg:items-center">
+          <div className="wrap w-full py-20 lg:py-28">
             <h2 id="how-title" className="max-w-2xl text-[clamp(1.9rem,3.6vw,2.75rem)] font-medium leading-[1.08] tracking-[-0.035em]">
               Six steps from a scenario to a fix.
             </h2>
@@ -210,9 +210,9 @@ export default function HomePage() {
         </section>
 
         {/* 5. Evidence */}
-        <section aria-labelledby="evidence-title" className="border-b border-line">
-          <div className="mx-auto grid max-w-6xl gap-12 px-5 py-20 sm:px-8 lg:grid-cols-2 lg:gap-16 lg:py-28">
-            <div>
+        <section aria-labelledby="evidence-title" className="border-b border-line lg:flex lg:min-h-[100svh] lg:items-center">
+          <div className="wrap grid gap-12 py-20 lg:grid-cols-12 lg:gap-x-6 lg:py-28">
+            <div className="lg:col-span-5">
               <h2 id="evidence-title" className="text-[clamp(1.9rem,3.6vw,2.75rem)] font-medium leading-[1.08] tracking-[-0.035em]">
                 A missing number stays missing.
               </h2>
@@ -237,7 +237,7 @@ export default function HomePage() {
                 <p className="mt-3 text-[13px] leading-relaxed text-text-3">{unmeasuredReason}</p>
               </div>
             </div>
-            <ul className="grid content-start gap-3">
+            <ul className="grid content-start gap-3 lg:col-span-7">
               <EvidenceRow
                 title="Silence"
                 owner="A finding about the bot"
@@ -261,8 +261,8 @@ export default function HomePage() {
         </section>
 
         {/* 6. Limits */}
-        <section id="limits" aria-labelledby="limits-title" className="border-b border-line bg-bg-soft">
-          <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-28">
+        <section id="limits" aria-labelledby="limits-title" className="border-b border-line bg-bg-soft lg:flex lg:min-h-[100svh] lg:items-center">
+          <div className="wrap w-full py-20 lg:py-28">
             <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
               <h2 id="limits-title" className="max-w-2xl text-[clamp(1.9rem,3.6vw,2.75rem)] font-medium leading-[1.08] tracking-[-0.035em]">
                 What it does not do yet.
@@ -284,10 +284,10 @@ export default function HomePage() {
         </section>
 
         {/* 7. Docs and close */}
-        <section id="docs" aria-labelledby="docs-title">
-          <div className="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-28">
-            <div className="grid gap-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
-              <div>
+        <section id="docs" aria-labelledby="docs-title" className="lg:flex lg:min-h-[100svh] lg:items-center">
+          <div className="wrap w-full py-20 lg:py-28">
+            <div className="grid gap-12 lg:grid-cols-12 lg:gap-x-6">
+              <div className="lg:col-span-5">
                 <h2 id="docs-title" className="text-[clamp(1.9rem,3.6vw,2.75rem)] font-medium leading-[1.08] tracking-[-0.035em]">
                   Read the protocol, then run your first test.
                 </h2>
@@ -304,7 +304,7 @@ export default function HomePage() {
                   </Link>
                 </div>
               </div>
-              <ul className="grid gap-3 sm:grid-cols-2">
+              <ul className="grid gap-3 sm:grid-cols-2 lg:col-span-7">
                 {docs.map((doc) => (
                   <li key={doc.href}>
                     <a

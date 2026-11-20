@@ -6,7 +6,7 @@ import { docs, site, statusBadge } from "@/lib/content";
 export function SiteFooter() {
   return (
     <footer data-chrome className="on-night bg-night text-night-text">
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:px-8 md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+      <div className="wrap grid gap-10 py-14 md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
         <div>
           <Logo inverted />
           <p className="mt-4 max-w-xs text-[14px] leading-relaxed text-night-muted">
@@ -35,8 +35,8 @@ export function SiteFooter() {
           </FooterLink>
         </FooterColumn>
       </div>
-      <div className="border-t border-night-line">
-        <p className="mx-auto max-w-6xl px-5 py-5 text-[12px] text-night-muted sm:px-8">
+      <div className="wrap">
+        <p className="border-t border-night-line py-5 text-[12px] text-night-muted">
           BhashaBench is open source. No customer logos, testimonials or usage figures appear on this site because none
           have been collected.
         </p>

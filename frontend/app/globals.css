@@ -143,6 +143,19 @@ body {
   outline-color: var(--night-accent);
 }
 
+/* The public site's one container: 1280px of content, so an 80px margin at
+   1440px, and 20px (32px from 640px) on narrower screens. */
+.wrap {
+  --pad: 1.25rem;
+  width: 100%;
+  max-width: calc(80rem + 2 * var(--pad));
+  margin-inline: auto;
+  padding-inline: var(--pad);
+}
+@media (min-width: 640px) {
+  .wrap { --pad: 2rem; }
+}
+
 .tabular {
   font-variant-numeric: tabular-nums;
 }
