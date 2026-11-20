@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 
 import { cx } from "./primitives";
-import type { ExecutionMode, HealthStatus, PipelineStatus, RunOutcome } from "@/lib/api/types";
+import type { ExecutionMode, HealthStatus, IntegrationCheckStatus, PipelineStatus, RunOutcome } from "@/lib/api/types";
 
 export type Tone = "ok" | "warn" | "bad" | "busy" | "idle" | "ink";
 
@@ -231,4 +231,62 @@ export function HealthBadge({ status }: { status: HealthStatus }) {
 /** A provider currently in use. Not a quality claim. */
 export function SelectedBadge() {
   return <Badge tone="ink">In use</Badge>;
+}
+
+// -- Connected bots ------------------------------------------------------------
+
+const INTEGRATION: Record<IntegrationCheckStatus, { tone: Tone; label: string; hint: string; glyph: ReactNode }> = {
+  connected: {
+    tone: "ok",
+    label: "Connected",
+    hint: "The last connection check through the run's own adapter succeeded.",
+    glyph: <CheckCircle2 aria-hidden="true" className={g} />,
+  },
+  unverified: {
+    tone: "idle",
+    label: "Not verified",
+    hint: "Saved, never checked, or changed since the last check. Saving contacts nothing.",
+    glyph: <CircleDashed aria-hidden="true" className={g} />,
+  },
+  failed: {
+    tone: "bad",
+    label: "Check failed",
+    hint: "The last connection check failed; its outcome says why.",
+    glyph: <XCircle aria-hidden="true" className={g} />,
+  },
+};
+
+export function IntegrationStatusBadge({ status }: { status: IntegrationCheckStatus }) {
+  const entry = INTEGRATION[status];
+  return (
+    <Badge tone={entry.tone} glyph={entry.glyph} title={entry.hint}>
+      {entry.label}
+    </Badge>
+  );
+}
+
+/** One capability of a connection check: verified, failed, or not exercised.
+ *  `null` is "not checked" and is never drawn as a pass. */
+export function VerifiedMark({ value, notCarried = false }: { value: boolean | null; notCarried?: boolean }) {
+  if (value === true)
+    return (
+      <Badge tone="ok" glyph={<CheckCircle2 aria-hidden="true" className={g} />}>
+        Verified
+      </Badge>
+    );
+  if (value === false)
+    return notCarried ? (
+      <Badge tone="idle" glyph={<MinusCircle aria-hidden="true" className={g} />}>
+        Not in this protocol
+      </Badge>
+    ) : (
+      <Badge tone="bad" glyph={<XCircle aria-hidden="true" className={g} />}>
+        Failed
+      </Badge>
+    );
+  return (
+    <Badge tone="idle" glyph={<CircleDot aria-hidden="true" className={g} />} title="A connection check does not exercise this; a run measures it.">
+      Not checked
+    </Badge>
+  );
 }

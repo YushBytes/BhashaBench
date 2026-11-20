@@ -6,6 +6,7 @@ import { DetailSkeleton, ErrorState, Panel } from "@/components/ui/primitives";
 import { ApiError, api } from "@/lib/api/client";
 import { loadContext } from "@/lib/api/context";
 import { signInAgainIfExpired } from "@/lib/api/server";
+import type { BotIntegration } from "@/lib/api/types";
 
 export const metadata = { title: "New test run" };
 
@@ -31,21 +32,26 @@ export default function NewRunPage({ searchParams }: { searchParams: Promise<Sea
 async function Form({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
   const initial = typeof params.scenario === "string" ? params.scenario : undefined;
+  const initialBot = typeof params.bot === "string" ? params.bot : undefined;
   let options: ScenarioOption[];
   let adapters;
+  let integrations: BotIntegration[];
   try {
     const context = await loadContext();
-    const [scenarios, suites, loadedAdapters] = await Promise.all([
+    const [scenarios, suites, loadedAdapters, perProject] = await Promise.all([
       api.scenarios({ cache: "no-store", headers: context.auth, query: { limit: 100 } }),
       api.suites({ cache: "no-store", headers: context.auth }),
       api.botAdapters({ cache: "no-store", headers: context.auth }),
+      Promise.all(context.projects.map((p) => api.integrations(p.id, { cache: "no-store", headers: context.auth }))),
     ]);
+    integrations = perProject.flat();
+    const suiteProject = new Map(suites.items.map((s) => [s.id, s.project_id]));
     const projectName = new Map(context.projects.map((p) => [p.id, p.name]));
     const suiteLabel = new Map(suites.items.map((s) => [s.id, `${projectName.get(s.project_id) ?? "Project"} / ${s.name}`]));
     adapters = loadedAdapters;
     options = scenarios.items
       .filter((s) => s.archived_at === null)
-      .map((s) => ({ ...s, suite_label: suiteLabel.get(s.suite_id) ?? "Suite" }));
+      .map((s) => ({ ...s, suite_label: suiteLabel.get(s.suite_id) ?? "Suite", project_id: suiteProject.get(s.suite_id) }));
   } catch (error) {
     signInAgainIfExpired(error);
     return (
@@ -54,5 +60,7 @@ async function Form({ searchParams }: { searchParams: Promise<SearchParams> }) {
       </Panel>
     );
   }
-  return <NewRunForm scenarios={options} adapters={adapters} initialScenarioId={initial} />;
+  return (
+    <NewRunForm scenarios={options} adapters={adapters} integrations={integrations} initialScenarioId={initial} initialIntegrationId={initialBot} />
+  );
 }

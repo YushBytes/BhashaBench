@@ -362,6 +362,86 @@ export interface BotAdapters {
 }
 
 // ---------------------------------------------------------------------------
+// Connected bots - transcribed from backend/app/schemas/integration.py
+// ---------------------------------------------------------------------------
+
+export type IntegrationProtocol = "http" | "ws_voice";
+
+/** `connected` only after a successful check; any change of URL or token
+ *  puts it back to `unverified`. */
+export type IntegrationCheckStatus = "unverified" | "connected" | "failed";
+
+export type IntegrationOutcome =
+  | "connected"
+  | "authentication_failed"
+  | "target_refused"
+  | "unreachable"
+  | "timeout"
+  | "protocol_error"
+  | "session_rejected";
+
+/** What the adapter declares, separate from what a check verified. */
+export interface IntegrationDeclared {
+  contacts_external_system: boolean;
+  supports_sessions: boolean;
+  requires_credentials: boolean;
+  accepts_containers: string[];
+  supports_caller_barge_in: boolean;
+  /** The run mode this protocol is tested in. */
+  execution_mode: "text_bot_test" | "external_bot_test";
+  notes: string[];
+}
+
+export interface IntegrationLastCheck {
+  outcome: IntegrationOutcome;
+  message: string;
+  protocol: IntegrationProtocol;
+  latency_ms: number | null;
+  /** true seen working; false seen failing, or not carried by the protocol;
+   *  null not exercised by a check - a run measures it. Never a pass. */
+  verified: Record<string, boolean | null>;
+  detail: Record<string, unknown>;
+}
+
+export interface BotIntegration {
+  id: string;
+  project_id: string;
+  name: string;
+  protocol: IntegrationProtocol;
+  url: string;
+  /** The token's last four characters, never more. The token is never returned. */
+  credential_hint: string;
+  default_language: string;
+  check_status: IntegrationCheckStatus;
+  last_checked_at: string | null;
+  last_check: IntegrationLastCheck | null;
+  declared: IntegrationDeclared;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntegrationCheckResult {
+  integration: BotIntegration;
+  ok: boolean;
+}
+
+export interface CreateIntegrationBody {
+  name: string;
+  protocol: IntegrationProtocol;
+  url: string;
+  token: string;
+  default_language: string;
+}
+
+export interface UpdateIntegrationBody {
+  name?: string;
+  url?: string;
+  /** A replacement; omit to keep the stored one. */
+  token?: string;
+  default_language?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Runs
 // ---------------------------------------------------------------------------
 
@@ -535,6 +615,8 @@ export interface CreateRunBody {
   /** Talk over the bot this far into each reply; needs a capable adapter. */
   caller_barge_in_after_ms?: number | null;
   bot_adapter?: string | null;
+  /** A connected bot from the suite's own project; must be `connected`. */
+  bot_integration_id?: string | null;
 }
 
 // -- Analytics (Phase 12) - transcribed from backend/app/analytics/service.py -

@@ -1,34 +1,119 @@
+import Link from "next/link";
 import { Suspense } from "react";
-import { Bot, Mic, PhoneOff, Radio, Speaker, Workflow } from "lucide-react";
+import { Bot, Mic, PhoneOff, Plug, Plus, Radio, Speaker, Workflow } from "lucide-react";
 
 import { PageBody, PageHeader } from "@/components/shell/page";
-import { ErrorState, Notice, Panel, PanelHeader, StatsSkeleton, cx } from "@/components/ui/primitives";
-import { AvailabilityBadge, Badge, SelectedBadge } from "@/components/ui/status";
+import { ButtonLink, ErrorState, Notice, Panel, PanelHeader, StatsSkeleton, TableSkeleton, cx, linkClass } from "@/components/ui/primitives";
+import { AvailabilityBadge, Badge, IntegrationStatusBadge, SelectedBadge } from "@/components/ui/status";
 import { ApiError, api } from "@/lib/api/client";
-import { loadContext } from "@/lib/api/context";
+import { can, loadContext } from "@/lib/api/context";
 import { signInAgainIfExpired } from "@/lib/api/server";
-import type { BotAdapters, CallerProviders, SpeechProviders, TranscriptionProviders } from "@/lib/api/types";
-import { formatBytes } from "@/lib/format";
+import type { BotAdapters, BotIntegration, CallerProviders, SpeechProviders, TranscriptionProviders } from "@/lib/api/types";
+import { formatBytes, formatTimestampShort } from "@/lib/format";
 
-export const metadata = { title: "Bot adapters" };
+export const metadata = { title: "Bots" };
 
 export default function BotsPage() {
   return (
     <>
       <PageHeader
-        title="Bot adapters and providers"
-        description="What this deployment can talk to. Adapters are configured on the server by its operator and chosen per run; nothing here is a stored credential, and filling in a form would not make an adapter live."
+        title="Bots"
+        description="The chatbots your workspace has connected, and what this deployment itself can talk to. A connected bot counts as connected only after a connection check succeeds."
+        actions={
+          <ButtonLink href="/app/bots/connect" tone="primary">
+            <Plus aria-hidden="true" className="size-4" />
+            Connect your chatbot
+          </ButtonLink>
+        }
       />
       <PageBody>
-        <Suspense fallback={<StatsSkeleton count={4} />}>
-          <Catalogue />
-        </Suspense>
+        <div className="space-y-8">
+          <Suspense fallback={<TableSkeleton rows={3} />}>
+            <ConnectedBots />
+          </Suspense>
+          <Suspense fallback={<StatsSkeleton count={4} />}>
+            <Catalogue />
+          </Suspense>
+        </div>
       </PageBody>
     </>
   );
 }
 
 const ADAPTER_ICON: Record<string, typeof Bot> = { ws_voice: Radio, http: Workflow, manual: Mic, scripted: Bot };
+
+async function ConnectedBots() {
+  let groups: { id: string; label: string; editable: boolean; bots: BotIntegration[] }[];
+  try {
+    const context = await loadContext();
+    const lists = await Promise.all(
+      context.projects.map((p) => api.integrations(p.id, { cache: "no-store", headers: context.auth })),
+    );
+    groups = context.projects.map((p, i) => ({
+      id: p.id,
+      label: `${p.workspace_name} / ${p.name}`,
+      editable: can(p.role, "edit"),
+      bots: lists[i] ?? [],
+    }));
+  } catch (error) {
+    signInAgainIfExpired(error);
+    return (
+      <Panel>
+        <ErrorState title="Your connected bots could not be loaded" detail={error instanceof ApiError ? error.message : "The API did not answer."} />
+      </Panel>
+    );
+  }
+  const all = groups.flatMap((g) => g.bots.map((b) => ({ ...b, project: g.label })));
+  return (
+    <section aria-labelledby="connected-title" className="space-y-3">
+      <div>
+        <h2 id="connected-title" className="text-[16px] font-semibold tracking-[-0.01em] text-text">
+          Your connected bots
+        </h2>
+        <p className="mt-0.5 text-[13px] text-text-3">Chatbots you run elsewhere, reached over a published protocol with a token stored encrypted.</p>
+      </div>
+      {all.length === 0 ? (
+        <Panel className="flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-3">
+            <Plug aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-text-3" strokeWidth={1.75} />
+            <div>
+              <p className="text-[14px] font-medium text-text">No bot connected yet</p>
+              <p className="mt-0.5 max-w-prose text-[13px] leading-relaxed text-text-3">
+                Connect a text chatbot over HTTP or a real-time voice bot over WebSocket, check the connection, then test it against any scenario.
+              </p>
+            </div>
+          </div>
+          {groups.some((g) => g.editable) ? (
+            <ButtonLink href="/app/bots/connect" tone="secondary">
+              Connect your chatbot
+            </ButtonLink>
+          ) : null}
+        </Panel>
+      ) : (
+        <ul className="grid gap-3 lg:grid-cols-2">
+          {all.map((bot) => (
+            <li key={bot.id}>
+              <Panel as="article" className="h-full p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link href={`/app/bots/${bot.id}`} className={cx(linkClass, "text-[15px]")}>
+                    {bot.name}
+                  </Link>
+                  <IntegrationStatusBadge status={bot.check_status} />
+                  <Badge tone="idle">{bot.protocol === "http" ? "Text bot" : "Voice bot"}</Badge>
+                </div>
+                <p className="mt-1.5 truncate font-mono text-[12px] text-text-3">{bot.url}</p>
+                <p className="mt-1 text-[12px] text-text-3">
+                  {bot.project}
+                  {bot.last_checked_at ? ` · checked ${formatTimestampShort(bot.last_checked_at)}` : " · never checked"}
+                </p>
+              </Panel>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 async function Catalogue() {
   let adapters: BotAdapters, stt: TranscriptionProviders, tts: SpeechProviders, callers: CallerProviders;
@@ -59,9 +144,11 @@ async function Catalogue() {
       <section aria-labelledby="adapters-title" className="space-y-3">
         <div>
           <h2 id="adapters-title" className="text-[16px] font-semibold tracking-[-0.01em] text-text">
-            Bot adapters
+            Server adapters
           </h2>
-          <p className="mt-0.5 text-[13px] text-text-3">Where the bot&rsquo;s side of a conversation comes from. A run records whether replies really came from outside.</p>
+          <p className="mt-0.5 text-[13px] text-text-3">
+            Configured by this deployment&rsquo;s operator, not by a form here. A run records whether replies really came from outside.
+          </p>
         </div>
         <ul className="grid gap-4 lg:grid-cols-2">
           {adapters.adapters.map((adapter) => {

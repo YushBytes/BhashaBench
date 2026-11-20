@@ -10,20 +10,26 @@
  * Create and start are two API calls. If the second fails the run exists,
  * and the form says so with a link to it rather than inviting a duplicate.
  * Starting runs in the background on the server; the run page follows it.
+ *
+ * The bot's side is either a server adapter or one of the workspace's own
+ * connected bots. A connected bot is offered only from the scenario's own
+ * project, picks its mode itself (text bot -> text_bot_test, voice bot ->
+ * external_bot_test), and can start a run only once a connection check has
+ * succeeded - the API refuses anything else, and so does this form.
  */
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, Check, Loader2, PlayCircle } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Plug, PlayCircle } from "lucide-react";
 
 import { Field, Input, Select } from "@/components/ui/field";
 import { failureMessage } from "@/components/ui/interactive";
 import { Button, EmptyState, Panel, cx, linkClass } from "@/components/ui/primitives";
-import { Badge, MODE_COPY } from "@/components/ui/status";
+import { Badge, IntegrationStatusBadge, MODE_COPY } from "@/components/ui/status";
 import { api } from "@/lib/api/client";
 import { CODECS, type ConditionDraft, NUMERIC_CONDITIONS, SAMPLE_RATES_HZ, buildAudioConditions } from "@/lib/conditions";
-import type { BotAdapters, ExecutionMode, NoiseProfile, ScenarioSummary } from "@/lib/api/types";
+import type { BotAdapters, BotIntegration, ExecutionMode, NoiseProfile, ScenarioSummary } from "@/lib/api/types";
 
 /** Run-level presets (`NoiseProfile` in the pipeline), distinct from a scenario's environment. */
 const NOISE_PROFILES: { value: NoiseProfile; label: string; blurb: string }[] = [
@@ -57,16 +63,22 @@ function preferredAdapter(mode: string, adapters: BotAdapters): string {
 
 export interface ScenarioOption extends ScenarioSummary {
   suite_label: string;
+  /** The suite's project: a connected bot is offered only from the same one. */
+  project_id?: string;
 }
 
 export function NewRunForm({
   scenarios,
   adapters,
+  integrations = [],
   initialScenarioId,
+  initialIntegrationId,
 }: {
   scenarios: ScenarioOption[];
   adapters: BotAdapters;
+  integrations?: BotIntegration[];
   initialScenarioId?: string;
+  initialIntegrationId?: string;
 }) {
   const router = useRouter();
   const modes = adapters.execution_modes as ExecutionMode[];
@@ -75,6 +87,7 @@ export function NewRunForm({
     modes.includes("audio_fixture_test") ? "audio_fixture_test" : (modes[0] ?? "offline_simulation"),
   );
   const [adapter, setAdapter] = useState(() => preferredAdapter(mode, adapters));
+  const [integrationId, setIntegrationId] = useState<string | null>(null);
   const [noise, setNoise] = useState<NoiseProfile | "">("");
   const [degrade, setDegrade] = useState(true);
   const [seed, setSeed] = useState("");
@@ -89,7 +102,28 @@ export function NewRunForm({
   const built = buildAudioConditions(conditions);
   const declared = built.body ? Object.keys(built.body).length : 0;
   const adapterInfo = adapters.adapters.find((a) => a.name === adapter);
-  const canBargeIn = adapterInfo?.supports_caller_barge_in === true;
+  const ownBots = useMemo(
+    () => integrations.filter((i) => !scenario?.project_id || i.project_id === scenario.project_id),
+    [integrations, scenario],
+  );
+  const integration = ownBots.find((i) => i.id === integrationId) ?? null;
+  const botReady = integration ? integration.check_status === "connected" : Boolean(adapterInfo?.available);
+  const canBargeIn = integration ? integration.declared.supports_caller_barge_in : adapterInfo?.supports_caller_barge_in === true;
+
+  function chooseIntegration(chosen: BotIntegration) {
+    setIntegrationId(chosen.id);
+    const fits = chosen.declared.execution_mode;
+    if (modes.includes(fits)) setMode(fits);
+  }
+
+  // Preselect a bot named in the URL (from "Test this bot" on its page) once,
+  // when it exists and is usable; anything else is left for the user to pick.
+  const [preselected, setPreselected] = useState(false);
+  if (!preselected && initialIntegrationId) {
+    setPreselected(true);
+    const named = integrations.find((i) => i.id === initialIntegrationId);
+    if (named && named.check_status === "connected") chooseIntegration(named);
+  }
   const movesAudio = mode !== "offline_simulation" && mode !== "text_bot_test";
   const suites = useMemo(() => [...new Set(scenarios.map((s) => s.suite_label))], [scenarios]);
   const bargeInProblem =
@@ -133,7 +167,8 @@ export function NewRunForm({
         degrade_caller_audio: degrade,
         audio_conditions: built.body,
         caller_barge_in_after_ms: canBargeIn && bargeIn.trim() !== "" ? Number(bargeIn) : null,
-        bot_adapter: adapter || null,
+        bot_adapter: integration ? null : adapter || null,
+        bot_integration_id: integration?.id ?? null,
       });
       runId = created.run_id;
     } catch (cause) {
@@ -199,6 +234,7 @@ export function NewRunForm({
                   onChange={() => {
                     setMode(value);
                     setAdapter(preferredAdapter(value, adapters));
+                    if (integration && integration.declared.execution_mode !== value) setIntegrationId(null);
                   }}
                   className="mt-0.5 size-4 shrink-0"
                 />
@@ -215,7 +251,67 @@ export function NewRunForm({
           </p>
         </Step>
 
-        <Step n={3} title="Bot adapter" done={Boolean(adapterInfo?.available)} description="Where the bot's side of the conversation comes from.">
+        <Step n={3} title="Bot" done={botReady} description="Where the bot's side of the conversation comes from: one of your connected bots, or an adapter this server provides.">
+          <fieldset className="mb-4 space-y-2">
+            <legend className="mb-2 flex w-full flex-wrap items-center justify-between gap-2 text-[13px] font-medium text-text">
+              <span>Your connected bots</span>
+              <Link href="/app/bots/connect" className={cx(linkClass, "text-[12px] font-normal")}>
+                Connect your chatbot
+              </Link>
+            </legend>
+            {ownBots.length === 0 ? (
+              <p className="rounded-md border border-dashed border-line px-3 py-3 text-[12px] leading-relaxed text-text-3">
+                {scenario?.project_id && integrations.length > 0
+                  ? "None in this scenario's project. A run can use a connected bot only from its own project."
+                  : "None yet. Connect the chatbot you already run, check the connection, and it appears here."}
+              </p>
+            ) : (
+              ownBots.map((item) => {
+                const ready = item.check_status === "connected";
+                return (
+                  <label
+                    key={item.id}
+                    className={cx(
+                      "flex gap-3 rounded-md border p-3 transition-colors",
+                      integrationId === item.id ? "border-accent bg-accent-soft/50" : "border-line",
+                      ready ? "cursor-pointer hover:border-line-strong" : "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="adapter"
+                      checked={integrationId === item.id}
+                      disabled={!ready}
+                      onChange={() => chooseIntegration(item)}
+                      className="mt-0.5 size-4 shrink-0"
+                    />
+                    <span className="min-w-0">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <Plug aria-hidden="true" className="size-3.5 text-text-3" />
+                        <span className="text-[14px] font-medium text-text">{item.name}</span>
+                        <IntegrationStatusBadge status={item.check_status} />
+                        <Badge tone="idle">{item.protocol === "http" ? "Text bot" : "Voice bot"}</Badge>
+                      </span>
+                      <span className="mt-1 block truncate font-mono text-[12px] text-text-3">{item.url}</span>
+                      {!ready ? (
+                        <span className="mt-1 block text-[12px] text-warn">
+                          Check its connection first.{" "}
+                          <Link href={`/app/bots/${item.id}`} className={linkClass}>
+                            Open
+                          </Link>
+                        </span>
+                      ) : (
+                        <span className="mt-1 block text-[12px] text-text-3">
+                          Runs as {MODE_COPY[item.declared.execution_mode]?.label ?? item.declared.execution_mode}.
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })
+            )}
+          </fieldset>
+          <p className="mb-2 text-[13px] font-medium text-text">Server adapters</p>
           <div className="grid gap-2">
             {adapters.adapters.map((item) => {
               const fits = (MODE_ADAPTERS[mode] ?? []).includes(item.name);
@@ -224,16 +320,19 @@ export function NewRunForm({
                   key={item.name}
                   className={cx(
                     "flex gap-3 rounded-md border p-3 transition-colors",
-                    adapter === item.name ? "border-accent bg-accent-soft/50" : "border-line",
+                    !integration && adapter === item.name ? "border-accent bg-accent-soft/50" : "border-line",
                     item.available && fits ? "cursor-pointer hover:border-line-strong" : "cursor-not-allowed opacity-60",
                   )}
                 >
                   <input
                     type="radio"
                     name="adapter"
-                    checked={adapter === item.name}
+                    checked={!integration && adapter === item.name}
                     disabled={!item.available || !fits}
-                    onChange={() => setAdapter(item.name)}
+                    onChange={() => {
+                      setIntegrationId(null);
+                      setAdapter(item.name);
+                    }}
                     className="mt-0.5 size-4 shrink-0"
                   />
                   <span className="min-w-0">
@@ -388,8 +487,8 @@ export function NewRunForm({
               {scenario?.language ?? "—"}
             </Row>
             <Row label="Mode">{MODE_COPY[mode]?.label ?? mode}</Row>
-            <Row label="Bot adapter" mono>
-              {adapter}
+            <Row label="Bot" mono={!integration}>
+              {integration ? `${integration.name} (connected bot)` : adapter}
             </Row>
             <Row label="Barge-in" mono>
               {canBargeIn && bargeIn ? `${bargeIn} ms` : "off"}
@@ -416,14 +515,16 @@ export function NewRunForm({
                 ) : null}
               </div>
             ) : null}
-            <Button tone="primary" size="lg" className="w-full" onClick={() => void launch()} disabled={!scenario || busy || !adapterInfo?.available} aria-busy={busy}>
+            <Button tone="primary" size="lg" className="w-full" onClick={() => void launch()} disabled={!scenario || busy || !botReady} aria-busy={busy}>
               {busy ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <PlayCircle aria-hidden="true" className="size-4" />}
               {busy ? "Starting…" : "Start test run"}
             </Button>
             <p className="text-[12px] leading-relaxed text-text-3">
               {!scenario
                 ? "Choose a scenario to enable this."
-                : adapter === "manual"
+                : integration
+                  ? `The run talks to ${integration.name} at ${hostOf(integration.url)}; its replies are recorded as received from it.`
+                  : adapter === "manual"
                   ? "The manual adapter pauses at each bot turn; you supply the reply on the run page."
                   : "The run executes on the server; its page follows it live."}
             </p>
@@ -458,6 +559,14 @@ function Step({ n, title, description, done, children }: { n: number; title: str
       <div className="px-4 py-4 sm:px-5">{children}</div>
     </li>
   );
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }
 
 function Row({ label, children, mono = false }: { label: string; children: ReactNode; mono?: boolean }) {

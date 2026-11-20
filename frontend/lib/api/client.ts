@@ -27,6 +27,10 @@ import type {
   AnalyticsTrend,
   ApiHealth,
   BotAdapters,
+  BotIntegration,
+  CreateIntegrationBody,
+  IntegrationCheckResult,
+  UpdateIntegrationBody,
   CallerProviders,
   CreateRunBody,
   EvaluationList,
@@ -501,6 +505,34 @@ export const api = {
   },
 
   metricCatalogue: (o?: RequestOptions) => request<MetricCatalogue>("/api/v1/evaluation/metrics", o),
+
+  // -- Connected bots (bring your own bot) --------------------------------
+
+  integrations: (projectId: string, o?: RequestOptions) =>
+    request<BotIntegration[]>(`/api/v1/projects/${projectId}/bot-integrations`, o),
+
+  integration: (id: string, o?: RequestOptions) =>
+    request<BotIntegration>(`/api/v1/bot-integrations/${id}`, o),
+
+  /** Saves only; contacts nothing. The result is `unverified`. */
+  createIntegration: (projectId: string, body: CreateIntegrationBody, o?: RequestOptions) =>
+    request<BotIntegration>(`/api/v1/projects/${projectId}/bot-integrations`, { ...o, method: "POST", body }),
+
+  updateIntegration: (id: string, body: UpdateIntegrationBody, o?: RequestOptions) =>
+    request<BotIntegration>(`/api/v1/bot-integrations/${id}`, { ...o, method: "PATCH", body }),
+
+  deleteIntegration: (id: string, o?: RequestOptions) =>
+    request<void>(`/api/v1/bot-integrations/${id}`, { ...o, method: "DELETE" }),
+
+  /** Contacts the bot through the run's own adapter. A failed check is a
+   *  200 with `ok: false` and the outcome recorded, not an error. */
+  checkIntegration: (id: string, language?: string | null, o?: RequestOptions) =>
+    request<IntegrationCheckResult>(`/api/v1/bot-integrations/${id}/check`, {
+      ...o,
+      method: "POST",
+      body: language ? { language } : {},
+      timeoutMs: o?.timeoutMs ?? 60_000,
+    }),
 
   changePassword: (current: string, next: string, o?: RequestOptions) =>
     request<PasswordChangeResult>("/api/v1/auth/password", {

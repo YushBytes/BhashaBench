@@ -40,7 +40,7 @@ export const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { href: "/app/scenarios", label: "Scenarios", icon: ListChecks, keywords: "builder yaml library" },
       { href: "/app/suites", label: "Test suites", icon: Layers, keywords: "bundle import export" },
-      { href: "/app/bots", label: "Bot adapters", icon: Bot, keywords: "integrations providers speech" },
+      { href: "/app/bots", label: "Bots", icon: Bot, keywords: "connect chatbot integrations adapters providers speech" },
     ],
   },
   {
