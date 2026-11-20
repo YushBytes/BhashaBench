@@ -14,7 +14,10 @@ a person on the line would experience, so it is not accelerated in tests
 either.
 
 Speaks the project's own protocol (docs/BOT_PROTOCOL.md), never a vendor's.
-Every URL passes the outbound guard. The token is never logged or returned.
+Every URL passes the outbound guard, at construction and again at every
+connect, and the socket is opened to an address that check established
+(`app/core/pinned.py`), so the host is never resolved twice. The token is
+never logged or returned.
 """
 
 from __future__ import annotations
@@ -32,7 +35,14 @@ import websockets
 import websockets.asyncio.client
 from pydantic import SecretStr
 
-from app.core.outbound import OutboundPolicy, OutboundTargetRefusedError, check_url
+from app.core.outbound import (
+    OutboundPolicy,
+    OutboundTarget,
+    OutboundTargetRefusedError,
+    Resolver,
+    check_url,
+)
+from app.core.pinned import open_pinned_socket
 from app.pipeline.bots.protocol import BotCapabilities, BotReply
 from app.pipeline.degradation import decode_pcm16_wav, resample, to_mono
 from app.pipeline.errors import (
@@ -119,21 +129,68 @@ def _caller_pcm(audio: bytes) -> bytes:
     ).tobytes()
 
 
-class WebSocketVoiceBotAdapter:
-    def __init__(self, config: VoiceBotConfig) -> None:
+def check_ws_url(
+    url: str, policy: OutboundPolicy, *, resolver: Resolver | None = None
+) -> OutboundTarget:
+    """Check a `ws://`/`wss://` URL with the HTTP rules it maps onto.
+
+    Raises:
+        BotTargetRefusedError: the scheme is not ws/wss, or the guard refused it.
+    """
+    if not url.startswith(("ws://", "wss://")):
+        raise BotTargetRefusedError(
+            "the voice bot URL must be ws:// or wss://", adapter=PROVIDER_NAME
+        )
+    http_url = (
+        "http://" + url[len("ws://") :]
+        if url.startswith("ws://")
+        else ("https://" + url[len("wss://") :])
+    )
+    try:
+        if resolver is None:
+            return check_url(http_url, policy)
+        return check_url(http_url, policy, resolver=resolver)
+    except OutboundTargetRefusedError as exc:
+        raise BotTargetRefusedError(
+            f"the bot URL was refused: {exc}", adapter=PROVIDER_NAME
+        ) from exc
+
+
+async def connect_pinned(
+    url: str,
+    policy: OutboundPolicy,
+    *,
+    headers: dict[str, str],
+    timeout_seconds: float,
+    resolver: Resolver | None = None,
+) -> Any:
+    """Open a WebSocket to `url` over a socket pinned to a checked address.
+
+    Raises:
+        BotTargetRefusedError: the guard refused the URL.
+        TimeoutError, OSError, websockets.InvalidHandshake: as the library does.
+    """
+    target = await asyncio.to_thread(check_ws_url, url, policy, resolver=resolver)
+    async with asyncio.timeout(timeout_seconds):
+        sock = await open_pinned_socket(target, timeout_seconds=timeout_seconds)
         try:
-            check_url(
-                config.url.replace("ws://", "http://").replace("wss://", "https://"), config.policy
+            return await _connect_without_redirects(
+                url,
+                sock=sock,
+                proxy=None,
+                additional_headers=headers,
+                max_size=MAX_BOT_FRAME_BYTES * 64,
             )
-        except OutboundTargetRefusedError as exc:
-            raise BotTargetRefusedError(
-                f"the bot URL was refused: {exc}", adapter=PROVIDER_NAME
-            ) from exc
-        if not config.url.startswith(("ws://", "wss://")):
-            raise BotTargetRefusedError(
-                "the voice bot URL must be ws:// or wss://", adapter=PROVIDER_NAME
-            )
+        except BaseException:
+            sock.close()
+            raise
+
+
+class WebSocketVoiceBotAdapter:
+    def __init__(self, config: VoiceBotConfig, *, resolver: Resolver | None = None) -> None:
+        check_ws_url(config.url, config.policy, resolver=resolver)
         self._config = config
+        self._resolver = resolver
         self._socket: Any = None
         self._run: uuid.UUID | None = None
 
@@ -154,11 +211,12 @@ class WebSocketVoiceBotAdapter:
         await self.close()
         headers = {"Authorization": f"Bearer {self._config.token.get_secret_value()}"}
         try:
-            socket = await asyncio.wait_for(
-                _connect_without_redirects(
-                    self._config.url, additional_headers=headers, max_size=MAX_BOT_FRAME_BYTES * 64
-                ),
-                timeout=self._config.connect_timeout_seconds,
+            socket = await connect_pinned(
+                self._config.url,
+                self._config.policy,
+                headers=headers,
+                timeout_seconds=self._config.connect_timeout_seconds,
+                resolver=self._resolver,
             )
         except (TimeoutError, OSError, websockets.InvalidHandshake) as exc:
             raise BotUnavailableError(
@@ -379,4 +437,11 @@ def _barge_in_evidence(
     }
 
 
-__all__ = ["CAPABILITIES", "PROTOCOL", "VoiceBotConfig", "WebSocketVoiceBotAdapter"]
+__all__ = [
+    "CAPABILITIES",
+    "PROTOCOL",
+    "VoiceBotConfig",
+    "WebSocketVoiceBotAdapter",
+    "check_ws_url",
+    "connect_pinned",
+]

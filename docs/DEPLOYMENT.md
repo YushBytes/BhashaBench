@@ -78,6 +78,16 @@ name, and downgrading `bcf146f6c696` drops `telephony_calls` with its rows.
 }
 ```
 
+### Egress filtering (defence in depth)
+
+The API refuses private, loopback, link-local and metadata destinations for
+every bot URL, and pins the address it checked into the connection
+(`docs/SECURITY.md`, "Outbound requests"). A host firewall rule adds a second,
+independent layer: drop new connections from the API container to
+`169.254.0.0/16`, `10.0.0.0/8`, `172.16.0.0/12` (except the compose network)
+and `192.168.0.0/16`. With `ufw` that is a `DOCKER-USER` chain rule. It is
+free, and it is not applied by this repository because it depends on the host.
+
 ### First account
 
 ```bash

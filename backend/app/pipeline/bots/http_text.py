@@ -14,7 +14,10 @@ Controls, each of which the tests drive over a real socket:
 
 - **Destination.** The base URL is checked at construction and every request
   URL again immediately before sending: scheme, allowlist, resolved addresses.
-  Redirects are never followed.
+  The socket then goes to one of *those* addresses (`app/core/pinned.py`), so
+  the host is never resolved a second time and DNS rebinding between the check
+  and the connect has nothing to rebind. Redirects are never followed, and
+  environment proxies are ignored.
 - **Credential.** The bearer token is a `SecretStr`, sent only in the
   `Authorization` header, and never placed in an exception, a log line, the
   reply metadata or the evidence. Any text from the bot that reaches an error
@@ -43,7 +46,13 @@ from urllib.parse import quote
 import httpx2
 from pydantic import SecretStr
 
-from app.core.outbound import OutboundPolicy, OutboundTargetRefusedError, check_url
+from app.core.outbound import (
+    OutboundPolicy,
+    OutboundTarget,
+    OutboundTargetRefusedError,
+    check_url,
+)
+from app.core.pinned import pinned_client
 from app.pipeline.bots.protocol import BotCapabilities, BotReply
 from app.pipeline.errors import (
     BotAdapterError,
@@ -157,12 +166,11 @@ class HttpTextBotAdapter:
     def capabilities(self) -> BotCapabilities:
         return CAPABILITIES
 
-    def _check(self, url: str) -> None:
+    def _check(self, url: str) -> OutboundTarget:
         try:
             if self._resolver is None:
-                check_url(url, self._config.policy)
-            else:
-                check_url(url, self._config.policy, resolver=self._resolver)
+                return check_url(url, self._config.policy)
+            return check_url(url, self._config.policy, resolver=self._resolver)
         except OutboundTargetRefusedError as exc:
             raise BotTargetRefusedError(
                 f"the bot URL was refused: {exc}", adapter=PROVIDER_NAME
@@ -195,10 +203,14 @@ class HttpTextBotAdapter:
         last: BotAdapterError | None = None
         for attempt in range(1, self._config.max_attempts + 1):
             # Re-checked per attempt: resolution can change between attempts.
-            await asyncio.to_thread(self._check, url)
+            target = await asyncio.to_thread(self._check, url)
             started = time.monotonic()
             try:
-                status, payload = await self._send(method, url, headers, body)
+                status, payload = await self._send(method, url, headers, body, target)
+            except OutboundTargetRefusedError as exc:
+                raise BotTargetRefusedError(
+                    f"the bot connection was refused: {exc}", adapter=PROVIDER_NAME
+                ) from exc
             except httpx2.ConnectError as exc:
                 last = BotUnavailableError(
                     f"could not connect to the bot ({type(exc).__name__})",
@@ -229,23 +241,26 @@ class HttpTextBotAdapter:
         raise last  # type: ignore[misc] - set on every path that reaches here
 
     @asynccontextmanager
-    async def _client_for_request(self) -> AsyncIterator[httpx2.AsyncClient]:
+    async def _client_for_request(
+        self, target: OutboundTarget
+    ) -> AsyncIterator[httpx2.AsyncClient]:
         if self._client is not None:
             yield self._client
             return
-        async with httpx2.AsyncClient(
-            follow_redirects=False,
-            timeout=self._config.timeout_seconds,
-            limits=httpx2.Limits(max_keepalive_connections=0),
-        ) as client:
+        async with pinned_client(target, timeout_seconds=self._config.timeout_seconds) as client:
             yield client
 
     async def _send(
-        self, method: str, url: str, headers: dict[str, str], body: dict[str, Any] | None
+        self,
+        method: str,
+        url: str,
+        headers: dict[str, str],
+        body: dict[str, Any] | None,
+        target: OutboundTarget,
     ) -> tuple[int, dict[str, Any] | None]:
         async with (
             asyncio.timeout(self._config.timeout_seconds),
-            self._client_for_request() as client,
+            self._client_for_request(target) as client,
             client.stream(method, url, headers=headers, json=body) as response,
         ):
             if 300 <= response.status_code < 400:

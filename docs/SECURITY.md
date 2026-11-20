@@ -113,8 +113,16 @@ adapter's base URL and the `ws_voice` adapter's WebSocket URL.
 | IPv4-mapped IPv6 | Judged as the IPv4 address it maps |
 | Transport | Plain `http`/`ws` only to a loopback target, or to a private one with `BOT_HTTP_ALLOW_PLAIN_PRIVATE` (the local Docker stack's reference bot). That flag never widens which addresses are reachable, and the settings refuse it when `APP_ENV` is staging or production |
 | Redirects | Never followed. The HTTP adapter passes `follow_redirects=False`; the WebSocket adapter overrides `websockets`' redirect handling, which by default follows a 3xx handshake answer cross-origin and resends the bearer token to a URI the guard never saw |
+| Pinning | The socket is opened to an address the check approved (`app/core/pinned.py`), never by resolving the name again. HTTP: a network backend that refuses any host or port it was not pinned to. WebSocket: a socket pre-connected to the pinned address, passed as `sock=`; TLS still verifies the certificate against the hostname |
+| Proxies | Environment proxies (`HTTPS_PROXY` and friends) are ignored by both clients, because a proxy would resolve the host itself |
 
-**Known gap: DNS rebinding.** Resolution happens immediately before each
-request, not inside the connect, so a hostile resolver could answer
-differently between the two. The allowlist is the primary control for that
-reason. Pinning the checked address into the transport would close it.
+**DNS rebinding (closed 2026-11-20).** Before pinning, resolution happened
+immediately before each request and again inside the connect, so a hostile
+resolver could approve a public address and then answer the connect with
+loopback or the metadata service. `tests/test_pinned_transport.py` proves the
+fix with a hostname that does not exist in real DNS: the request succeeds only
+because the socket goes to the pinned address. Each request (and each retry)
+is checked afresh, and connects to what that check approved. Network-level
+egress filtering (a firewall that drops traffic to private ranges from the API
+container) is still recommended on a deployed host as defence in depth; see
+`docs/DEPLOYMENT.md`.

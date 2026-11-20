@@ -29,12 +29,12 @@ Redirects are not followed by the clients that use this module (`httpx` with
 redirect handling), so a permitted host cannot bounce a request to a
 forbidden one.
 
-**Residual risk, stated:** resolution happens immediately before each request,
-not inside the socket connect, so a hostile DNS server could answer
-differently between the check and the connect (rebinding). The allowlist is
-the primary control for that reason: an operator who allowlists a host is
-trusting its DNS. Pinning the resolved address into the transport would close
-the gap and is recorded in `docs/SECURITY.md` as future work.
+**DNS rebinding is closed by pinning, not by this module alone.** `check_url`
+returns the addresses it approved, and `app/core/pinned.py` makes the HTTP and
+WebSocket clients connect to one of those addresses by IP, so the host is
+never resolved a second time between the check and the connect. A client that
+calls `check_url` and then connects by *name* reopens the gap: use the pinned
+transports for anything that sends a request.
 """
 
 from __future__ import annotations
