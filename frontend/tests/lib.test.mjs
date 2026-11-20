@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import { ApiError, api, artefactAudioUrl, recordingAudioUrl, request } from "../lib/api/client.ts";
-import { formatErrorRate, formatPassRate, humanise, shortId } from "../lib/format.ts";
+import { DISPLAY_LOCALE, formatErrorRate, formatPassRate, formatTimestamp, formatTimestampShort, humanise, shortId } from "../lib/format.ts";
 import { safeNext } from "../lib/redirect.ts";
 
 describe("formatPassRate", () => {
@@ -281,5 +281,15 @@ describe("describeBargeIn", async () => {
       describeBargeIn({ caller_barge_in: { sent: false, not_sent_reason: "the bot's turn ended first" } }),
       "Caller barge-in not sent: the bot's turn ended first.",
     );
+  });
+});
+
+describe("dates are formatted in one locale on server and browser alike", () => {
+  // A runtime-chosen locale rendered "20 Nov" on the server and "Nov 20" in
+  // the browser, and React rejected the hydration (#418).
+  it("does not depend on the runtime's default locale", () => {
+    assert.equal(DISPLAY_LOCALE, "en-IN");
+    assert.match(formatTimestampShort("2026-11-20T09:48:00Z"), /^\d{1,2} Nov/);
+    assert.match(formatTimestamp("2026-11-20T09:48:00Z"), /^\d{1,2} Nov 2026/);
   });
 });

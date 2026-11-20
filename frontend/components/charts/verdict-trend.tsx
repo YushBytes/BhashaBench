@@ -18,6 +18,7 @@
 import { useId, useState } from "react";
 
 import { cx } from "@/components/ui/primitives";
+import { DISPLAY_LOCALE } from "@/lib/format";
 
 export interface TrendPeriod {
   period: string;
@@ -40,7 +41,7 @@ function label(period: string): string {
   const date = new Date(`${period.slice(0, 10)}T00:00:00Z`);
   return Number.isNaN(date.getTime())
     ? period.slice(0, 10)
-    : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" }).format(date);
+    : new Intl.DateTimeFormat(DISPLAY_LOCALE, { month: "short", day: "numeric", timeZone: "UTC" }).format(date);
 }
 
 export function VerdictTrend({ periods, title = "Runs per day by verdict" }: { periods: TrendPeriod[]; title?: string }) {

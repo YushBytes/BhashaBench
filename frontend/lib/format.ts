@@ -44,11 +44,20 @@ export function formatHz(value: number | null | undefined): string | null {
  * in an evidence trail, where the question is usually whether two runs
  * happened before or after a change.
  */
+/**
+ * The one locale every date is formatted in. Not the runtime's: the server
+ * (Node) and the browser default to different locales, so a client component
+ * that formats a date renders "20 Nov" on the server and "Nov 20" in the
+ * browser, and React rejects the hydration (error #418). en-IN because the
+ * product serves India, and it reads naturally elsewhere.
+ */
+export const DISPLAY_LOCALE = "en-IN";
+
 export function formatTimestamp(value: string | null | undefined): string | null {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(DISPLAY_LOCALE, {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
@@ -59,7 +68,7 @@ export function formatTimestampShort(value: string | null | undefined): string |
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(DISPLAY_LOCALE, {
     month: "short",
     day: "numeric",
     hour: "2-digit",
