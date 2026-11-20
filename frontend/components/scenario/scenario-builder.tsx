@@ -17,7 +17,7 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
-import { parse as parseYaml, stringify as toYaml } from "yaml";
+import { parse as parseYaml } from "yaml";
 import {
   AlertCircle,
   AudioLines,
@@ -39,6 +39,7 @@ import { Button, Notice, cx } from "@/components/ui/primitives";
 import { api } from "@/lib/api/client";
 import type { Language, LibraryScenario, ScenarioValidation } from "@/lib/api/types";
 import { CODECS, NUMERIC_CONDITIONS, SAMPLE_RATES_HZ } from "@/lib/conditions";
+import { toServerYaml } from "@/lib/server-yaml";
 import {
   NAME_PATTERN,
   SCENARIO_NOISE_PROFILES,
@@ -108,7 +109,7 @@ export function ScenarioBuilder({ mode, scenarioId, suites, initialSuiteId, lang
     setValidation(null);
   }
 
-  const yaml = useMemo(() => (tab === "source" ? source : toYaml(specFromDraft(draft), { lineWidth: 100 })), [tab, source, draft]);
+  const yaml = useMemo(() => (tab === "source" ? source : toServerYaml(specFromDraft(draft))), [tab, source, draft]);
 
   const errors = useMemo(() => {
     const map = new Map<string, string>();
@@ -125,7 +126,7 @@ export function ScenarioBuilder({ mode, scenarioId, suites, initialSuiteId, lang
   const language = languages.find((l) => l.code === draft.language) ?? null;
 
   function toSource() {
-    setSource(toYaml(specFromDraft(draft), { lineWidth: 100 }));
+    setSource(toServerYaml(specFromDraft(draft)));
     setSourceError(null);
     setTab("source");
   }
