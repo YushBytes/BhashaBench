@@ -212,6 +212,9 @@ function Side({ title, run }: { title: string; run: ComparedRun }) {
           <Fact label="Bot adapter" mono>
             {run.bot_adapter ?? <NotReported />}
           </Fact>
+          <Fact label="Bot" hint="The connected bot this run tested, as recorded when it was created.">
+            {run.bot_integration ? `${run.bot_integration.name} (${run.bot_integration.host})` : "A server adapter, not a connected bot"}
+          </Fact>
           <Fact label="Evaluator" mono>
             {run.evaluator_version}
           </Fact>

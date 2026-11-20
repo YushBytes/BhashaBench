@@ -368,6 +368,15 @@ export interface BotAdapters {
 // Connected bots - transcribed from backend/app/schemas/integration.py
 // ---------------------------------------------------------------------------
 
+/** The connected bot a run used, copied at creation. Never a credential. */
+export interface RunBotIntegration {
+  id: string;
+  name: string;
+  protocol: string;
+  host: string;
+  connection_checked_at: string | null;
+}
+
 export type CallerPhraseReview = "reviewed" | "unreviewed";
 
 export type IntegrationProtocol = "http" | "ws_voice";
@@ -465,6 +474,8 @@ export interface RunSummary {
   bot_text_externally_received: boolean;
   uses_language_model: boolean;
   /** `reviewed`, `unreviewed`, or null (not recorded - unknown, not reviewed). */
+  /** The workspace's connected bot, or null when a server adapter supplied the bot's side. */
+  bot_integration?: RunBotIntegration | null;
   caller_phrase_review?: CallerPhraseReview | null;
   caller_turns: number;
   bot_turns: number;
@@ -509,6 +520,8 @@ export interface Run {
   /** Whether a fluent speaker reviewed the caller's phrases in this language.
    *  `unreviewed`: machine-written, so a bot that misunderstands them may be
    *  failing the caller. null: not recorded - unknown, never "reviewed". */
+  /** The workspace's connected bot, or null when a server adapter supplied the bot's side. */
+  bot_integration?: RunBotIntegration | null;
   caller_phrase_review?: CallerPhraseReview | null;
   stt_provider: string | null;
   tts_provider: string | null;
@@ -694,6 +707,7 @@ export interface ComparedRun {
   language: string | null;
   mode: string | null;
   bot_adapter: string | null;
+  bot_integration?: RunBotIntegration | null;
   evaluator_version: string;
   evidence_fingerprint: string;
   verdict: "pass" | "fail" | "undetermined";

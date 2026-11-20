@@ -229,6 +229,13 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
                           <Fact label="Speech to text" mono>{run.stt_provider ?? "none (no audio)"}</Fact>
                           <Fact label="Text to speech" mono>{run.tts_provider ?? "none (no audio)"}</Fact>
                           <Fact label="Bot adapter" mono>{run.bot_adapter}</Fact>
+                          {run.bot_integration ? (
+                            <Fact label="Connected bot" hint={`Recorded when the run was created. ${run.bot_integration.protocol} at ${run.bot_integration.host}.`}>
+                              <Link href={`/app/bots/${run.bot_integration.id}`} className="text-accent hover:underline">
+                                {run.bot_integration.name}
+                              </Link>
+                            </Fact>
+                          ) : null}
                           <Fact label="Seed" mono hint="Fixed so the degradation reproduces exactly.">{run.degradation_seed ?? "none"}</Fact>
                           <Fact label="Noise applied" hint={run.degradation_requested ? (run.degradation_requested.source === "scenario" ? "From the scenario's declared SNR and packet loss." : "A profile chosen for this run.") : undefined}>
                             {describeRequested(run.degradation_requested) ?? humanise(run.noise_profile)}
