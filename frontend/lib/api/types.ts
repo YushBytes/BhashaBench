@@ -606,7 +606,8 @@ export interface RunArtefacts {
 }
 
 export interface StageEvent {
-  turn_index: number;
+  /** null for a step about the whole run, such as closing the bot's session. */
+  turn_index: number | null;
   stage: string;
   status: string;
   duration_ms: number | null;

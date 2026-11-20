@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.caller.schemas import TerminationReason
 from app.caller.state import CallerState
@@ -117,11 +117,25 @@ class RunBotIntegration(BaseModel):
 class StageEventResponse(BaseModel):
     """One step of one turn, and what became of it."""
 
-    turn_index: int = Field(ge=0)
+    turn_index: int | None = Field(
+        ge=0,
+        description="The turn this step belongs to, or `null` for a step about the "
+        "whole run, such as closing the bot's session.",
+    )
     stage: str = Field(
         description="`caller_turn`, `caller_synthesis`, `degradation`, "
-        "`bot_exchange`, `bot_audio_validation` or `bot_transcription`."
+        "`bot_exchange`, `bot_audio_validation`, `bot_transcription`, "
+        "`bot_session` or `recovery`."
     )
+
+    @field_validator("turn_index", mode="before")
+    @classmethod
+    def _session_events_have_no_turn(cls, value: object) -> object:
+        # Text-bot runs recorded the session-close event with -1, which this
+        # schema refused, so their reports answered 500. Read it as what it
+        # meant: not a turn. The stored evidence is left as it was.
+        return None if isinstance(value, int) and value < 0 else value
+
     status: str = Field(description="`ok`, `failed`, `skipped` or `pending`.")
     duration_ms: float | None = Field(
         default=None, description="Measured, not estimated. `null` if not timed."

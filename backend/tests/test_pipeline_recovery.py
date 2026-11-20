@@ -438,5 +438,34 @@ class TestProtectedHistoricalRuns:
         assert _full_snapshot(cli_db, protected_id) == before
 
 
+def test_recovery_survives_run_level_events_and_files_under_the_last_real_turn(
+    db_session: Session, settings: Settings, tmp_path: Path
+) -> None:
+    """A run-level event (turn index None, or -1 in older runs) is not a turn.
+
+    `abandon` computed the last turn with `int(turn_index)`, which crashes on
+    None; and a -1 must not be taken as a turn either.
+    """
+    run_id = _offline_run(db_session, settings, tmp_path)
+    run = repo.get_run(db_session, run_id)
+    assert run is not None
+    meta = dict(repo.pipeline_metadata_of(run))
+    real_last = max(e["turn_index"] for e in meta["events"])
+    meta["events"] = [
+        *meta["events"],
+        {"turn_index": None, "stage": "bot_session", "status": "ok"},
+        {"turn_index": -1, "stage": "bot_session", "status": "ok"},
+    ]
+    repo.update_pipeline_metadata(db_session, run, meta)
+    _make_stuck(db_session, run_id, idle=timedelta(hours=2))
+    now = utc_now()
+    stale = recovery.find_stale_runs(db_session, older_than=timedelta(hours=1), now=now)
+    target = next(s for s in stale if s.run.id == run_id)
+    recovery.abandon(db_session, target, now=now)
+    events = repo.pipeline_metadata_of(repo.get_run(db_session, run_id))["events"]
+    assert events[-1]["stage"] == "recovery"
+    assert events[-1]["turn_index"] == real_last
+
+
 def test_abandoned_is_never_a_statement_about_the_bot() -> None:
     assert RunOutcome.ABANDONED in OUR_FAULT_OUTCOMES

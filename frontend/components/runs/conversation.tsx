@@ -209,7 +209,7 @@ export function Conversation({
     return <p className="px-4 py-8 text-center text-[13px] text-text-3 sm:px-5">No turns were recorded. The run was created but never started, or failed before the first turn.</p>;
   }
   const byIndex = new Map<number, StageEvent[]>();
-  for (const e of events) byIndex.set(e.turn_index, [...(byIndex.get(e.turn_index) ?? []), e]);
+  for (const e of events) if (e.turn_index !== null) byIndex.set(e.turn_index, [...(byIndex.get(e.turn_index) ?? []), e]);
   const lastOfIndex = new Map<number, number>();
   turns.forEach((t, i) => lastOfIndex.set(t.index, i));
 

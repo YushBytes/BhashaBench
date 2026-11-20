@@ -315,6 +315,16 @@ class TestRunningAScenarioAgainstAConnectedBot:
         assert integration["id"] == connected["id"]
         assert integration["host"] == "127.0.0.1"
         assert TOKEN not in str(row.run_metadata)
+        # The report - which the run page loads - serialises every stage event.
+        # Closing the bot's session is a run-level event: no turn index.
+        report_response = api_client.get(f"{API}/test-runs/{run_id}/report")
+        assert report_response.status_code == 200, report_response.text
+        closed = [
+            e
+            for e in report_response.json()["events"]
+            if e["stage"] == "bot_session" and e["detail"] == "session closed"
+        ]
+        assert [e["turn_index"] for e in closed] == [None]
         # Which bot was tested is part of the run's own record, on every surface.
         shown = api_client.get(f"{API}/test-runs/{run_id}").json()["bot_integration"]
         assert shown["name"] == connected["name"] and shown["protocol"] == "http"
@@ -463,3 +473,38 @@ def _run_row(session: Session, run_id: str) -> Any:
     row = session.get(RunModel, uuid.UUID(run_id))
     assert row is not None
     return row
+
+
+class TestRunLevelEvents:
+    def test_a_run_stored_with_the_old_minus_one_index_still_reports(
+        self,
+        api_client: TestClient,
+        db_session: Session,
+        project: Project,
+        connected: dict[str, Any],
+    ) -> None:
+        """Text-bot runs before this fix stored the session event at -1, which
+        the report schema refused with a 500. They must read back as null."""
+        from app.repositories import pipeline_runs as pipeline_repo
+
+        suite, scenario = _suite_and_scenario(db_session, project)
+        run_id = api_client.post(
+            f"{API}/test-runs",
+            json={
+                "suite_id": str(suite.id), "scenario_id": str(scenario.id),
+                "mode": "text_bot_test", "bot_integration_id": connected["id"],
+            },
+        ).json()["run_id"]  # fmt: skip
+        row = _run_row(db_session, run_id)
+        meta = pipeline_repo.pipeline_metadata_of(row)
+        meta["events"] = [
+            *meta.get("events", []),
+            {"turn_index": -1, "stage": "bot_session", "status": "ok", "duration_ms": None,
+             "detail": "session closed"},
+        ]  # fmt: skip
+        pipeline_repo.update_pipeline_metadata(db_session, row, meta)
+        report = api_client.get(f"{API}/test-runs/{run_id}/report")
+        assert report.status_code == 200, report.text
+        assert [
+            e["turn_index"] for e in report.json()["events"] if e["stage"] == "bot_session"
+        ] == [None]

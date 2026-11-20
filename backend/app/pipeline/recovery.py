@@ -145,7 +145,10 @@ def abandon(
         )
     meta: dict[str, Any] = dict(repo.pipeline_metadata_of(run))
     events: list[dict[str, Any]] = list(meta.get("events", []))
-    last_turn = max((int(event.get("turn_index", 0)) for event in events), default=0)
+    # Run-level events (turn_index None, or -1 in older runs) are not turns.
+    last_turn = max(
+        (i for e in events if isinstance(i := e.get("turn_index"), int) and i >= 0), default=0
+    )
     when = stale.last_activity_at.isoformat()
     detail = (
         f"abandoned: {reason or f'no activity since {when}'}; closed by '{by}' at {now.isoformat()}"

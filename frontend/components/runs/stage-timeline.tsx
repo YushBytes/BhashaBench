@@ -18,7 +18,11 @@ export function StageTimeline({ events }: { events: StageEvent[] }) {
     return <p className="px-4 py-8 text-center text-[13px] text-text-3">No stages ran. The run was created but never started.</p>;
   }
   const slowest = Math.max(...events.map((e) => e.duration_ms ?? 0), 1);
-  const turns = [...new Set(events.map((e) => e.turn_index))].sort((a, b) => a - b);
+  // Turns in order, then run-level steps (no turn index) as their own group.
+  const turns: (number | null)[] = [...new Set(events.map((e) => e.turn_index))]
+    .filter((t): t is number => t !== null)
+    .sort((a, b) => a - b);
+  if (events.some((e) => e.turn_index === null)) turns.push(null);
   const total = events.reduce((n, e) => n + (e.duration_ms ?? 0), 0);
   return (
     <div>
@@ -27,8 +31,8 @@ export function StageTimeline({ events }: { events: StageEvent[] }) {
       </p>
       <ol className="divide-y divide-line">
         {turns.map((turn) => (
-          <li key={turn} className="px-4 py-3 sm:px-5">
-            <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.08em] text-text-3">Turn {turn}</p>
+          <li key={turn ?? "run"} className="px-4 py-3 sm:px-5">
+            <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.08em] text-text-3">{turn === null ? "Whole run" : `Turn ${turn}`}</p>
             <ul className="space-y-2">
               {events
                 .filter((e) => e.turn_index === turn)

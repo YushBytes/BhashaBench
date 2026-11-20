@@ -321,7 +321,10 @@ def _with_source(parameters: dict[str, Any], requested: dict[str, Any] | None) -
 class StageEvent:
     """One step of one turn, and what became of it."""
 
-    turn_index: int
+    turn_index: int | None
+    """`None` for an event about the whole run rather than one turn, such as
+    closing the bot's session. (Runs recorded before this used -1; the API
+    reports those as `None` too.)"""
     stage: str
     status: str
     """`ok`, `failed`, `skipped` or `pending`."""
@@ -489,6 +492,16 @@ class RunReport:
             sum(a.duration_seconds or 0.0 for a in self.artefacts),
             3,
         )
+
+
+def _turn_of(event: dict[str, Any]) -> int | None:
+    """A stored event's turn, or `None` for a run-level event.
+
+    Run-level events (closing the bot's session) carry `None`; runs recorded
+    before that carry -1. Neither is a turn.
+    """
+    value = event.get("turn_index")
+    return value if isinstance(value, int) and value >= 0 else None
 
 
 class RunEngine:
@@ -1816,7 +1829,7 @@ class RunEngine:
         except BotAdapterError as exc:
             events.append(
                 StageEvent(
-                    turn_index=-1,
+                    turn_index=None,
                     stage="bot_session",
                     status="failed",
                     detail=f"closing the session failed: {type(exc).__name__}: {redact(exc)}",
@@ -1826,7 +1839,7 @@ class RunEngine:
             meta["bot_session_closed"] = True
             events.append(
                 StageEvent(
-                    turn_index=-1, stage="bot_session", status="ok", detail="session closed"
+                    turn_index=None, stage="bot_session", status="ok", detail="session closed"
                 ).as_dict()
             )
         meta["events"] = events
@@ -2072,7 +2085,7 @@ class RunEngine:
             ),
             events=tuple(
                 StageEvent(
-                    turn_index=int(event.get("turn_index", 0)),
+                    turn_index=_turn_of(event),
                     stage=str(event.get("stage", "")),
                     status=str(event.get("status", "")),
                     duration_ms=event.get("duration_ms"),
