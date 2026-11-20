@@ -182,9 +182,7 @@ def create(
         name=name,
         protocol=protocol,
         url=validate_url(protocol, url),
-        credential_sealed=seal(
-            plain, secret_key=settings.secret_key, bound_to=integration_id.bytes
-        ),
+        credential_sealed=seal(plain, master=settings.secret_key, bound_to=integration_id.bytes),
         credential_hint=hint(plain),
         default_language=_language(default_language),
         created_by=principal.user_id,
@@ -219,9 +217,8 @@ def update(
     if token is not None:
         _require_enabled(settings)
         plain = _validate_token(token.get_secret_value())
-        integration.credential_sealed = seal(
-            plain, secret_key=settings.secret_key, bound_to=integration.id.bytes
-        )
+        sealed = seal(plain, master=settings.secret_key, bound_to=integration.id.bytes)
+        integration.credential_sealed = sealed
         integration.credential_hint = hint(plain)
         changed_target = True
     if default_language is not None:
@@ -246,7 +243,7 @@ def _token(integration: BotIntegration, settings: Settings) -> SecretStr:
         return SecretStr(
             open_sealed(
                 integration.credential_sealed,
-                secret_key=settings.secret_key,
+                master=settings.secret_key,
                 bound_to=integration.id.bytes,
             )
         )

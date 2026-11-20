@@ -38,23 +38,21 @@ class CredentialUnreadableError(ValueError):
     """
 
 
-def _key(secret_key: str) -> bytes:
+def _key(master: str) -> bytes:
     return HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=_INFO).derive(
-        secret_key.encode("utf-8")
+        master.encode("utf-8")
     )
 
 
-def seal(plaintext: str, *, secret_key: str, bound_to: bytes) -> bytes:
+def seal(plaintext: str, *, master: str, bound_to: bytes) -> bytes:
     """Encrypt `plaintext`, bound to `bound_to` (the owning row's id)."""
     nonce = os.urandom(NONCE_BYTES)
     return (
-        VERSION
-        + nonce
-        + AESGCM(_key(secret_key)).encrypt(nonce, plaintext.encode("utf-8"), bound_to)
+        VERSION + nonce + AESGCM(_key(master)).encrypt(nonce, plaintext.encode("utf-8"), bound_to)
     )
 
 
-def open_sealed(sealed: bytes, *, secret_key: str, bound_to: bytes) -> str:
+def open_sealed(sealed: bytes, *, master: str, bound_to: bytes) -> str:
     """Decrypt what `seal` produced.
 
     Raises:
@@ -65,9 +63,7 @@ def open_sealed(sealed: bytes, *, secret_key: str, bound_to: bytes) -> str:
         raise CredentialUnreadableError("the stored credential is not in a known format")
     nonce = sealed[len(VERSION) : len(VERSION) + NONCE_BYTES]
     try:
-        plain = AESGCM(_key(secret_key)).decrypt(
-            nonce, sealed[len(VERSION) + NONCE_BYTES :], bound_to
-        )
+        plain = AESGCM(_key(master)).decrypt(nonce, sealed[len(VERSION) + NONCE_BYTES :], bound_to)
     except InvalidTag as exc:
         raise CredentialUnreadableError(
             "the stored credential cannot be decrypted with the current SECRET_KEY; enter it again"

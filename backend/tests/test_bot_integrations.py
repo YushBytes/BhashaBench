@@ -132,11 +132,11 @@ class TestSavingIsNotConnecting:
         assert row is not None
         assert TOKEN.encode() not in row.credential_sealed
         key = settings.secret_key
-        assert open_sealed(row.credential_sealed, secret_key=key, bound_to=row.id.bytes) == TOKEN
+        assert open_sealed(row.credential_sealed, master=key, bound_to=row.id.bytes) == TOKEN
         with pytest.raises(CredentialUnreadableError):
-            open_sealed(row.credential_sealed, secret_key=key, bound_to=uuid.uuid4().bytes)
+            open_sealed(row.credential_sealed, master=key, bound_to=uuid.uuid4().bytes)
         with pytest.raises(CredentialUnreadableError):
-            open_sealed(row.credential_sealed, secret_key="another-key", bound_to=row.id.bytes)
+            open_sealed(row.credential_sealed, master="another-key", bound_to=row.id.bytes)
 
     @pytest.mark.parametrize(
         ("body", "fragment"),

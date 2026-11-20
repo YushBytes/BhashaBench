@@ -18,4 +18,10 @@ regexes = [
   '''test-secret-key-not-used-for-anything''',
   '''timbre-key-0123456789abcdef''',
   '''gnani_tts_key_abcdef0123456789''',
+  # Not fixtures: source code that the generic-api-key rule misread in commit
+  # 77d0228 ("seal(plain, secret_key=settings.secret_key, bound_to=...)"). The
+  # captured text is a Python attribute reference, never a credential value.
+  # The code no longer has this shape; the entries keep history scannable.
+  '''^bound_to=integration_id\.bytes$''',
+  '''^bound_to=integration\.id\.bytes$''',
 ]
