@@ -1,50 +1,57 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-
-import { site } from "@/lib/content";
+import type { Metadata, Viewport } from "next";
+import { Host_Grotesk, JetBrains_Mono } from "next/font/google";
 
 import "./globals.css";
 
 /**
- * Two fonts, both loaded through `next/font` so they are self-hosted and
- * subset at build time: no render-blocking request to a third party, and no
- * layout shift when they arrive.
+ * The document and the fonts, nothing else. The public site and the
+ * workspace each supply their own chrome, and each has a `<main id="main">`
+ * for the skip link to land on.
  */
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+
+const host = Host_Grotesk({
   subsets: ["latin"],
+  variable: "--font-host",
   display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrains = JetBrains_Mono({
   subsets: ["latin"],
+  variable: "--font-jetbrains",
   display: "swap",
 });
 
 export const metadata: Metadata = {
   title: {
-    default: `${site.name} — ${site.tagline}`,
-    template: `%s · ${site.name}`,
+    default: "BhashaBench — test voice AI on how India actually speaks",
+    template: "%s · BhashaBench",
   },
-  description: site.description,
-  applicationName: site.name,
+  description:
+    "Run scripted callers in 13 Indian languages against your voice bot, under codecs, jitter and noise, " +
+    "and read back every turn, recording and measured error rate.",
+  applicationName: "BhashaBench",
+  openGraph: {
+    title: "BhashaBench",
+    description: "Testing and benchmarking for Indian-language voice AI.",
+    type: "website",
+  },
 };
 
-/**
- * The root layout carries the document and nothing else.
- *
- * The public site and the workspace have different chrome — a marketing
- * header against a persistent operator rail — so neither belongs here.
- * Each supplies its own.
- */
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
+  width: "device-width",
+  initialScale: 1,
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full bg-bg">{children}</body>
+    <html lang="en" className={`${host.variable} ${jetbrains.variable}`}>
+      <body className="min-h-dvh antialiased">
+        <a href="#main" className="skip-link">
+          Skip to content
+        </a>
+        {children}
+      </body>
     </html>
   );
 }

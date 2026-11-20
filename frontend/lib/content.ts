@@ -274,3 +274,124 @@ export const limitations = [
       "run describes any real speech engine.",
   },
 ] as const;
+
+/**
+ * The language catalogue, as the public site shows it. Copied from
+ * backend/app/core/languages.py (the single source of truth) because the
+ * public page is static and must render with no backend; `tests/content.test.mjs`
+ * reads that file and fails when this list disagrees with it.
+ *
+ * `transcribable` is Prisma's coverage as docs/PROVIDERS.md states it: ten of
+ * the thirteen. Authorable is not the same as transcribable.
+ */
+export const languages = [
+  { code: "hi-IN", name: "Hindi", endonym: "हिन्दी", script: "Deva", transcribable: true },
+  { code: "bn-IN", name: "Bengali", endonym: "বাংলা", script: "Beng", transcribable: true },
+  { code: "mr-IN", name: "Marathi", endonym: "मराठी", script: "Deva", transcribable: true },
+  { code: "te-IN", name: "Telugu", endonym: "తెలుగు", script: "Telu", transcribable: true },
+  { code: "ta-IN", name: "Tamil", endonym: "தமிழ்", script: "Taml", transcribable: true },
+  { code: "gu-IN", name: "Gujarati", endonym: "ગુજરાતી", script: "Gujr", transcribable: true },
+  { code: "ur-IN", name: "Urdu", endonym: "اردو", script: "Arab", transcribable: false },
+  { code: "kn-IN", name: "Kannada", endonym: "ಕನ್ನಡ", script: "Knda", transcribable: true },
+  { code: "or-IN", name: "Odia", endonym: "ଓଡ଼ିଆ", script: "Orya", transcribable: false },
+  { code: "ml-IN", name: "Malayalam", endonym: "മലയാളം", script: "Mlym", transcribable: true },
+  { code: "pa-IN", name: "Punjabi", endonym: "ਪੰਜਾਬੀ", script: "Guru", transcribable: true },
+  { code: "as-IN", name: "Assamese", endonym: "অসমীয়া", script: "Beng", transcribable: false },
+  { code: "en-IN", name: "Indian English", endonym: "Indian English", script: "Latn", transcribable: true },
+] as const;
+
+/** Feature status as the public site states it. `limited` names what is missing. */
+export type FeatureStatus = "built" | "limited";
+
+export const features: readonly {
+  key: string;
+  title: string;
+  body: string;
+  status: FeatureStatus;
+  limit?: string;
+}[] = [
+  {
+    key: "languages",
+    title: "Indian-language callers",
+    body: "A goal-driven caller speaks reviewed phrase tables in the scenario's language and pursues its objective turn by turn.",
+    status: "limited",
+    limit: "A deterministic rule engine. Bengali, Marathi and Telugu phrase tables are not written yet.",
+  },
+  {
+    key: "conditions",
+    title: "Line and room conditions",
+    body: "G.711 A-law and µ-law, jitter, dropouts, clipping, gain, truncation, silence and noise at a stated signal-to-noise ratio, from a fixed seed.",
+    status: "built",
+  },
+  {
+    key: "accent",
+    title: "Accent profiles",
+    body: "A scenario requests an accent from the catalogue and every run records whether the speech provider applied it.",
+    status: "limited",
+    limit: "No speech provider documents an accented voice, so runs record it as requested, not applied.",
+  },
+  {
+    key: "barge-in",
+    title: "Caller interruption",
+    body: "The caller talks over the bot a set time into its reply, and the run records whether the bot stopped and how fast.",
+    status: "limited",
+    limit: "Only on the streaming voice adapter (ws_voice). Sequential adapters cannot interrupt.",
+  },
+  {
+    key: "code-mixing",
+    title: "Code-mixing measurement",
+    body: "Every turn is split into runs of one writing system, and WER is reported per script, so you see where English words inside Tamil were lost.",
+    status: "limited",
+    limit: "Measured as script switching. The caller's own speech is monolingual for now.",
+  },
+  {
+    key: "wer",
+    title: "Speech recognition error rates",
+    body: "Word and character error rates against a reviewer's reference transcript, never against the transcript being scored.",
+    status: "built",
+  },
+  {
+    key: "evaluation",
+    title: "Conversation verdicts",
+    body: "Task completion, required and forbidden phrases, latency and transcription failures, each verdict with its reason.",
+    status: "built",
+  },
+  {
+    key: "comparison",
+    title: "Comparison and regression",
+    body: "Two runs side by side with metric deltas, and a Fisher exact test between two periods before anything is called a regression.",
+    status: "built",
+  },
+  {
+    key: "reports",
+    title: "Evidence you can export",
+    body: "Each run's turns, recordings, stage timings and evaluation as JSON, CSV or a printable PDF.",
+    status: "built",
+  },
+];
+
+/**
+ * Qualities the evaluator does not measure. They need the LLM judge, which is
+ * offline-only and not validated against human labels (docs/EVALUATION.md),
+ * so they are shown as unavailable and never scored.
+ */
+export const unmeasuredQualities = [
+  "Semantic correctness",
+  "Context retention",
+  "Response relevance",
+  "Language quality",
+] as const;
+
+export const unmeasuredReason =
+  "These need a language-model judge. BhashaBench's judge runs offline only and has not been " +
+  "validated against human labels, so these qualities are reported as unavailable rather than scored.";
+
+const DOCS = "https://github.com/YushBytes/BhashaBench/blob/main/docs";
+
+/** Documentation that exists in the repository. */
+export const docs = [
+  { title: "Scenario format", href: `${DOCS}/SCENARIO_FORMAT.md`, body: "Every field a scenario takes, with its bounds." },
+  { title: "Bot protocol", href: `${DOCS}/BOT_PROTOCOL.md`, body: "Connect a bot over HTTP text or streaming voice." },
+  { title: "Evaluation", href: `${DOCS}/EVALUATION.md`, body: "How each metric and verdict is computed." },
+  { title: "Local deployment", href: `${DOCS}/LOCAL_DEPLOYMENT.md`, body: "Run the whole stack on one machine at no cost." },
+] as const;

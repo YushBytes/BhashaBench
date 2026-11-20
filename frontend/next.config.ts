@@ -33,6 +33,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Routes renamed by the 2026-11 frontend; old links and bookmarks keep working.
+  async redirects() {
+    return [
+      { source: "/app/new-test", destination: "/app/runs/new", permanent: true },
+      { source: "/app/providers", destination: "/app/bots", permanent: true },
+      { source: "/app/workspace", destination: "/app/settings/team", permanent: true },
+    ];
+  },
   async rewrites() {
     return [{ source: "/api/v1/:path*", destination: `${BACKEND_URL}/api/v1/:path*` }];
   },

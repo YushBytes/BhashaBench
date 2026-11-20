@@ -1,328 +1,236 @@
 @import "tailwindcss";
 
-/* ===========================================================================
-   BhashaBench design tokens
-   ---------------------------------------------------------------------------
-   One dark palette, not a theme switch. This is an instrument that sits open
-   beside a terminal while a run executes, and a single palette keeps the
-   status colours meaning one thing: a reader never has to ask which theme a
-   screenshot was taken in before trusting the colour of a badge.
-
-   Three rules hold the colour system together:
-
-   1. Accent is for the primary action, the current selection and focus.
-      Never for decoration, never for an inactive state.
-   2. Status hues are fixed vocabulary. `--state-ok` always means verified,
-      `--state-warn` always means qualified, `--state-bad` always means
-      failed. A hue is never reused for a different meaning on another page.
-   3. No status is carried by colour alone. Every badge pairs its hue with a
-      label, and most with a glyph, so the run table reads correctly in
-      greyscale and to anyone who cannot separate the hues.
-   ======================================================================== */
+/*
+ * BhashaBench design tokens.
+ *
+ * One light system with a dark "instrument" surface for the public hero and
+ * footer. Monochrome by default: ink on white, hairlines for structure, mono
+ * for every measured value. Electric blue is the only accent and it means
+ * exactly three things - the primary action, the current selection, focus.
+ *
+ * Every text colour below was measured against all three light grounds
+ * (--bg, --bg-soft, --bg-sunk). The lowest pairing is --busy on --bg-sunk at
+ * 5.19:1; AA body text needs 4.5:1. Re-measure if any value changes.
+ *
+ * A status hue never means two things, and no status is colour alone: every
+ * badge carries a word.
+ */
 
 :root {
-  color-scheme: dark;
+  --bg: #ffffff;
+  --bg-soft: #fafafa;
+  --bg-sunk: #f4f4f5;
 
-  /* -- Surfaces, furthest back to closest ------------------------------- */
-  --bg: #090b0f;
-  --surface: #10141b;
-  --surface-raised: #171d26;
-  --surface-inset: #0c1016;
-  /* A second neutral layer for the sidebar and toolbars, cooler than the
-     content surface so the chrome recedes behind the data. */
-  --chrome: #0b0e14;
+  --line: #e7e7ea;
+  --line-strong: #d4d4d8;
 
-  --line: #1e2531;
-  --line-strong: #2b3442;
+  --text: #0a0a0a;
+  --text-2: #3f3f46;
+  --text-3: #63636b;
 
-  /* -- Type -------------------------------------------------------------- */
-  --text: #f4f7fa;
-  --text-dim: #a0aab7;
-  /* Lightened from the #778392 of the original brief: that value measured
-     4.39:1 on `--surface-raised`, failing AA for body text by a margin too
-     small to see and too real to keep. This one clears 4.9:1 on every
-     surface it is used on. */
-  --text-muted: #808c9b;
+  --accent: #0a4bff;
+  --accent-hover: #0039d6;
+  --accent-soft: #eef3ff;
+  --accent-line: #b9cdff;
 
-  /* -- Accent ------------------------------------------------------------ */
-  --accent: #36d6c5;
-  --accent-strong: #5ee3d4;
-  --accent-dim: #0f2b2c;
-  --accent-line: #1d5a56;
-  /* A second accent, strictly for plotting one series against another -
-     caller against bot, original against degraded. Never for an action. */
-  --accent-alt: #62b6ff;
-  --accent-alt-dim: #10243a;
+  --ok: #08703a;
+  --ok-soft: #ecf7f0;
+  --warn: #9a4a00;
+  --warn-soft: #fdf4e7;
+  --bad: #c1121f;
+  --bad-soft: #fdeeee;
+  --busy: #00708a;
+  --busy-soft: #e8f6f9;
+  --idle: #63636b;
+  --idle-soft: #f4f4f5;
 
-  /* -- Status ------------------------------------------------------------ */
-  --state-ok: #42c98b;
-  --state-ok-dim: #0f2a1f;
-  --state-warn: #f0b75e;
-  --state-warn-dim: #2e2412;
-  --state-bad: #f07178;
-  --state-bad-dim: #2e1619;
-  --state-idle: #6b7687;
-  --state-idle-dim: #171c24;
-  --state-busy: #62b6ff;
-  --state-busy-dim: #10243a;
+  /* The instrument surface. */
+  --night: #0a0a0a;
+  --night-2: #141416;
+  --night-3: #1c1c1f;
+  --night-line: #2a2a2e;
+  --night-text: #fafafa;
+  --night-muted: #a1a1aa;
+  --night-accent: #5b8cff;
 
-  /* -- Shape and depth --------------------------------------------------- */
-  --r-sm: 4px;
-  --r-md: 6px;
-  --r-lg: 10px;
-  --r-xl: 14px;
-
-  /* Shadows carry an offset and a soft blur. A zero-offset halo is
-     decoration, not depth. */
-  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px rgb(0 0 0 / 0.3);
-  --shadow-overlay: 0 8px 16px rgb(0 0 0 / 0.45), 0 24px 48px rgb(0 0 0 / 0.4);
-
-  /* -- Motion ------------------------------------------------------------ */
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-  --t-fast: 120ms;
-  --t-base: 180ms;
+  --shadow-1: 0 1px 2px rgb(10 10 10 / 0.04);
+  --shadow-2: 0 1px 2px rgb(10 10 10 / 0.04), 0 8px 24px -12px rgb(10 10 10 / 0.12);
+  --shadow-pop: 0 2px 4px rgb(10 10 10 / 0.06), 0 16px 40px -12px rgb(10 10 10 / 0.22);
 }
 
 @theme inline {
   --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-surface-raised: var(--surface-raised);
-  --color-surface-inset: var(--surface-inset);
-  --color-chrome: var(--chrome);
-
+  --color-bg-soft: var(--bg-soft);
+  --color-bg-sunk: var(--bg-sunk);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
-
   --color-text: var(--text);
-  --color-text-dim: var(--text-dim);
-  --color-text-muted: var(--text-muted);
-
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
   --color-accent: var(--accent);
-  --color-accent-strong: var(--accent-strong);
-  --color-accent-dim: var(--accent-dim);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
   --color-accent-line: var(--accent-line);
-  --color-accent-alt: var(--accent-alt);
-  --color-accent-alt-dim: var(--accent-alt-dim);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-busy: var(--busy);
+  --color-busy-soft: var(--busy-soft);
+  --color-idle: var(--idle);
+  --color-idle-soft: var(--idle-soft);
+  --color-night: var(--night);
+  --color-night-2: var(--night-2);
+  --color-night-3: var(--night-3);
+  --color-night-line: var(--night-line);
+  --color-night-text: var(--night-text);
+  --color-night-muted: var(--night-muted);
+  --color-night-accent: var(--night-accent);
 
-  --color-ok: var(--state-ok);
-  --color-ok-dim: var(--state-ok-dim);
-  --color-warn: var(--state-warn);
-  --color-warn-dim: var(--state-warn-dim);
-  --color-bad: var(--state-bad);
-  --color-bad-dim: var(--state-bad-dim);
-  --color-idle: var(--state-idle);
-  --color-idle-dim: var(--state-idle-dim);
-  --color-busy: var(--state-busy);
-  --color-busy-dim: var(--state-busy-dim);
+  --font-sans: var(--font-host), ui-sans-serif, system-ui, "Nirmala UI", "Noto Sans", sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "Cascadia Mono", Consolas, monospace;
 
-  --radius-sm: var(--r-sm);
-  --radius-md: var(--r-md);
-  --radius-lg: var(--r-lg);
-  --radius-xl: var(--r-xl);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-/* ===========================================================================
-   Base
-   ======================================================================== */
-
-html {
-  /* A fixed rem scale, not a fluid one. Operators view at a consistent DPI,
-     and a heading that shrinks inside a panel looks worse, not better. */
-  font-size: 16px;
-}
-
-body {
-  background-color: var(--bg);
-  color: var(--text);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-/* Machine values - ids, references, durations, seeds, language tags - are set
-   in mono because they are data to be compared character by character, not
-   because mono reads as technical. Tabular figures so columns of numbers
-   line up. */
-code,
-kbd,
-samp,
-pre,
-.tabular {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ===========================================================================
-   Browser surfaces
-   ---------------------------------------------------------------------------
-   The parts not drawn by hand still carry the design. Left at their defaults
-   these are the cheapest tell that a page was assembled rather than built.
-   ======================================================================== */
-
-::selection {
-  background: var(--accent-dim);
-  color: var(--accent-strong);
-}
-
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--r-sm);
-}
-
-/* Focus belongs to the keyboard. A mouse press on a button should not leave
-   a ring behind it. */
-:focus:not(:focus-visible) {
-  outline: none;
+  --shadow-1: var(--shadow-1);
+  --shadow-2: var(--shadow-2);
+  --shadow-pop: var(--shadow-pop);
 }
 
 * {
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+  border-color: var(--line);
 }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+html {
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+  scroll-padding-top: 5rem;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
-  border-radius: 999px;
-  border: 2px solid var(--bg);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #3b4756;
-}
-
-a {
-  text-underline-offset: 0.2em;
-  text-decoration-thickness: 1px;
-}
-
-/* The caret in a dark field defaults to a colour belonging to no palette. */
-input,
-textarea,
-select {
-  caret-color: var(--accent);
-}
-
-/* The native dialog backdrop, so an overlay sits in this world rather than
-   the browser's. */
-dialog::backdrop {
-  background: rgb(4 6 9 / 0.72);
-  backdrop-filter: blur(2px);
-}
-
-dialog {
+body {
+  background: var(--bg);
   color: var(--text);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
 }
 
-/* ===========================================================================
-   Motion
-   ======================================================================== */
+/* Indic scripts read badly squeezed: give any tagged non-Latin run a little
+   more line height and no negative tracking. */
+:lang(hi), :lang(bn), :lang(mr), :lang(te), :lang(ta), :lang(gu), :lang(ur),
+:lang(kn), :lang(or), :lang(ml), :lang(pa), :lang(as) {
+  letter-spacing: 0;
+  line-height: 1.6;
+}
+
+::selection {
+  background: var(--text);
+  color: var(--bg);
+}
+
+/* Focus: one ring everywhere, never removed, visible on light and dark. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.on-night :focus-visible {
+  outline-color: var(--night-accent);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: -4rem;
+  z-index: 100;
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-md);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 14px;
+  font-weight: 500;
+}
+.skip-link:focus {
+  top: 0.75rem;
+}
+
+/* Skeletons shimmer only when motion is welcome. */
+.bb-skeleton {
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg, var(--bg-sunk) 25%, #ececee 37%, var(--bg-sunk) 63%);
+  background-size: 400% 100%;
+  animation: bb-shimmer 1.4s ease infinite;
+}
+@keyframes bb-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* The hero entrance: once, on load. */
+.bb-enter {
+  animation: bb-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.bb-enter-2 { animation-delay: 0.08s; }
+.bb-enter-3 { animation-delay: 0.16s; }
+.bb-enter-4 { animation-delay: 0.26s; }
+@keyframes bb-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* A live indicator for a run in flight. */
+.bb-pulse {
+  animation: bb-pulse 1.6s ease-in-out infinite;
+}
+@keyframes bb-pulse {
+  50% { opacity: 0.35; }
+}
+
+/* The signal line on the public hero: bars that breathe in sequence. It is
+   ornament, not data, so it carries no figure and is hidden from AT. */
+.bb-signal span {
+  transform-origin: center;
+  animation: bb-signal 3.2s ease-in-out infinite;
+}
+@keyframes bb-signal {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+  .bb-signal span { transform: scaleY(0.7); }
 }
 
-/* A loading skeleton, not a spinner in the middle of content. */
-@keyframes bb-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
+/* Native controls take the accent. */
+input[type="checkbox"], input[type="radio"], input[type="range"] {
+  accent-color: var(--accent);
 }
 
-.bb-skeleton {
-  background: var(--surface-raised);
-  border-radius: var(--r-sm);
-  animation: bb-pulse 1.6s var(--ease) infinite;
-}
-
-/* The one authored entrance: content arriving after a fetch settles in from
-   an already-visible default rather than fading up from nothing. */
-@keyframes bb-settle {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.bb-settle {
-  animation: bb-settle var(--t-base) var(--ease) both;
-}
-
-/* A run that is executing. Used on one dot, never on a region. */
-@keyframes bb-breathe {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.35);
-  }
-}
-
-.bb-live-dot {
-  animation: bb-breathe 1.8s var(--ease) infinite;
-}
-
-/* ==========================================================================
-   Print: a run or comparison page saved as PDF from the browser.
-   Light palette for paper, chrome and controls hidden, evidence kept.
-   Nothing is re-rendered or summarised: the PDF is the page as measured.
-   ========================================================================== */
+/* Print: the run and comparison pages save as PDF through the browser. Chrome
+   goes, evidence stays; panels never split across a page. */
 @media print {
-  :root {
-    color-scheme: light;
-    --bg: #ffffff;
-    --surface: #ffffff;
-    --surface-raised: #ffffff;
-    --surface-inset: #f4f5f7;
-    --chrome: #ffffff;
-    --line: #d0d5dc;
-    --line-strong: #9aa3ae;
-    --text: #0b0d10;
-    --text-dim: #2a3038;
-    --text-muted: #4a525c;
-    --accent: #00665e;
-    --accent-alt: #0b5aa3;
-  }
-  body {
-    background: #ffffff;
-  }
-  nav,
-  button,
-  audio,
-  [data-print-hide] {
-    display: none !important;
-  }
-  a {
-    text-decoration: none;
-  }
+  @page { margin: 14mm; }
+  html, body { background: #fff !important; }
+  .no-print, nav, aside, header[data-chrome], [data-chrome] { display: none !important; }
+  main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  section, article, [data-panel] { break-inside: avoid; box-shadow: none !important; }
+  a { color: inherit !important; text-decoration: none !important; }
+  audio { display: none !important; }
+  .print-only { display: block !important; }
 }
+.print-only { display: none; }

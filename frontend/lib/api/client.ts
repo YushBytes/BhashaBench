@@ -18,6 +18,11 @@
  */
 
 import type {
+  BundleExport,
+  BundleImportResult,
+  MetricCatalogue,
+  PasswordChangeResult,
+  SuiteRead,
   AnalyticsSummary,
   AnalyticsTrend,
   ApiHealth,
@@ -172,16 +177,19 @@ export async function request<T>(
   const timer = AbortSignal.timeout(timeoutMs);
   const composed = signal ? AbortSignal.any([signal, timer]) : timer;
 
+  // A FormData body (an audio upload) goes as multipart, and the browser sets
+  // its own content type with the boundary; everything else is JSON.
+  const multipart = typeof FormData !== "undefined" && body instanceof FormData;
   const init: RequestInit & { next?: { revalidate: number } } = {
     method,
     signal: composed,
     headers: {
-      ...(body ? { "content-type": "application/json" } : {}),
+      ...(body !== undefined && !multipart ? { "content-type": "application/json" } : {}),
       ...extraHeaders,
     },
     // Same-origin in the browser; the session cookie travels by itself.
     credentials: "same-origin",
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : multipart ? (body as FormData) : JSON.stringify(body),
   };
   if (cache) init.cache = cache;
   if (revalidate !== undefined) init.next = { revalidate };
@@ -432,6 +440,74 @@ export const api = {
 
   cancelRun: (id: string, o?: RequestOptions) =>
     request<Run>(`/api/v1/test-runs/${id}/cancel`, { ...o, method: "POST" }),
+  // -- Added for the 2026-11 frontend; each path is in the OpenAPI document --
+
+  project: (id: string, o?: RequestOptions) => request<ProjectRead>(`/api/v1/projects/${id}`, o),
+
+  createProjectWith: (workspaceId: string, body: { name: string; description?: string | null }, o?: RequestOptions) =>
+    request<ProjectRead>(`/api/v1/workspaces/${workspaceId}/projects`, { ...o, method: "POST", body }),
+
+  updateProject: (id: string, body: { name?: string; description?: string | null }, o?: RequestOptions) =>
+    request<ProjectRead>(`/api/v1/projects/${id}`, { ...o, method: "PATCH", body }),
+
+  /** 409 while the project still holds suites. */
+  deleteProject: (id: string, o?: RequestOptions) =>
+    request<void>(`/api/v1/projects/${id}`, { ...o, method: "DELETE" }),
+
+  suite: (id: string, o?: RequestOptions) => request<SuiteRead>(`/api/v1/suites/${id}`, o),
+
+  createSuiteFull: (body: { name: string; project_id: string; description?: string | null }, o?: RequestOptions) =>
+    request<SuiteSummary>("/api/v1/suites", { ...o, method: "POST", body }),
+
+  updateSuite: (id: string, body: { name?: string; description?: string | null }, o?: RequestOptions) =>
+    request<SuiteSummary>(`/api/v1/suites/${id}`, { ...o, method: "PATCH", body }),
+
+  suiteScenarios: (id: string, o?: RequestOptions) =>
+    request<Page<ScenarioSummary>>(`/api/v1/suites/${id}/scenarios`, { ...o, query: { limit: 100, ...o?.query } }),
+
+  moveScenario: (id: string, targetSuiteId: string, newName?: string | null, o?: RequestOptions) =>
+    request<ScenarioDetail>(`/api/v1/scenarios/${id}/move`, {
+      ...o,
+      method: "POST",
+      body: { target_suite_id: targetSuiteId, new_name: newName ?? null },
+    }),
+
+  exportSuite: (id: string, o?: RequestOptions) =>
+    request<BundleExport>(`/api/v1/suites/${id}/scenarios/export`, o),
+
+  importBundle: (id: string, body: { yaml: string; dry_run: boolean; atomic: boolean }, o?: RequestOptions) =>
+    request<BundleImportResult>(`/api/v1/suites/${id}/scenarios/import`, { ...o, method: "POST", body }),
+
+  /** The bot's reply for a run paused on a manual or offline adapter. An empty
+   *  string records that the bot said nothing - a finding, not an error. */
+  supplyBotText: (id: string, text: string, o?: RequestOptions) =>
+    request<{ run: Run; turn_index: number }>(`/api/v1/test-runs/${id}/bot-text`, {
+      ...o,
+      method: "POST",
+      body: { text },
+      timeoutMs: o?.timeoutMs ?? 120_000,
+    }),
+
+  /** The bot's reply as audio, uploaded as multipart; it is transcribed. */
+  supplyBotAudio: (id: string, file: Blob, o?: RequestOptions) => {
+    const form = new FormData();
+    form.append("audio", file);
+    return request<{ run: Run }>(`/api/v1/test-runs/${id}/bot-audio`, {
+      ...o,
+      method: "POST",
+      body: form,
+      timeoutMs: o?.timeoutMs ?? 120_000,
+    });
+  },
+
+  metricCatalogue: (o?: RequestOptions) => request<MetricCatalogue>("/api/v1/evaluation/metrics", o),
+
+  changePassword: (current: string, next: string, o?: RequestOptions) =>
+    request<PasswordChangeResult>("/api/v1/auth/password", {
+      ...o,
+      method: "POST",
+      body: { current_password: current, new_password: next },
+    }),
 };
 
 /**
@@ -462,6 +538,9 @@ export function runExportUrl(runId: string, format: "json" | "csv"): string {
   return `/api/v1/test-runs/${runId}/export?format=${format}`;
 }
 
-export function runsCsvUrl(): string {
-  return "/api/v1/analytics/runs.csv";
+export function runsCsvUrl(query?: Record<string, string | undefined>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query ?? {})) if (value) params.set(key, value);
+  const tail = params.toString();
+  return `/api/v1/analytics/runs.csv${tail ? `?${tail}` : ""}`;
 }

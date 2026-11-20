@@ -14,7 +14,7 @@ vi.mock("@/lib/api/client", async (original) => ({
   api,
 }));
 
-import { ReferenceEditor } from "@/components/domain/reference-editor";
+import { ReferenceEditor } from "@/components/runs/reference-editor";
 
 describe("ReferenceEditor", () => {
   beforeEach(() => {

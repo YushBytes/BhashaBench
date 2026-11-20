@@ -1,323 +1,231 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { BookMarked, ListChecks, Plus, Search } from "lucide-react";
 
+import { PageBody, PageHeader } from "@/components/shell/page";
+import { Input, Select } from "@/components/ui/field";
 import {
-  AddScenario,
-  SuiteRow,
-  CreateSuite,
-  type ProjectChoice,
-} from "@/components/domain/scenario-authoring";
-import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { TableSkeleton } from "@/components/ui/loading";
-import {
+  ButtonLink,
   EmptyState,
   ErrorState,
   Panel,
   PanelHeader,
+  Table,
   TableScroll,
+  TableSkeleton,
   Td,
   Th,
   buttonClass,
 } from "@/components/ui/primitives";
+import { Badge } from "@/components/ui/status";
 import { ApiError, api } from "@/lib/api/client";
-import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
+import { loadContext } from "@/lib/api/context";
+import { signInAgainIfExpired } from "@/lib/api/server";
+import type { LanguageCatalogue, LibraryScenario, Page, ScenarioSummary, SuiteSummary } from "@/lib/api/types";
 import { formatTimestampShort, langAttr } from "@/lib/format";
-import type {
-  LanguageCatalogue,
-  LibraryScenario,
-  Page as PageEnvelope,
-  ScenarioSummary,
-  SuiteSummary,
-} from "@/lib/api/types";
 
 export const metadata = { title: "Scenarios" };
 
 type SearchParams = Record<string, string | string[] | undefined>;
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
 
-function one(value: string | string[] | undefined): string | undefined {
-  if (Array.isArray(value)) return value[0];
-  return value || undefined;
-}
-
-export default function ScenariosPage({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>;
-}) {
+export default function ScenariosPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   return (
     <>
       <PageHeader
         title="Scenarios"
-        description="What a caller is trying to achieve, in which language, under what conditions. A run executes one of these."
+        description="Who calls, in which language, what they want and under what conditions. A test run executes one scenario."
+        actions={
+          <ButtonLink href="/app/scenarios/new" tone="primary">
+            <Plus aria-hidden="true" className="size-4" />
+            New scenario
+          </ButtonLink>
+        }
       />
       <PageBody>
         <Suspense fallback={<TableSkeleton />}>
           <Library searchParams={searchParams} />
         </Suspense>
-        <Suspense fallback={<TableSkeleton rows={2} />}>
-          <Authoring />
+        <Suspense fallback={<TableSkeleton rows={3} />}>
+          <Reference />
         </Suspense>
       </PageBody>
     </>
   );
 }
 
-async function Library({
-  searchParams,
-}: {
-  searchParams: Promise<SearchParams>;
-}) {
-  const auth = await sessionHeaders();
+async function Library({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
+  const name = one(params.q);
   const language = one(params.language);
-  const search = one(params.q);
-  const showArchived = one(params.archived) === "1";
-
-  let scenarios: PageEnvelope<ScenarioSummary> | null = null;
-  let languages: LanguageCatalogue | null = null;
-  let failure: string | null = null;
-
+  const tag = one(params.tag);
+  const archived = one(params.archived) === "1";
+  let scenarios: Page<ScenarioSummary>;
+  let languages: LanguageCatalogue;
+  let suites: SuiteSummary[];
   try {
-    [scenarios, languages] = await Promise.all([
-      api.scenarios({
-        cache: "no-store",
-        headers: auth,
-        // `name`, as the search endpoint declares it. A misspelled filter
-        // is not rejected - it is ignored, and the page would quietly show
-        // every scenario while appearing to have searched.
-        query: { limit: 100, language, name: search, include_archived: showArchived || undefined },
-      }),
+    const { auth } = await loadContext();
+    [scenarios, languages, suites] = await Promise.all([
+      // `name`, `language`, `tag`, `include_archived`: the parameters the
+      // search endpoint declares. A misspelt one would be ignored, not refused.
+      api.scenarios({ cache: "no-store", headers: auth, query: { limit: 100, name, language, tag, include_archived: archived || undefined } }),
       api.languages({ revalidate: 3600 }),
+      api.suites({ cache: "no-store", headers: auth }).then((p) => p.items),
     ]);
-  } catch (error) {
-    signInAgainIfExpired(error);
-    failure =
-      error instanceof ApiError ? error.message : "The library could not be loaded.";
-  }
-
-  const byCode = new Map(
-    (languages?.languages ?? []).map((entry) => [entry.code, entry]),
-  );
-
-  return (
-    <>
-        {languages ? (
-          <form
-            className="flex flex-wrap items-end gap-3 rounded-lg border border-line bg-surface p-3 sm:p-4"
-            aria-label="Filter scenarios"
-          >
-            <div className="min-w-[12rem] flex-1">
-              <label
-                className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted"
-                htmlFor="q"
-              >
-                Name
-              </label>
-              <input
-                id="q"
-                name="q"
-                type="search"
-                defaultValue={search ?? ""}
-                placeholder="Search by name"
-                className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface-raised px-2.5 text-[13px] text-text placeholder:text-text-muted hover:border-[#3b4756] focus-visible:border-accent"
-              />
-            </div>
-            <div className="min-w-[10rem]">
-              <label
-                className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-muted"
-                htmlFor="language"
-              >
-                Language
-              </label>
-              <select
-                id="language"
-                name="language"
-                defaultValue={language ?? ""}
-                className="mt-1 h-9 w-full rounded-md border border-line-strong bg-surface-raised px-2.5 text-[13px] text-text hover:border-[#3b4756] focus-visible:border-accent"
-              >
-                <option value="">Any language</option>
-                {languages.languages.map((entry) => (
-                  <option key={entry.code} value={entry.code}>
-                    {entry.name} ({entry.code})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <label className="flex h-9 items-center gap-2 text-[13px] text-text-dim">
-              <input
-                type="checkbox"
-                name="archived"
-                value="1"
-                defaultChecked={showArchived}
-                className="size-4 accent-[var(--accent)]"
-              />
-              Show archived
-            </label>
-            <button type="submit" className={buttonClass("default", "sm")}>
-              Apply
-            </button>
-            {language || search || showArchived ? (
-              <Link href="/app/scenarios" className={buttonClass("quiet", "sm")}>
-                Clear
-              </Link>
-            ) : null}
-          </form>
-        ) : null}
-
-        <Panel>
-          {failure !== null || scenarios === null ? (
-            <ErrorState title="The scenario library could not be loaded" detail={failure} />
-          ) : scenarios.items.length === 0 ? (
-            <EmptyState title={language || search ? "No scenarios match" : "No scenarios yet"}>
-              {language || search ? (
-                "Nothing in the library matches these filters."
-              ) : (
-                <>
-                  Create a suite below, then start from one of the shipped
-                  reference scenarios or paste your own YAML. The API and the{" "}
-                  <code className="font-mono text-[12px]">bhashabench</code> CLI
-                  load scenarios too.
-                </>
-              )}
-            </EmptyState>
-          ) : (
-            <>
-              <TableScroll>
-                <table className="w-full border-collapse text-left">
-                  <thead>
-                    <tr className="border-b border-line bg-surface-inset">
-                      <Th>Name</Th>
-                      <Th>Language</Th>
-                      <Th>Script</Th>
-                      <Th>Description</Th>
-                      <Th>Updated</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scenarios.items.map((scenario) => {
-                      const meta = byCode.get(scenario.language);
-                      return (
-                        <tr
-                          key={scenario.id}
-                          className="border-b border-line transition-colors last:border-0 hover:bg-surface-raised"
-                        >
-                          <Td className="max-w-[20rem]">
-                            <Link
-                              href={`/app/scenarios/${scenario.id}`}
-                              className="block truncate font-medium text-text hover:text-accent"
-                            >
-                              {scenario.name}
-                            </Link>
-                            {scenario.archived_at ? (
-                              <span className="text-[11px] text-warn">Archived · </span>
-                            ) : null}
-                            <span className="font-mono text-[11px] text-text-muted">
-                              {scenario.id.slice(0, 8)}
-                            </span>
-                          </Td>
-                          <Td>
-                            <span className="flex flex-col">
-                              <span className="font-mono text-[12px] text-text">
-                                {scenario.language}
-                              </span>
-                              {meta ? (
-                                <span
-                                  className="text-[12px] text-text-muted"
-                                  lang={langAttr(meta.code)}
-                                >
-                                  {meta.endonym}
-                                </span>
-                              ) : null}
-                            </span>
-                          </Td>
-                          <Td className="font-mono text-[12px]">{meta?.script ?? "—"}</Td>
-                          <Td className="max-w-[26rem]">
-                            <span className="block truncate">
-                              {scenario.description ?? "—"}
-                            </span>
-                          </Td>
-                          <Td className="whitespace-nowrap font-mono text-[12px] text-text-muted">
-                            {formatTimestampShort(scenario.updated_at) ?? "—"}
-                          </Td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </TableScroll>
-              <p className="border-t border-line px-4 py-3 text-[12px] text-text-muted">
-                {scenarios.total} scenario{scenarios.total === 1 ? "" : "s"}
-              </p>
-            </>
-          )}
-        </Panel>
-    </>
-  );
-}
-
-/** Suites and new scenarios. The page loads the caller's suites; the forms
- *  call the real create and validate routes. */
-async function Authoring() {
-  const auth = await sessionHeaders();
-  let suites: PageEnvelope<SuiteSummary>;
-  let library: LibraryScenario[] | null = null;
-  const projects: ProjectChoice[] = [];
-  try {
-    const [loaded, workspaces, shipped] = await Promise.all([
-      api.suites({ cache: "no-store", headers: auth }),
-      api.workspaces({ cache: "no-store", headers: auth }),
-      // The library is a convenience; the editor works without it.
-      api.scenarioLibrary({ cache: "no-store", headers: auth }).catch(() => null),
-    ]);
-    suites = loaded;
-    library = shipped?.scenarios ?? null;
-    // Projects the caller may create suites in: member role or above.
-    for (const workspace of workspaces.filter((w) => w.role !== "viewer")) {
-      for (const project of await api.projects(workspace.id, { cache: "no-store", headers: auth })) {
-        projects.push({ id: project.id, label: `${workspace.name} / ${project.name}` });
-      }
-    }
   } catch (error) {
     signInAgainIfExpired(error);
     return (
       <Panel>
-        <ErrorState
-          title="Suites could not be loaded"
-          detail={error instanceof ApiError ? error.message : "The request failed."}
-        />
+        <ErrorState title="Scenarios could not be loaded" detail={error instanceof ApiError ? error.message : "The API did not answer."} />
       </Panel>
     );
   }
+  const byCode = new Map(languages.languages.map((l) => [l.code, l]));
+  const suiteName = new Map(suites.map((s) => [s.id, s.name]));
+  const filtered = Boolean(name || language || tag || archived);
+
   return (
-    <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-      <Panel>
-        <PanelHeader
-          title="Suites"
-          description={`${suites.total} in your workspace${suites.total === 1 ? "" : "s"}. Names are unique within a project.`}
-        />
-        <ul className="divide-y divide-line">
-          {suites.items.map((suite) => (
-            <li key={suite.id} className="px-4 py-2.5 text-[13px] text-text sm:px-5">
-              <SuiteRow id={suite.id} name={suite.name} canEdit={projects.some((p) => p.id === suite.project_id)} />
-            </li>
-          ))}
-        </ul>
-        <div className="border-t border-line p-4 sm:p-5">
-          {projects.length > 0 ? (
-            <CreateSuite projects={projects} />
-          ) : (
-            <p className="text-[13px] text-text-muted">
-              Your role is viewer everywhere, so you cannot create suites.
-            </p>
-          )}
+    <Panel>
+      <form className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:flex-wrap sm:items-end sm:px-5" aria-label="Filter scenarios">
+        <label className="min-w-0 flex-1 sm:min-w-[14rem]">
+          <span className="text-[12px] font-medium text-text-3">Name</span>
+          <span className="relative mt-1 block">
+            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-text-3" />
+            <Input name="q" type="search" defaultValue={name ?? ""} placeholder="Search by name" className="pl-8" />
+          </span>
+        </label>
+        <label className="sm:w-56">
+          <span className="text-[12px] font-medium text-text-3">Language</span>
+          <Select name="language" defaultValue={language ?? ""} className="mt-1">
+            <option value="">Any language</option>
+            {languages.languages.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.name} ({l.code})
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="sm:w-40">
+          <span className="text-[12px] font-medium text-text-3">Tag</span>
+          <Input name="tag" defaultValue={tag ?? ""} placeholder="e.g. smoke" className="mt-1" />
+        </label>
+        <label className="flex h-9 items-center gap-2 text-[13px] text-text-2">
+          <input type="checkbox" name="archived" value="1" defaultChecked={archived} className="size-4" />
+          Include archived
+        </label>
+        <div className="flex gap-2">
+          <button type="submit" className={buttonClass("secondary", "md")}>
+            Apply
+          </button>
+          {filtered ? (
+            <Link href="/app/scenarios" className={buttonClass("ghost", "md")}>
+              Clear
+            </Link>
+          ) : null}
         </div>
-      </Panel>
-      <Panel>
-        <PanelHeader title="Add a scenario" description="Validated by the server before it can be added, and again when it is." />
-        <div className="p-4 sm:p-5">
-          <AddScenario suites={suites.items} library={library} />
-        </div>
-      </Panel>
-    </div>
+      </form>
+
+      {scenarios.items.length === 0 ? (
+        <EmptyState
+          title={filtered ? "No scenarios match" : "No scenarios yet"}
+          icon={<ListChecks aria-hidden="true" className="size-5" />}
+          action={
+            filtered ? null : (
+              <ButtonLink href="/app/scenarios/new" tone="primary">
+                Build a scenario
+              </ButtonLink>
+            )
+          }
+        >
+          {filtered ? "Nothing matches these filters." : "Build one in the guided editor, or start from a reference scenario below."}
+        </EmptyState>
+      ) : (
+        <>
+          <TableScroll label="Scenarios">
+            <Table className="min-w-[48rem]">
+              <thead>
+                <tr>
+                  <Th>Scenario</Th>
+                  <Th>Language</Th>
+                  <Th>Suite</Th>
+                  <Th>Updated</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {scenarios.items.map((scenario) => {
+                  const meta = byCode.get(scenario.language);
+                  return (
+                    <tr key={scenario.id} className="hover:bg-bg-soft">
+                      <Td className="max-w-[26rem]">
+                        <Link href={`/app/scenarios/${scenario.id}`} className="block truncate font-medium text-text hover:text-accent">
+                          {scenario.name}
+                        </Link>
+                        <span className="mt-0.5 block truncate text-[12px] text-text-3">
+                          {scenario.archived_at ? <span className="font-medium text-warn">Archived · </span> : null}
+                          {scenario.description ?? "No description"}
+                        </span>
+                      </Td>
+                      <Td>
+                        <span className="block font-mono text-[12px] text-text">{scenario.language}</span>
+                        {meta ? (
+                          <span lang={langAttr(meta.code)} className="text-[12px] text-text-3">
+                            {meta.endonym} · {meta.script}
+                          </span>
+                        ) : null}
+                      </Td>
+                      <Td>
+                        <Link href={`/app/suites/${scenario.suite_id}`} className="text-[13px] text-text-2 hover:text-accent">
+                          {suiteName.get(scenario.suite_id) ?? scenario.suite_id.slice(0, 8)}
+                        </Link>
+                      </Td>
+                      <Td className="whitespace-nowrap font-mono text-[12px] text-text-3">{formatTimestampShort(scenario.updated_at)}</Td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </TableScroll>
+          <p className="border-t border-line px-4 py-3 text-[12px] text-text-3 sm:px-5">
+            {scenarios.total} scenario{scenarios.total === 1 ? "" : "s"}
+            {scenarios.total > scenarios.items.length ? `, showing the first ${scenarios.items.length}` : ""}
+          </p>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+/** The scenarios that ship with BhashaBench, as starting templates. */
+async function Reference() {
+  let library: LibraryScenario[];
+  try {
+    const { auth } = await loadContext();
+    library = (await api.scenarioLibrary({ cache: "no-store", headers: auth })).scenarios;
+  } catch {
+    return null;
+  }
+  if (library.length === 0) return null;
+  return (
+    <Panel>
+      <PanelHeader
+        title="Reference library"
+        icon={<BookMarked aria-hidden="true" className="size-4" />}
+        description="Scenarios that ship with BhashaBench, one per language plus demos. Open one in the builder, edit it, and add it to a suite."
+      />
+      <ul className="grid gap-px bg-line sm:grid-cols-2 xl:grid-cols-3">
+        {library.map((item) => (
+          <li key={item.key} className="bg-bg">
+            <Link href={`/app/scenarios/new?template=${encodeURIComponent(item.key)}`} className="group flex h-full flex-col p-5 transition-colors hover:bg-bg-soft">
+              <span className="flex items-start justify-between gap-2">
+                <span className="font-mono text-[13px] font-medium text-text group-hover:text-accent">{item.name}</span>
+                <Badge tone="idle">{item.language}</Badge>
+              </span>
+              <span className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-text-3">{item.description ?? item.objective}</span>
+              <span className="mt-auto pt-4 text-[12px] font-medium text-accent">Use as a template</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Panel>
   );
 }

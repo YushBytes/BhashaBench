@@ -1,133 +1,122 @@
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 
-import { TableScroll, Td, Th, cx } from "@/components/ui/primitives";
 import { ModeBadge, OutcomeBadge, RunStatusBadge } from "@/components/ui/status";
-import { formatSeconds, formatTimestampShort, langAttr } from "@/lib/format";
+import { Table, TableScroll, Td, Th, cx } from "@/components/ui/primitives";
+import { formatSeconds, formatTimestampShort, langAttr, shortId } from "@/lib/format";
 import type { RunSummary } from "@/lib/api/types";
 
 /**
- * The run history table.
- *
- * Shared by the overview and the runs page so a run reads the same in both.
- * `compact` drops the columns that only matter when filtering.
- *
- * Two honesty details carried by the row itself:
- *
- * - An absent duration renders as "—" with a title explaining it, never as
- *   0s. The backend returns null until a run has both a start and a finish.
- * - A run labelled `external_bot_test` whose `bot_audio_externally_received`
- *   is false gets a marker here, in the list, rather than only on the detail
- *   page. The mislabelling is the kind of thing a reader should catch while
- *   scanning.
+ * Runs as a table on wide screens and a list on narrow ones. Each row says
+ * whether an external system really answered - counted from the replies, not
+ * the mode - because that is what decides whether the run describes a bot.
  */
 export function RunsTable({
   runs,
+  suiteNames,
   compact = false,
 }: {
   runs: RunSummary[];
+  /** suite id -> "Project / Suite", when the caller has it. */
+  suiteNames?: Map<string, string>;
   compact?: boolean;
 }) {
   return (
-    <TableScroll>
-      <table className="w-full border-collapse text-left">
-        <thead>
-          <tr className="border-b border-line bg-surface-inset">
-            <Th>Scenario</Th>
-            <Th>Language</Th>
-            <Th>Mode</Th>
-            <Th>Status</Th>
-            <Th>Outcome</Th>
-            {!compact ? <Th className="text-right">Turns</Th> : null}
-            {!compact ? <Th className="text-right">Duration</Th> : null}
-            <Th>Started</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {runs.map((run) => {
-            const mislabelled =
-              (run.mode === "external_bot_test" && !run.bot_audio_externally_received) ||
-              (run.mode === "text_bot_test" && !run.bot_text_externally_received);
-            const duration = formatSeconds(run.duration_seconds);
-            const created = formatTimestampShort(run.created_at);
-
-            return (
-              <tr
-                key={run.run_id}
-                className="border-b border-line transition-colors last:border-0 hover:bg-surface-raised"
-              >
-                <Td className="max-w-[22rem]">
-                  <Link
-                    href={`/app/runs/${run.run_id}`}
-                    className="group flex flex-col gap-0.5"
-                  >
-                    <span className="truncate font-medium text-text group-hover:text-accent">
-                      {run.scenario_name || "Unnamed scenario"}
-                    </span>
-                    <span className="font-mono text-[11px] text-text-muted">
-                      {run.run_id.slice(0, 8)}
-                    </span>
-                  </Link>
-                </Td>
-
-                <Td>
-                  <span className="font-mono text-[12px]" lang={langAttr(run.language)}>
-                    {run.language || "—"}
-                  </span>
-                </Td>
-
-                <Td>
-                  <span className="flex items-center gap-1.5">
-                    <ModeBadge mode={run.mode} />
-                    {mislabelled ? (
-                      <span
-                        className="text-[11px] font-medium text-warn"
-                        title="Labelled an external bot test, but every reply came from inside this process."
-                      >
-                        unverified
-                      </span>
-                    ) : null}
-                  </span>
-                </Td>
-
-                <Td>
-                  <RunStatusBadge status={run.status} />
-                </Td>
-
-                <Td>
-                  <OutcomeBadge outcome={run.outcome} />
-                </Td>
-
-                {!compact ? (
-                  <Td className="text-right font-mono text-[12px] tabular">
-                    <span title="Caller turns / bot turns">
-                      {run.caller_turns}
-                      <span className="text-text-muted"> / </span>
-                      {run.bot_turns}
-                    </span>
-                  </Td>
-                ) : null}
-
-                {!compact ? (
-                  <Td className={cx("text-right font-mono text-[12px] tabular")}>
-                    {duration ?? (
-                      <span
-                        className="text-text-muted"
-                        title="A duration needs both a start and a finish. This run has not finished."
-                      >
-                        —
-                      </span>
-                    )}
-                  </Td>
-                ) : null}
-
-                <Td className="whitespace-nowrap font-mono text-[12px] text-text-muted">
-                  {created ?? "—"}
-                </Td>
+    <>
+      <div className="hidden md:block">
+        <TableScroll label="Test runs">
+          <Table className="min-w-[56rem]">
+            <thead>
+              <tr>
+                <Th>Scenario</Th>
+                <Th>Status</Th>
+                <Th>Outcome</Th>
+                <Th>Mode</Th>
+                {compact ? null : <Th>Language</Th>}
+                {compact ? null : <Th className="text-right">Turns</Th>}
+                {compact ? null : <Th className="text-right">Duration</Th>}
+                <Th>Created</Th>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </TableScroll>
+            </thead>
+            <tbody>
+              {runs.map((run) => (
+                <tr key={run.run_id} className="group transition-colors hover:bg-bg-soft">
+                  <Td className="max-w-[22rem]">
+                    <Link
+                      href={`/app/runs/${run.run_id}`}
+                      className="block truncate font-medium text-text hover:text-accent hover:underline underline-offset-4"
+                    >
+                      {run.scenario_name || "Unnamed scenario"}
+                    </Link>
+                    <span className="mt-0.5 block truncate font-mono text-[11px] text-text-3">
+                      {shortId(run.run_id)}
+                      {suiteNames?.get(run.suite_id) ? ` · ${suiteNames.get(run.suite_id)}` : ""}
+                    </span>
+                  </Td>
+                  <Td>
+                    <RunStatusBadge status={run.status} />
+                  </Td>
+                  <Td>
+                    <OutcomeBadge outcome={run.outcome} />
+                  </Td>
+                  <Td>
+                    <div className="flex flex-col items-start gap-1">
+                      <ModeBadge mode={run.mode} />
+                      <ExternalNote run={run} />
+                    </div>
+                  </Td>
+                  {compact ? null : (
+                    <Td className="font-mono text-[12px]">
+                      <span lang={langAttr(run.language)}>{run.language}</span>
+                    </Td>
+                  )}
+                  {compact ? null : (
+                    <Td className="text-right font-mono text-[12px] tabular">
+                      {run.caller_turns}/{run.bot_turns}
+                    </Td>
+                  )}
+                  {compact ? null : (
+                    <Td className="text-right font-mono text-[12px] tabular">{formatSeconds(run.duration_seconds) ?? "—"}</Td>
+                  )}
+                  <Td className="whitespace-nowrap font-mono text-[12px] text-text-3">{formatTimestampShort(run.created_at)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+        </TableScroll>
+      </div>
+
+      <ul className="divide-y divide-line md:hidden">
+        {runs.map((run) => (
+          <li key={run.run_id}>
+            <Link href={`/app/runs/${run.run_id}`} className="flex items-start gap-3 px-4 py-3.5 active:bg-bg-soft">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-medium text-text">{run.scenario_name || "Unnamed scenario"}</p>
+                <p className="mt-0.5 font-mono text-[11px] text-text-3">
+                  {shortId(run.run_id)} · {run.language} · {formatTimestampShort(run.created_at)}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <RunStatusBadge status={run.status} />
+                  <OutcomeBadge outcome={run.outcome} />
+                  <ModeBadge mode={run.mode} />
+                </div>
+              </div>
+              <ChevronRight aria-hidden="true" className="mt-1 size-4 shrink-0 text-text-3" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function ExternalNote({ run }: { run: RunSummary }) {
+  const claimsExternal = run.mode === "external_bot_test" || run.mode === "text_bot_test";
+  if (!claimsExternal) return null;
+  const received = run.mode === "external_bot_test" ? run.bot_audio_externally_received : run.bot_text_externally_received;
+  return (
+    <span className={cx("text-[11px]", received ? "text-text-3" : "font-medium text-warn")}>
+      {received ? "bot answered" : "no reply from a bot"}
+    </span>
   );
 }

@@ -1,129 +1,97 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { AlertOctagon, PauseCircle } from "lucide-react";
 
-import { Conversation } from "@/components/domain/conversation";
-import { RunEvidence, MeasurementNote } from "@/components/domain/evidence";
-import { StageTimeline } from "@/components/domain/stage-timeline";
-import { PageBody, PageHeader } from "@/components/shell/page-header";
-import { DetailSkeleton } from "@/components/ui/loading";
+import { AudioPlayer } from "@/components/runs/audio-player";
+import { Conversation } from "@/components/runs/conversation";
+import { EvaluationView } from "@/components/runs/evaluation-view";
+import { MeasurementNote, RunCautions, RunEvidence } from "@/components/runs/evidence";
+import { BotReply, EvaluateButton, RunActions, RunFollower, RunTabs } from "@/components/runs/run-controls";
+import { StageTimeline } from "@/components/runs/stage-timeline";
+import { PageBody, PageHeader } from "@/components/shell/page";
 import {
+  DetailSkeleton,
   ErrorState,
   Fact,
+  NotReported,
   Panel,
+  PanelBody,
   PanelHeader,
+  Stat,
+  Table,
   TableScroll,
   Td,
   Th,
 } from "@/components/ui/primitives";
-import { RunActions } from "@/components/domain/run-actions";
-import { ModeBadge, OutcomeBadge, RunStatusBadge } from "@/components/ui/status";
+import { ModeBadge, OutcomeBadge, RunStatusBadge, VerdictBadge } from "@/components/ui/status";
 import { ApiError, api, recordingAudioUrl } from "@/lib/api/client";
-import { EvaluateButton, RunAutoRefresh } from "@/components/domain/run-live";
-import { sessionHeaders, signInAgainIfExpired } from "@/lib/api/server";
-import {
-  formatBytes,
-  formatHz,
-  formatSeconds,
-  formatTimestamp,
-  humanise,
-  langAttr,
-} from "@/lib/format";
-import type {
-  DegradationRequested,
-  EvaluationList,
-  RecordingManifest,
-  Role,
-  RunReport,
-  RunTurns,
-} from "@/lib/api/types";
+import { can, loadContext, projectOf } from "@/lib/api/context";
+import { signInAgainIfExpired } from "@/lib/api/server";
+import type { DegradationRequested, EvaluationList, MetricCatalogue, RecordingManifest, RunReport, RunTurns, SuiteRead } from "@/lib/api/types";
 import { metricRows } from "@/lib/evaluation";
+import { formatBytes, formatHz, formatSeconds, formatTimestamp, humanise, langAttr } from "@/lib/format";
 
-
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ runId: string }>;
-}) {
+export async function generateMetadata({ params }: { params: Promise<{ runId: string }> }) {
   const { runId } = await params;
   return { title: `Run ${runId.slice(0, 8)}` };
 }
 
-/**
- * The requested channel conditions in words, or null when not recorded (a run
- * that moves no audio, or one created before requests were recorded).
- * Requested, not achieved: the artefacts carry the measured values.
- */
-function describeRequested(requested: DegradationRequested | null | undefined): string | null {
-  if (!requested) return null;
-  const parts: string[] = [];
-  parts.push(requested.snr_db === null ? "No added noise" : `${requested.snr_db} dB SNR`);
-  parts.push(
-    requested.packet_loss_percent > 0
-      ? `${requested.packet_loss_percent}% packet loss`
-      : "no packet loss",
-  );
-  return parts.join(" · ");
-}
-
-export default function RunDetailPage({
-  params,
-}: {
-  params: Promise<{ runId: string }>;
-}) {
+export default function RunPage({ params }: { params: Promise<{ runId: string }> }) {
   return (
-    <Suspense fallback={<DetailLoading />}>
+    <Suspense
+      fallback={
+        <>
+          <PageHeader title="Run" crumbs={[{ href: "/app/runs", label: "Test runs" }]} />
+          <PageBody>
+            <DetailSkeleton />
+          </PageBody>
+        </>
+      }
+    >
       <RunDetail params={params} />
     </Suspense>
   );
 }
 
-function DetailLoading() {
-  return (
-    <>
-      <PageHeader title="Run" />
-      <PageBody>
-        <DetailSkeleton />
-      </PageBody>
-    </>
-  );
+/** Requested, not achieved: each degraded artefact records the measured values. */
+function describeRequested(requested: DegradationRequested | null | undefined): string | null {
+  if (!requested) return null;
+  return [
+    requested.snr_db === null ? "No added noise" : `${requested.snr_db} dB SNR`,
+    requested.packet_loss_percent > 0 ? `${requested.packet_loss_percent}% packet loss` : "no packet loss",
+  ].join(" · ");
 }
 
 async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
-  const auth = await sessionHeaders();
   const { runId } = await params;
-
-  let report: RunReport;
-  let turns: RunTurns;
-  let evaluations: EvaluationList | null;
-  let recording: RecordingManifest | null;
+  let report: RunReport, turns: RunTurns, evaluations: EvaluationList | null, recording: RecordingManifest | null;
+  let catalogue: MetricCatalogue | null, suite: SuiteRead | null;
+  let context;
   try {
-    [report, turns, evaluations, recording] = await Promise.all([
-      api.runReport(runId, { cache: "no-store", headers: auth }),
-      api.runTurns(runId, { cache: "no-store", headers: auth }),
-      api.runEvaluations(runId, { cache: "no-store", headers: auth }).catch(() => null),
+    context = await loadContext();
+    const o = { cache: "no-store" as const, headers: context.auth };
+    [report, turns, evaluations, recording, catalogue] = await Promise.all([
+      api.runReport(runId, o),
+      api.runTurns(runId, o),
+      api.runEvaluations(runId, o).catch(() => null),
       // 404 until the run finishes: no recording yet is not an error.
-      api.runRecording(runId, { cache: "no-store", headers: auth }).catch((error: unknown) => {
+      api.runRecording(runId, o).catch((error: unknown) => {
         if (error instanceof ApiError && error.status === 404) return null;
         throw error;
       }),
+      api.metricCatalogue({ revalidate: 3600 }).catch(() => null),
     ]);
+    suite = await api.suite(report.run.suite_id, o).catch(() => null);
   } catch (error) {
     signInAgainIfExpired(error);
     if (error instanceof ApiError && error.status === 404) notFound();
     return (
       <>
-        <PageHeader title="Run" />
+        <PageHeader title="Run" crumbs={[{ href: "/app/runs", label: "Test runs" }]} />
         <PageBody>
           <Panel>
-            <ErrorState
-              title="This run could not be loaded"
-              detail={
-                error instanceof ApiError
-                  ? error.message
-                  : "The report endpoint did not answer."
-              }
-            />
+            <ErrorState title="This run could not be loaded" detail={error instanceof ApiError ? error.message : "The report endpoint did not answer."} />
           </Panel>
         </PageBody>
       </>
@@ -131,409 +99,270 @@ async function RunDetail({ params }: { params: Promise<{ runId: string }> }) {
   }
 
   const run = report.run;
-  const degraded = report.artefacts.filter((a) => a.variant === "degraded");
-  const inFlight =
-    (run.status === "initializing" || run.status === "running") &&
-    run.awaiting_bot_audio_for_turn === null &&
-    typeof run.awaiting_bot_text_for_turn !== "number";
+  const project = suite ? projectOf(context, suite.project_id) : null;
+  const role = project?.role ?? null;
   const finished = ["completed", "failed", "cancelled", "timed_out"].includes(run.status);
-  const latest = evaluations?.evaluations[0] ?? null;
-  const role = finished ? await roleForSuite(run.suite_id, auth) : null;
-  const canDelete = role === "owner" || role === "admin";
-  // Recording a reference is an edit (member and above); a viewer reads them.
-  const references = !finished ? "hidden" : role && role !== "viewer" ? "edit" : "view";
+  const waiting = run.awaiting_bot_audio_for_turn !== null || typeof run.awaiting_bot_text_for_turn === "number";
+  const inFlight = (run.status === "initializing" || run.status === "running") && !waiting;
+  const references = !finished ? "hidden" : can(role, "edit") ? "edit" : "view";
+  const list = evaluations?.evaluations ?? [];
+  const latest = list[0] ?? null;
+  const latencyRow = latest ? metricRows(latest.metrics).find((r) => r.key === "latency") : undefined;
+  const werRow = latest ? metricRows(latest.metrics).find((r) => r.key === "wer") : undefined;
 
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link
-            href="/app/runs"
-            className="font-mono text-[12px] text-text-muted hover:text-accent"
-          >
-            ← Test runs
-          </Link>
-        }
+        crumbs={[
+          { href: "/app/runs", label: "Test runs" },
+          ...(suite ? [{ href: `/app/suites/${suite.id}`, label: suite.name }] : []),
+          { label: run.run_id.slice(0, 8) },
+        ]}
         title={run.scenario_name || "Unnamed scenario"}
         description={
-          <span className="font-mono text-[12px] text-text-muted">{run.run_id}</span>
+          <span className="font-mono text-[12px]">
+            {run.run_id} · started {formatTimestamp(run.started_at) ?? "not yet"}
+            {run.finished_at ? ` · finished ${formatTimestamp(run.finished_at)}` : ""}
+          </span>
         }
-        actions={
-          <div className="flex flex-col items-start gap-2 sm:items-end">
-            <div className="flex flex-wrap items-center gap-2">
-              <ModeBadge mode={run.mode} />
-              <RunStatusBadge status={run.status} />
-              <OutcomeBadge outcome={run.outcome} />
-            </div>
-            <RunActions runId={run.run_id} finished={finished} canDelete={canDelete} />
-          </div>
+        meta={
+          <>
+            <ModeBadge mode={run.mode} />
+            <RunStatusBadge status={run.status} />
+            <OutcomeBadge outcome={run.outcome} />
+            {finished ? <VerdictBadge verdict={latest?.verdict ?? null} /> : null}
+          </>
         }
+        actions={<RunActions runId={run.run_id} finished={finished} inFlight={inFlight} canEdit={can(role, "edit")} canDelete={can(role, "manage")} />}
       />
-
       <PageBody>
-        <RunAutoRefresh active={inFlight} />
-
-        <div className="grid min-w-0 gap-5 lg:grid-cols-2">
-          <Panel>
-            <PanelHeader
-              title="Evaluation"
-              description="Read from what this run stored, under the current evaluator. Re-evaluating appends; history is kept."
-              actions={finished ? <EvaluateButton runId={run.run_id} again={latest !== null} /> : null}
-            />
-            {latest === null ? (
-              <p className="p-4 text-[13px] text-text-muted sm:p-5">
-                {finished ? "Not evaluated yet." : "The run has not finished, so there is nothing to evaluate."}
-              </p>
-            ) : (
-              <div className="p-4 sm:p-5">
-                <p className="text-[15px] font-semibold text-text">
-                  Verdict: {latest.verdict}{" "}
-                  <span className="font-mono text-[12px] font-normal text-text-dim">{latest.evaluator_version}</span>
-                </p>
-                <dl className="mt-3 divide-y divide-line rounded-md border border-line">
-                  {metricRows(latest.metrics).map((row) => (
-                    <div key={row.key} className="grid gap-x-4 gap-y-0.5 px-3 py-2 sm:grid-cols-[11rem_minmax(0,1fr)]">
-                      <dt className="text-[12px] text-text-muted">{row.label}</dt>
-                      <dd className="min-w-0">
-                        <span className={row.value === null ? "text-[13px] text-text-muted" : "font-mono text-[13px] tabular text-text"}>
-                          {row.value ?? "not reported"}
-                        </span>
-                        <span className="block text-[11px] leading-relaxed text-text-muted">{row.detail}</span>
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-                <ul className="mt-3 space-y-1.5">
-                  {latest.criteria.map((criterion) => (
-                    <li key={criterion.name} className="text-[13px]">
-                      <span className="font-mono text-text">{criterion.name}</span>{" "}
-                      <span className="text-text-muted">{criterion.status} - {criterion.reason}</span>
-                    </li>
-                  ))}
-                </ul>
-                {!latest.measures_audio ? (
-                  <p className="mt-3 text-[12px] text-text-dim">This mode moved no audio; nothing here describes audio.</p>
-                ) : null}
-              </div>
-            )}
-          </Panel>
-
-          <Panel>
-            <PanelHeader
-              title="Full recording"
-              description="Assembled from the turns after the run, in order. Gaps between turns are not reproduced, so it is not a timing measurement."
-            />
-            <div className="p-4 sm:p-5">
-              {recording === null ? (
-                <p className="text-[13px] text-text-muted">No recording until the run finishes.</p>
-              ) : recording.status === "stored" ? (
-                <>
-                  <audio controls preload="none" src={recordingAudioUrl(run.run_id)} className="w-full">
-                    Your browser cannot play this recording.
-                  </audio>
-                  <p className="mt-2 font-mono text-[12px] text-text-dim">
-                    {recording.duration_seconds?.toFixed(1)} s · {recording.segments?.length ?? 0} segments
-                    {recording.excluded && recording.excluded.length > 0
-                      ? ` · ${recording.excluded.length} turn(s) excluded`
-                      : ""}
-                  </p>
-                  {recording.excluded?.map((e) => (
-                    <p key={`${e.turn_index}-${e.speaker}`} className="mt-1 text-[12px] text-warn">
-                      Turn {e.turn_index} ({e.speaker}) not included: {e.reason}
-                    </p>
-                  ))}
-                </>
-              ) : (
-                <p className="text-[13px] text-text-muted">
-                  {recording.status === "not_applicable" ? "No audio moved in this run." : "The recording could not be assembled"}
-                  {recording.reason ? `: ${recording.reason}` : "."}
-                </p>
-              )}
-            </div>
-          </Panel>
-        </div>
+        <h1 className="print-only text-[20px] font-semibold">
+          BhashaBench run report · {run.scenario_name} · {run.run_id}
+        </h1>
+        <RunFollower active={inFlight} />
+        <RunCautions run={run} />
 
         {run.error ? (
-          <Panel className="border-bad/40">
-            <ErrorState title="This run failed" detail={run.error} />
+          <Panel className="border-bad/30">
+            <ErrorState title={run.outcome === "audio_validation_failed" ? "The audio could not be decoded" : "This run failed"} detail={run.error} />
           </Panel>
         ) : null}
 
-        {run.awaiting_bot_audio_for_turn !== null ? (
-          <Panel className="border-busy/40">
-            <div className="px-4 py-3">
-              <p className="text-[13px] font-medium text-busy">
-                Waiting for bot audio for turn {run.awaiting_bot_audio_for_turn}
-              </p>
-              <p className="mt-1 text-[12px] leading-relaxed text-text-dim">
-                The caller&rsquo;s audio for this turn is stored and the run is
-                paused. It is healthy, not failed. Post the bot&rsquo;s reply to{" "}
-                <code className="font-mono text-[11px] text-text-dim">
-                  POST /api/v1/test-runs/{run.run_id}/bot-audio
-                </code>{" "}
-                to continue.
-              </p>
-            </div>
-          </Panel>
-        ) : null}
-
-        {typeof run.awaiting_bot_text_for_turn === "number" ? (
-          <Panel className="border-busy/40">
-            <div className="px-4 py-3">
-              <p className="text-[13px] font-medium text-busy">
-                Waiting for the bot&rsquo;s text reply for turn{" "}
-                {run.awaiting_bot_text_for_turn}
-              </p>
-              <p className="mt-1 text-[12px] leading-relaxed text-text-dim">
-                An offline simulation moves no audio. The caller has spoken and
-                the run is paused &mdash; healthy, not failed. Post what the bot
-                said to{" "}
-                <code className="font-mono text-[11px] text-text-dim">
-                  POST /api/v1/test-runs/{run.run_id}/bot-text
-                </code>{" "}
-                to continue.
-              </p>
-            </div>
-          </Panel>
-        ) : null}
-
-        <RunEvidence run={run} />
-
-        {/* Configuration. The reproducibility record: a run nobody can
-            reproduce is not evidence, so the seed and profile sit beside the
-            result rather than behind a tab. */}
-        <Panel>
-          <PanelHeader title="Configuration" />
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 px-4 py-4 sm:grid-cols-3 lg:grid-cols-6">
-            <Fact label="Language" mono>
-              <span lang={langAttr(run.language)}>{run.language || "—"}</span>
-            </Fact>
-            <Fact label="Caller" mono>
-              {run.caller_provider || "—"}
-            </Fact>
-            <Fact label="Speech to text" mono>
-              {run.stt_provider ?? "—"}
-            </Fact>
-            <Fact label="Text to speech" mono>
-              {run.tts_provider ?? "—"}
-            </Fact>
-            <Fact label="Bot adapter" mono>
-              {run.bot_adapter || "—"}
-            </Fact>
-            <Fact label="Seed" mono hint="Fixed so the degradation reproduces exactly.">
-              {run.degradation_seed ?? "—"}
-            </Fact>
-            <Fact
-              label="Noise applied"
-              hint={
-                run.degradation_requested
-                  ? run.degradation_requested.source === "scenario"
-                    ? "Requested from the scenario's declared SNR and packet loss. Each degraded artefact records the measured values."
-                    : "An explicit profile chosen for this run, applied as its reviewed preset."
-                  : undefined
-              }
-            >
-              {describeRequested(run.degradation_requested) ?? humanise(run.noise_profile)}
-            </Fact>
-            <Fact
-              label="Accent"
-              hint={run.accent?.reason ?? "The scenario names no accent."}
-            >
-              {run.accent
-                ? run.accent.applied
-                  ? `${run.accent.requested_name} · applied`
-                  : `${run.accent.requested_name} · requested, not applied`
-                : "none requested"}
-            </Fact>
-            <Fact
-              label="Channel conditions"
-              mono
-              hint="Requested, field by field, with who set each: the scenario or the operator. Each degraded artefact records what was achieved."
-            >
-              {run.degradation_requested?.conditions
-                ? Object.entries(run.degradation_requested.conditions)
-                    .map(
-                      ([key, value]) =>
-                        `${key}=${value} (${run.degradation_requested?.condition_sources?.[key] ?? "?"})`,
-                    )
-                    .join(" · ")
-                : "none declared"}
-            </Fact>
-            <Fact
-              label="Scenario declared"
-              hint="The acoustic environment the scenario asked for, kept beside what was applied."
-            >
-              {humanise(run.scenario_noise_profile) ?? "—"}
-            </Fact>
-            <Fact label="Caller state" mono>
-              {run.caller_state}
-            </Fact>
-            <Fact label="Ended because">
-              {humanise(run.termination_reason) ?? "—"}
-            </Fact>
-            <Fact label="Started">{formatTimestamp(run.started_at) ?? "—"}</Fact>
-            <Fact label="Finished">{formatTimestamp(run.finished_at) ?? "—"}</Fact>
-          </dl>
-        </Panel>
-
-        {/* Counts. Captioned with the API's own note so they are not read as
-            a score. */}
-        <Panel>
-          <PanelHeader title="What was counted" />
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 px-4 py-4 sm:grid-cols-3 lg:grid-cols-6">
-            <Fact label="Caller turns" mono>
-              {run.caller_turns}
-            </Fact>
-            <Fact label="Bot turns" mono>
-              {run.bot_turns}
-            </Fact>
-            <Fact label="Turn budget" mono>
-              {run.turn_budget}
-            </Fact>
-            <Fact label="Transcribed" mono>
-              {run.bot_transcripts_succeeded}
-            </Fact>
-            <Fact
-              label="Not transcribed"
-              mono
-              hint="Bot replies whose audio arrived but could not be transcribed."
-            >
-              {run.bot_transcripts_failed}
-            </Fact>
-            <Fact
-              label="Audio measured"
-              mono
-              hint="Summed from artefacts whose length could be read from the bytes."
-            >
-              {formatSeconds(run.total_audio_seconds) ?? "—"}
-            </Fact>
-          </dl>
-          <div className="border-t border-line px-4 py-3">
-            <MeasurementNote note={report.measurement_note} />
-          </div>
-        </Panel>
-
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <Panel>
+        {waiting ? (
+          <Panel className="border-busy/30">
             <PanelHeader
-              title="Conversation"
-              description="Each turn with the audio that carried it. Play a turn to hear exactly what the other side received."
+              icon={<PauseCircle aria-hidden="true" className="size-4 text-busy" />}
+              title={`Waiting for the bot's reply to turn ${run.awaiting_bot_audio_for_turn ?? run.awaiting_bot_text_for_turn}`}
+              description="The caller has spoken and the run is paused. It is healthy, not failed."
             />
-            <Conversation
-              run={run}
-              turns={turns.turns}
-              artefacts={report.artefacts}
-              references={references}
-            />
-          </Panel>
-
-          <div className="min-w-0 space-y-5">
-            <Panel>
-              <PanelHeader
-                title="Pipeline stages"
-                description="Measured, not estimated. Bars are relative to the slowest stage in this run."
-              />
-              <StageTimeline events={report.events} />
-            </Panel>
-
-            <Panel>
-              <PanelHeader
-                title="Audio artefacts"
-                description={
-                  degraded.length > 0
-                    ? "A degraded file names the original it came from, so the pair stays comparable."
-                    : undefined
-                }
-              />
-              {report.artefacts.length === 0 ? (
-                <p className="px-4 py-6 text-[13px] text-text-dim">
-                  No audio was stored. This run moved no audio.
-                </p>
+            <PanelBody>
+              {can(role, "edit") ? (
+                <BotReply
+                  runId={run.run_id}
+                  turn={(run.awaiting_bot_audio_for_turn ?? run.awaiting_bot_text_for_turn) as number}
+                  kind={run.awaiting_bot_audio_for_turn !== null ? "audio" : "text"}
+                />
               ) : (
-                <TableScroll>
-                  <table className="w-full border-collapse text-left">
-                    <thead>
-                      <tr className="border-b border-line bg-surface-inset">
-                        <Th>Turn</Th>
-                        <Th>Speaker</Th>
-                        <Th>Variant</Th>
-                        <Th className="text-right">Duration</Th>
-                        <Th className="text-right">Rate</Th>
-                        <Th className="text-right">Size</Th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.artefacts.map((artefact) => (
-                        <tr
-                          key={`${artefact.turn_index}-${artefact.variant ?? "none"}`}
-                          className="border-b border-line last:border-0"
-                        >
-                          <Td className="font-mono tabular">{artefact.turn_index}</Td>
-                          <Td>{artefact.speaker}</Td>
-                          <Td>
-                            <span className="font-mono text-[12px]">
-                              {artefact.variant ?? "—"}
-                            </span>
-                            {artefact.transformations.length > 0 ? (
-                              <span
-                                className="ml-1.5 text-[11px] text-text-muted"
-                                title={artefact.transformations.join(", ")}
-                              >
-                                {artefact.transformations.length} transform
-                                {artefact.transformations.length === 1 ? "" : "s"}
-                              </span>
-                            ) : null}
-                          </Td>
-                          <Td className="text-right font-mono tabular">
-                            {formatSeconds(artefact.duration_seconds) ?? (
-                              <span
-                                className="text-text-muted"
-                                title="This container cannot be measured without a decoder."
-                              >
-                                —
-                              </span>
-                            )}
-                          </Td>
-                          <Td className="text-right font-mono tabular">
-                            {formatHz(artefact.sample_rate_hz) ?? "—"}
-                          </Td>
-                          <Td className="text-right font-mono tabular">
-                            {formatBytes(artefact.size_bytes) ?? "—"}
-                          </Td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </TableScroll>
+                <p className="text-[13px] text-text-3">A member of this workspace supplies the reply.</p>
               )}
-            </Panel>
-          </div>
+            </PanelBody>
+          </Panel>
+        ) : null}
+
+        <section aria-label="Run figures" className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]">
+          <Stat label="Turns" value={`${run.caller_turns + run.bot_turns}`} unit={`of ${run.turn_budget}`} detail={`${run.caller_turns} caller · ${run.bot_turns} bot`} />
+          <Stat label="Bot replies transcribed" value={run.bot_exchange === "audio" ? `${run.bot_transcripts_succeeded}` : null} missing={run.bot_exchange === "audio" ? undefined : "No audio replies in this mode"} detail={run.bot_exchange === "audio" ? `${run.bot_transcripts_failed} not transcribed (our side)` : undefined} />
+          <Stat label="Audio measured" value={run.total_audio_seconds > 0 ? formatSeconds(run.total_audio_seconds) : null} missing="No audio was stored" />
+          <Stat label="Bot latency" value={latencyRow?.value ?? null} missing={latest ? (latencyRow?.detail ?? "Not measured") : "Evaluate the run to read it"} />
+          <Stat label="Word error rate" value={werRow?.value ?? null} missing={latest ? "Needs a reference transcript" : "Evaluate the run to read it"} />
+        </section>
+
+        <RunTabs
+          tabs={[
+            {
+              id: "conversation",
+              label: "Conversation",
+              badge: <span className="rounded-full bg-bg-sunk px-1.5 font-mono text-[11px] text-text-3">{turns.turns.length}</span>,
+              panel: (
+                <Panel>
+                  <PanelHeader title="Conversation" description="Each turn with the audio that carried it. Play a turn to hear exactly what the other side received." />
+                  <Conversation run={run} turns={turns.turns} artefacts={report.artefacts} events={report.events} references={references} />
+                </Panel>
+              ),
+            },
+            {
+              id: "evaluation",
+              label: "Evaluation",
+              panel: (
+                <div className="space-y-3">
+                  {finished ? (
+                    <div className="flex justify-end">
+                      <EvaluateButton runId={run.run_id} again={latest !== null} />
+                    </div>
+                  ) : null}
+                  <EvaluationView evaluations={list} catalogue={catalogue} finished={finished} />
+                </div>
+              ),
+            },
+            {
+              id: "evidence",
+              label: "Evidence and setup",
+              panel: (
+                <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+                  <div className="min-w-0 space-y-3">
+                    <h3 className="text-[14px] font-semibold text-text">What this run establishes</h3>
+                    <RunEvidence run={run} />
+                  </div>
+                  <div className="min-w-0 space-y-6">
+                    <Panel>
+                      <PanelHeader title="Configuration" description="The reproducibility record: a run nobody can reproduce is not evidence." />
+                      <PanelBody>
+                        <dl className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-3">
+                          <Fact label="Project">{project?.name ?? "Not visible"}</Fact>
+                          <Fact label="Suite">{suite ? <Link href={`/app/suites/${suite.id}`} className="text-accent hover:underline">{suite.name}</Link> : "Not visible"}</Fact>
+                          <Fact label="Language" mono>
+                            <span lang={langAttr(run.language)}>{run.language}</span>
+                          </Fact>
+                          <Fact label="Caller" mono hint={run.uses_language_model ? "Language model, per turn evidence." : "Rule engine."}>
+                            {run.caller_provider}
+                          </Fact>
+                          <Fact label="Speech to text" mono>{run.stt_provider ?? "none (no audio)"}</Fact>
+                          <Fact label="Text to speech" mono>{run.tts_provider ?? "none (no audio)"}</Fact>
+                          <Fact label="Bot adapter" mono>{run.bot_adapter}</Fact>
+                          <Fact label="Seed" mono hint="Fixed so the degradation reproduces exactly.">{run.degradation_seed ?? "none"}</Fact>
+                          <Fact label="Noise applied" hint={run.degradation_requested ? (run.degradation_requested.source === "scenario" ? "From the scenario's declared SNR and packet loss." : "A profile chosen for this run.") : undefined}>
+                            {describeRequested(run.degradation_requested) ?? humanise(run.noise_profile)}
+                          </Fact>
+                          <Fact label="Scenario declared">{humanise(run.scenario_noise_profile) ?? "nothing"}</Fact>
+                          <Fact label="Accent" hint={run.accent?.reason ?? (run.accent ? undefined : "The scenario names no accent.")}>
+                            {run.accent ? (run.accent.applied ? `${run.accent.requested_name} · applied` : `${run.accent.requested_name} · requested, not applied`) : "none requested"}
+                          </Fact>
+                          <Fact label="Ended because">{humanise(run.termination_reason) ?? "not ended"}</Fact>
+                        </dl>
+                        <div className="mt-5 border-t border-line pt-4">
+                          <p className="text-[12px] font-medium text-text-3">Line conditions, with who set each</p>
+                          {run.degradation_requested?.conditions ? (
+                            <ul className="mt-2 flex flex-wrap gap-1.5">
+                              {Object.entries(run.degradation_requested.conditions).map(([key, value]) => (
+                                <li key={key} className="rounded-md border border-line bg-bg-soft px-2 py-1 font-mono text-[12px] text-text-2">
+                                  {key}={String(value)} <span className="text-text-3">· {run.degradation_requested?.condition_sources?.[key] ?? "?"}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="mt-1 text-[13px] text-text-2">None declared.</p>
+                          )}
+                        </div>
+                      </PanelBody>
+                    </Panel>
+                    <Panel>
+                      <PanelHeader title="What was counted" />
+                      <PanelBody>
+                        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                          <Fact label="Caller turns" mono>{run.caller_turns}</Fact>
+                          <Fact label="Bot turns" mono>{run.bot_turns}</Fact>
+                          <Fact label="Turn budget" mono>{run.turn_budget}</Fact>
+                          <Fact label="Caller state" mono>{run.caller_state}</Fact>
+                          <Fact label="Text replies from the bot" mono>{run.bot_text_replies_received}</Fact>
+                          <Fact label="Goal achieved">{run.goal_achieved ? "Yes" : "No"}</Fact>
+                        </dl>
+                        <div className="mt-4 border-t border-line pt-3">
+                          <MeasurementNote note={report.measurement_note} />
+                        </div>
+                      </PanelBody>
+                    </Panel>
+                  </div>
+                </div>
+              ),
+            },
+            {
+              id: "audio",
+              label: "Recording and audio",
+              badge: <span className="rounded-full bg-bg-sunk px-1.5 font-mono text-[11px] text-text-3">{report.artefacts.length}</span>,
+              panel: (
+                <div className="space-y-6">
+                  <Panel>
+                    <PanelHeader title="Full recording" description="Assembled from the turns after the run, in order. Gaps between turns are not reproduced, so it is not a timing measurement." />
+                    <PanelBody>
+                      {recording === null ? (
+                        <p className="text-[13px] text-text-3">No recording until the run finishes.</p>
+                      ) : recording.status === "stored" ? (
+                        <div className="space-y-2">
+                          <AudioPlayer
+                            src={recordingAudioUrl(run.run_id)}
+                            label="the full recording"
+                            meta={[`${recording.duration_seconds?.toFixed(1) ?? "?"} s`, `${recording.segments?.length ?? 0} segments`, recording.assembly ?? ""].filter(Boolean)}
+                          />
+                          {recording.excluded?.map((e) => (
+                            <p key={`${e.turn_index}-${e.speaker}`} className="text-[12px] text-warn">
+                              Turn {e.turn_index} ({e.speaker}) not included: {e.reason}
+                            </p>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[13px] text-text-2">
+                          {recording.status === "not_applicable" ? "No audio moved in this run" : "The recording could not be assembled"}
+                          {recording.reason ? `: ${recording.reason}` : "."}
+                        </p>
+                      )}
+                    </PanelBody>
+                  </Panel>
+                  <Panel>
+                    <PanelHeader title="Stored audio" description="A degraded file names the original it came from, so the pair stays comparable." />
+                    {report.artefacts.length === 0 ? (
+                      <p className="px-4 py-6 text-[13px] text-text-3 sm:px-5">No audio was stored. This run moved no audio.</p>
+                    ) : (
+                      <TableScroll label="Stored audio">
+                        <Table className="min-w-[44rem]">
+                          <thead>
+                            <tr>
+                              <Th>Turn</Th>
+                              <Th>Speaker</Th>
+                              <Th>Variant</Th>
+                              <Th>Transformations</Th>
+                              <Th className="text-right">Duration</Th>
+                              <Th className="text-right">Rate</Th>
+                              <Th className="text-right">Size</Th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {report.artefacts.map((a) => (
+                              <tr key={`${a.turn_index}-${a.speaker}-${a.variant ?? "none"}`}>
+                                <Td className="font-mono tabular">{a.turn_index}</Td>
+                                <Td>{a.speaker}</Td>
+                                <Td className="font-mono text-[12px]">{a.variant ?? "stored"}</Td>
+                                <Td className="text-[12px]">{a.transformations.length > 0 ? a.transformations.join(", ") : "none"}</Td>
+                                <Td className="text-right font-mono tabular">{formatSeconds(a.duration_seconds) ?? <NotReported what="needs a decoder" />}</Td>
+                                <Td className="text-right font-mono tabular">{formatHz(a.sample_rate_hz) ?? "not read"}</Td>
+                                <Td className="text-right font-mono tabular">{formatBytes(a.size_bytes)}</Td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </Table>
+                      </TableScroll>
+                    )}
+                  </Panel>
+                </div>
+              ),
+            },
+            {
+              id: "stages",
+              label: "Pipeline stages",
+              panel: (
+                <Panel>
+                  <PanelHeader title="Pipeline stages" description="Measured, not estimated." />
+                  <StageTimeline events={report.events} />
+                </Panel>
+              ),
+            },
+          ]}
+        />
+
+        <div className="flex items-center gap-2 text-[12px] text-text-3">
+          <AlertOctagon aria-hidden="true" className="size-3.5" />
+          Every figure on this page is read from what the run stored. Missing values are shown as missing.
         </div>
       </PageBody>
     </>
   );
-}
-
-/**
- * The caller's role in the workspace holding this run's suite. Decides only
- * which controls are shown - Delete needs admin or owner, recording a
- * reference needs member or above - and the server checks again. Any
- * failure returns null, which shows neither.
- */
-async function roleForSuite(suiteId: string, headers: Record<string, string>): Promise<Role | null> {
-  try {
-    const [suites, workspaces] = await Promise.all([
-      api.suites({ cache: "no-store", headers }),
-      api.workspaces({ cache: "no-store", headers }),
-    ]);
-    const suite = suites.items.find((item) => item.id === suiteId);
-    if (!suite) return null;
-    for (const workspace of workspaces) {
-      const projects = await api.projects(workspace.id, { cache: "no-store", headers });
-      if (projects.some((project) => project.id === suite.project_id)) return workspace.role;
-    }
-  } catch {
-    return null;
-  }
-  return null;
 }

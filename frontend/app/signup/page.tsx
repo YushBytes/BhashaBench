@@ -1,54 +1,60 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
-import { SignupForm } from "@/components/domain/signup-form";
-import { Wordmark } from "@/components/shell/wordmark";
-import { api } from "@/lib/api/client";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { SignupForm } from "@/components/auth/signup-form";
+import { ErrorState, Notice, Skeleton, buttonClass } from "@/components/ui/primitives";
+import { ApiError, api } from "@/lib/api/client";
 
-export const metadata: Metadata = { title: "Create an account · BhashaBench" };
-
-/** Reads the deployment's options at request time, so it is suspended. */
-async function SignupBody() {
-  let enabled = false;
-  try {
-    enabled = (await api.authOptions({ cache: "no-store" })).signup_enabled;
-  } catch {
-    enabled = false;
-  }
-  if (!enabled) {
-    return (
-      <p className="text-[14px] leading-relaxed text-text-muted">
-        Sign-up is turned off on this server. An owner of a workspace adds you, or an operator
-        creates your account with <code className="font-mono">bhashabench users create</code>.{" "}
-        <Link href="/login" className="text-accent hover:underline">Back to sign in</Link>
-      </p>
-    );
-  }
-  return <SignupForm />;
-}
+export const metadata = { title: "Create an account" };
 
 export default function SignupPage() {
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-bg px-4 py-16">
-      <div className="w-full max-w-sm">
-        <Link href="/" className="mb-10 inline-flex min-h-11 items-center rounded-md">
-          <Wordmark />
-        </Link>
-        <h1 className="text-[22px] font-semibold tracking-[-0.01em] text-text">Create an account</h1>
-        <p className="mt-2 text-[14px] leading-relaxed text-text-muted">
-          You get your own workspace with a Default project. Nobody else can see it until you add them.
-        </p>
-        <div className="mt-8">
-          <Suspense fallback={null}>
-            <SignupBody />
-          </Suspense>
-        </div>
-        <p className="mt-8 text-[13px] text-text-muted">
-          Already have an account?{" "}
-          <Link href="/login" className="text-accent hover:underline">Sign in</Link>
-        </p>
-      </div>
-    </main>
+    <AuthShell
+      title="Create your workspace"
+      description="An account, a workspace you own and a Default project to put your first suite in."
+      aside={{
+        title: "What you can do in the first ten minutes.",
+        points: [
+          "Add a reference scenario from the shipped library, in Tamil, Hindi, English or another language.",
+          "Run it offline to check the caller's logic before any audio moves.",
+          "Point it at your bot over HTTP text or streaming voice and read back every turn.",
+        ],
+      }}
+    >
+      <Suspense fallback={<Skeleton className="h-96 w-full" />}>
+        <SignupGate />
+      </Suspense>
+    </AuthShell>
   );
+}
+
+/** The form only where this deployment allows sign-up (`AUTH_ALLOW_SIGNUP`). */
+async function SignupGate() {
+  let enabled: boolean;
+  try {
+    enabled = (await api.authOptions({ cache: "no-store" })).signup_enabled;
+  } catch (error) {
+    return (
+      <div className="rounded-lg border border-line">
+        <ErrorState
+          title="Sign-up could not be checked"
+          detail={error instanceof ApiError ? error.message : "The API did not answer."}
+        />
+      </div>
+    );
+  }
+  if (!enabled) {
+    return (
+      <div className="space-y-4">
+        <Notice tone="info">
+          This deployment does not allow self sign-up. Its operator creates accounts with the <code className="font-mono">bhashabench users create</code> command; a workspace owner or admin can then add you by email.
+        </Notice>
+        <Link href="/login" className={buttonClass("secondary", "lg", "w-full")}>
+          Back to sign in
+        </Link>
+      </div>
+    );
+  }
+  return <SignupForm />;
 }

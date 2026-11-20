@@ -1,36 +1,43 @@
 /**
  * The status vocabulary.
  *
- * The Phase 8 audit found one `StatusPill` carrying four different meanings
- * across the old page. These are deliberately separate components: a run
- * status, an outcome, an execution mode and a provider's availability are
- * different statements, and a reader who learns one badge should not have to
- * re-learn it on the next screen.
+ * A run status, an outcome, an execution mode, a verdict and a provider's
+ * availability are different statements, so they are different components
+ * and a reader who learns one badge does not have to re-learn it on the next
+ * screen. The words are the ones the product has used since Phase 8.
  *
  * **No status is colour alone.** Every badge pairs its hue with a word, and
- * the run-status badge with a glyph, so the table reads correctly in
- * greyscale and to anyone who cannot separate the hues.
+ * most with a glyph, so a table reads correctly in greyscale.
+ *
+ * Blue is not a status. External-bot modes are drawn in solid ink: they are
+ * the modes whose results describe a real bot, which deserves weight, not
+ * the colour reserved for actions and focus.
  */
 
 import type { ReactNode } from "react";
+import {
+  Ban,
+  CheckCircle2,
+  CircleDashed,
+  CircleDot,
+  Clock,
+  Loader2,
+  MinusCircle,
+  XCircle,
+} from "lucide-react";
 
 import { cx } from "./primitives";
-import type {
-  ExecutionMode,
-  HealthStatus,
-  PipelineStatus,
-  RunOutcome,
-} from "@/lib/api/types";
+import type { ExecutionMode, HealthStatus, PipelineStatus, RunOutcome } from "@/lib/api/types";
 
-type Tone = "ok" | "warn" | "bad" | "busy" | "idle" | "accent";
+export type Tone = "ok" | "warn" | "bad" | "busy" | "idle" | "ink";
 
 const TONES: Record<Tone, string> = {
-  ok: "border-ok/30 bg-ok-dim text-ok",
-  warn: "border-warn/30 bg-warn-dim text-warn",
-  bad: "border-bad/30 bg-bad-dim text-bad",
-  busy: "border-busy/30 bg-busy-dim text-busy",
-  idle: "border-line-strong bg-idle-dim text-text-dim",
-  accent: "border-accent-line bg-accent-dim text-accent",
+  ok: "border-ok/25 bg-ok-soft text-ok",
+  warn: "border-warn/25 bg-warn-soft text-warn",
+  bad: "border-bad/25 bg-bad-soft text-bad",
+  busy: "border-busy/25 bg-busy-soft text-busy",
+  idle: "border-line-strong bg-bg-soft text-text-2",
+  ink: "border-text bg-text text-bg",
 };
 
 export function Badge({
@@ -50,8 +57,7 @@ export function Badge({
     <span
       title={title}
       className={cx(
-        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full",
-        "border px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[12px] font-medium leading-5",
         TONES[tone],
         className,
       )}
@@ -62,109 +68,53 @@ export function Badge({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Run status
-// ---------------------------------------------------------------------------
+const g = "size-3.5 shrink-0";
 
-const STATUS: Record<PipelineStatus, { tone: Tone; label: string }> = {
-  created: { tone: "idle", label: "Created" },
-  initializing: { tone: "busy", label: "Initializing" },
-  running: { tone: "busy", label: "Running" },
-  completed: { tone: "ok", label: "Completed" },
-  failed: { tone: "bad", label: "Failed" },
-  cancelled: { tone: "idle", label: "Cancelled" },
-  timed_out: { tone: "bad", label: "Timed out" },
+// -- Run status --------------------------------------------------------------
+
+const STATUS: Record<PipelineStatus, { tone: Tone; label: string; glyph: ReactNode }> = {
+  created: { tone: "idle", label: "Created", glyph: <CircleDashed aria-hidden="true" className={g} /> },
+  initializing: { tone: "busy", label: "Initializing", glyph: <Loader2 aria-hidden="true" className={cx(g, "animate-spin")} /> },
+  running: { tone: "busy", label: "Running", glyph: <Loader2 aria-hidden="true" className={cx(g, "animate-spin")} /> },
+  completed: { tone: "ok", label: "Completed", glyph: <CheckCircle2 aria-hidden="true" className={g} /> },
+  failed: { tone: "bad", label: "Failed", glyph: <XCircle aria-hidden="true" className={g} /> },
+  cancelled: { tone: "idle", label: "Cancelled", glyph: <MinusCircle aria-hidden="true" className={g} /> },
+  timed_out: { tone: "bad", label: "Timed out", glyph: <Clock aria-hidden="true" className={g} /> },
 };
 
-export function RunStatusBadge({ status }: { status: PipelineStatus }) {
-  const { tone, label } = STATUS[status] ?? { tone: "idle" as Tone, label: status };
-  const live = status === "running" || status === "initializing";
+/** `pending` is the persisted status a listing can return for a created run. */
+export function RunStatusBadge({ status }: { status: PipelineStatus | "pending" }) {
+  const entry =
+    status === "pending"
+      ? STATUS.created
+      : (STATUS[status] ?? { tone: "idle" as Tone, label: status, glyph: null });
   return (
-    <Badge
-      tone={tone}
-      glyph={
-        <span
-          aria-hidden="true"
-          className={cx(
-            "inline-block size-1.5 shrink-0 rounded-full bg-current",
-            live && "bb-live-dot",
-          )}
-        />
-      }
-    >
-      {label}
+    <Badge tone={entry.tone} glyph={entry.glyph}>
+      {status === "pending" ? "Pending" : entry.label}
     </Badge>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Outcome
-// ---------------------------------------------------------------------------
+// -- Outcome -----------------------------------------------------------------
 
 /**
- * What the run established.
- *
- * Only `goal_achieved` is green. Every other outcome is a finding rather
- * than a success, and several are findings about *us* rather than the bot:
- * `provider_error` and `audio_validation_failed` say our pipeline broke, and
- * colouring them like a bot failure would misattribute the fault.
+ * Only `goal_achieved` is green. Several outcomes are findings about *us*
+ * (`provider_error`, `audio_validation_failed`, `abandoned`), and colouring
+ * them like a bot failure would misattribute the fault - so the hint says
+ * whose side each is on.
  */
-const OUTCOME: Record<RunOutcome, { tone: Tone; label: string; hint: string }> = {
-  goal_achieved: {
-    tone: "ok",
-    label: "Goal achieved",
-    hint: "The caller reached its objective within the turn budget.",
-  },
-  bot_refused: {
-    tone: "warn",
-    label: "Bot refused",
-    hint: "The bot declined to help. A finding about the bot.",
-  },
-  bot_unintelligible: {
-    tone: "warn",
-    label: "Bot unintelligible",
-    hint: "The bot's replies could not be understood by the caller rules.",
-  },
-  no_progress: {
-    tone: "warn",
-    label: "No progress",
-    hint: "The conversation stopped advancing toward the objective.",
-  },
-  turn_budget_exhausted: {
-    tone: "warn",
-    label: "Budget exhausted",
-    hint: "The turn ceiling was reached before the objective was met.",
-  },
-  provider_error: {
-    tone: "bad",
-    label: "Provider error",
-    hint: "A speech provider failed. This is our side, not the bot's.",
-  },
-  audio_validation_failed: {
-    tone: "bad",
-    label: "Audio invalid",
-    hint: "Audio did not survive inspection. Not a statement about the bot.",
-  },
-  external_bot_unavailable: {
-    tone: "bad",
-    label: "Bot unavailable",
-    hint: "The bot adapter could not obtain a reply.",
-  },
-  bot_protocol_error: {
-    tone: "warn",
-    label: "Bot protocol error",
-    hint: "The bot answered outside its protocol. A finding about the bot's integration.",
-  },
-  bot_ended_session: {
-    tone: "warn",
-    label: "Bot ended session",
-    hint: "The bot closed the session before the caller reached its objective.",
-  },
-  cancelled: {
-    tone: "idle",
-    label: "Cancelled",
-    hint: "Stopped by an operator.",
-  },
+export const OUTCOME: Record<RunOutcome, { tone: Tone; label: string; hint: string }> = {
+  goal_achieved: { tone: "ok", label: "Goal achieved", hint: "The caller reached its objective within the turn budget." },
+  bot_refused: { tone: "warn", label: "Bot refused", hint: "The bot declined to help. A finding about the bot." },
+  bot_unintelligible: { tone: "warn", label: "Bot unintelligible", hint: "The bot's replies could not be understood by the caller rules." },
+  no_progress: { tone: "warn", label: "No progress", hint: "The conversation stopped advancing toward the objective." },
+  turn_budget_exhausted: { tone: "warn", label: "Budget exhausted", hint: "The turn ceiling was reached before the objective was met." },
+  provider_error: { tone: "bad", label: "Provider error", hint: "A speech provider failed. This is our side, not the bot's." },
+  audio_validation_failed: { tone: "bad", label: "Audio invalid", hint: "Audio did not survive inspection. Not a statement about the bot." },
+  external_bot_unavailable: { tone: "bad", label: "Bot unavailable", hint: "The bot adapter could not obtain a reply." },
+  bot_protocol_error: { tone: "warn", label: "Bot protocol error", hint: "The bot answered outside its protocol. A finding about the bot's integration." },
+  bot_ended_session: { tone: "warn", label: "Bot ended session", hint: "The bot closed the session before the caller reached its objective." },
+  cancelled: { tone: "idle", label: "Cancelled", hint: "Stopped by an operator." },
   abandoned: {
     tone: "idle",
     label: "Abandoned",
@@ -174,17 +124,9 @@ const OUTCOME: Record<RunOutcome, { tone: Tone; label: string; hint: string }> =
 
 export function OutcomeBadge({ outcome }: { outcome: RunOutcome | null }) {
   if (outcome === null) {
-    return (
-      <span className="text-[13px] text-text-muted" title="An unfinished run has no result.">
-        —
-      </span>
-    );
+    return <span className="text-[13px] text-text-3" title="An unfinished run has no result.">No result yet</span>;
   }
-  const entry = OUTCOME[outcome] ?? {
-    tone: "idle" as Tone,
-    label: outcome,
-    hint: "",
-  };
+  const entry = OUTCOME[outcome] ?? { tone: "idle" as Tone, label: outcome, hint: "" };
   return (
     <Badge tone={entry.tone} title={entry.hint}>
       {entry.label}
@@ -192,23 +134,14 @@ export function OutcomeBadge({ outcome }: { outcome: RunOutcome | null }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Execution mode
-// ---------------------------------------------------------------------------
+// -- Execution mode ----------------------------------------------------------
 
 /**
- * How much of the system a run actually exercised.
- *
- * The mode is the honesty control, so the badge says what the run touched
- * rather than only naming the mode. Only `external_bot_test` may be
- * described as testing a bot, and even then the run's
- * `bot_audio_externally_received` has to agree - which is what
- * `EvidenceNotice` checks.
+ * How much of the system a run exercised. Only `external_bot_test` may be
+ * described as testing a voice bot, and even then the run's
+ * `bot_audio_externally_received` has to agree - `RunEvidence` checks that.
  */
-export const MODE_COPY: Record<
-  ExecutionMode,
-  { label: string; tone: Tone; hint: string }
-> = {
+export const MODE_COPY: Record<ExecutionMode, { label: string; tone: Tone; hint: string }> = {
   offline_simulation: {
     label: "Offline simulation",
     tone: "idle",
@@ -217,23 +150,17 @@ export const MODE_COPY: Record<
   audio_fixture_test: {
     label: "Fixture test",
     tone: "idle",
-    hint:
-      "Every stage ran with the bot stubbed by fixture audio. It establishes " +
-      "that the pipeline works, not that any bot does.",
+    hint: "Every stage ran with the bot stubbed by fixture audio. It establishes that the pipeline works, not that any bot does.",
   },
   external_bot_test: {
     label: "External voice bot",
-    tone: "accent",
-    hint:
-      "Bot audio was supplied from outside this process. The only mode that " +
-      "may be described as testing a voice bot.",
+    tone: "ink",
+    hint: "Bot audio was supplied from outside this process. The only mode that may be described as testing a voice bot.",
   },
   text_bot_test: {
     label: "Text bot",
-    tone: "accent",
-    hint:
-      "An external bot answered in text over HTTP. It tests what the bot says, " +
-      "and nothing about audio, speech recognition or synthesis.",
+    tone: "ink",
+    hint: "An external bot answered in text over HTTP. It tests what the bot says, and nothing about audio.",
   },
   telephony_test: {
     label: "Telephony",
@@ -243,11 +170,7 @@ export const MODE_COPY: Record<
 };
 
 export function ModeBadge({ mode }: { mode: ExecutionMode }) {
-  const entry = MODE_COPY[mode] ?? {
-    label: mode,
-    tone: "idle" as Tone,
-    hint: "",
-  };
+  const entry = MODE_COPY[mode] ?? { label: mode, tone: "idle" as Tone, hint: "" };
   return (
     <Badge tone={entry.tone} title={entry.hint}>
       {entry.label}
@@ -255,63 +178,57 @@ export function ModeBadge({ mode }: { mode: ExecutionMode }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Health and availability
-// ---------------------------------------------------------------------------
+// -- Verdict -----------------------------------------------------------------
 
-const HEALTH: Record<HealthStatus, { tone: Tone; label: string }> = {
-  ok: { tone: "ok", label: "Healthy" },
-  degraded: { tone: "warn", label: "Degraded" },
-  unavailable: { tone: "bad", label: "Unavailable" },
-};
+export function VerdictBadge({ verdict }: { verdict: "pass" | "fail" | "undetermined" | null }) {
+  if (verdict === null) {
+    return (
+      <Badge tone="idle" glyph={<CircleDashed aria-hidden="true" className={g} />} title="No evaluation has been stored for this run.">
+        Not evaluated
+      </Badge>
+    );
+  }
+  const map = {
+    pass: { tone: "ok" as Tone, label: "Pass", glyph: <CheckCircle2 aria-hidden="true" className={g} /> },
+    fail: { tone: "bad" as Tone, label: "Fail", glyph: <XCircle aria-hidden="true" className={g} /> },
+    undetermined: { tone: "warn" as Tone, label: "Undetermined", glyph: <CircleDot aria-hidden="true" className={g} /> },
+  }[verdict];
+  return (
+    <Badge tone={map.tone} glyph={map.glyph}>
+      {map.label}
+    </Badge>
+  );
+}
+
+// -- Availability and health -------------------------------------------------
+
+export function AvailabilityBadge({ available, reason }: { available: boolean; reason?: string | null }) {
+  return available ? (
+    <Badge tone="ok" glyph={<CheckCircle2 aria-hidden="true" className={g} />} title="This deployment has what it needs to use it.">
+      Available
+    </Badge>
+  ) : (
+    <Badge tone="warn" glyph={<Ban aria-hidden="true" className={g} />} title={reason ?? undefined}>
+      Not configured
+    </Badge>
+  );
+}
 
 export function HealthBadge({ status }: { status: HealthStatus }) {
-  const entry = HEALTH[status] ?? { tone: "idle" as Tone, label: status };
-  return <Badge tone={entry.tone}>{entry.label}</Badge>;
-}
-
-/**
- * Whether a provider can currently be built, and why not when it cannot.
- *
- * `selected` and `available` are different questions: a provider can be
- * configured and missing its credential, and the operator needs to see both
- * rather than one standing in for the other.
- */
-export function AvailabilityBadge({
-  available,
-  reason,
-}: {
-  available: boolean;
-  reason?: string | null;
-}) {
-  return available ? (
-    <Badge tone="ok">Available</Badge>
-  ) : (
-    <Badge tone="bad" title={reason ?? undefined}>
-      Unavailable
-    </Badge>
-  );
-}
-
-/**
- * Marks the provider the server is actually configured to use.
- *
- * Load-bearing when the selection is a test double: a run executed against
- * the `fake` provider establishes nothing, and that has to be visible
- * without opening the configuration.
- */
-export function SelectedBadge({ name }: { name: string }) {
-  const isFake = name === "fake";
+  const map: Record<HealthStatus, { tone: Tone; label: string }> = {
+    ok: { tone: "ok", label: "Healthy" },
+    degraded: { tone: "warn", label: "Degraded" },
+    unavailable: { tone: "bad", label: "Unavailable" },
+  };
+  const entry = map[status] ?? { tone: "idle" as Tone, label: status };
   return (
-    <Badge
-      tone={isFake ? "warn" : "accent"}
-      title={
-        isFake
-          ? "The configured provider is the offline test double. Its output is scripted, not recognised."
-          : "The provider this server is configured to use."
-      }
-    >
-      {isFake ? "Selected · test double" : "Selected"}
+    <Badge tone={entry.tone} glyph={<span aria-hidden="true" className="size-1.5 rounded-full bg-current" />}>
+      {entry.label}
     </Badge>
   );
+}
+
+/** A provider currently in use. Not a quality claim. */
+export function SelectedBadge() {
+  return <Badge tone="ink">In use</Badge>;
 }

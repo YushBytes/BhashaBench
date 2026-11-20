@@ -57,3 +57,18 @@ describe("the landing page's phase table", () => {
     assert.match(statusBadge, /no telephone call placed/);
   });
 });
+
+describe("the landing page's language list", () => {
+  it("matches backend/app/core/languages.py, the catalogue's single source of truth", async () => {
+    const { languages } = await import("../lib/content.ts");
+    const source = readFileSync(new URL("../../backend/app/core/languages.py", import.meta.url), "utf8");
+    const rows = [...source.matchAll(/Language\("([^"]+)", "([^"]+)", "([^"]+)", "([^"]+)", "[^"]+"\)/g)].map(
+      (m) => ({ code: m[1], name: m[2], endonym: m[3], script: m[4] }),
+    );
+    assert.ok(rows.length >= 13, `found ${rows.length} catalogue rows`);
+    assert.deepEqual(
+      languages.map(({ code, name, endonym, script }) => ({ code, name, endonym, script })),
+      rows,
+    );
+  });
+});

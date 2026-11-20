@@ -737,3 +737,55 @@ export interface ScenarioValidation {
   errors: { field: string; message: string; type: string }[];
   normalized_yaml: string | null;
 }
+
+// -- Added for the 2026-11 frontend: transcribed from the OpenAPI schemas ----
+
+/** `GET /suites/{id}`: the detail route is the only one with a count. */
+export interface SuiteRead extends SuiteSummary {
+  scenario_count: number;
+}
+
+/** `GET /evaluation/metrics`: one metric and how it is computed. */
+export interface MetricDefinition {
+  name: string;
+  title: string;
+  definition: string;
+  formula: string;
+  evidence: string;
+  normalisation: string;
+  /** `lower`, `higher`, `pass` or `neither`. */
+  better: string;
+  missing_data: string;
+  limitations: string[];
+  unit: string;
+}
+
+export interface MetricCatalogue {
+  evaluator_version: string;
+  normalisation_version: string;
+  /** Always null: there is no composite score. */
+  composite_score: null;
+  metrics: MetricDefinition[];
+}
+
+/** `GET /suites/{id}/scenarios/export`. */
+export interface BundleExport {
+  yaml: string;
+  scenario_count: number;
+}
+
+/** `POST /suites/{id}/scenarios/import`. */
+export interface BundleImportResult {
+  total: number;
+  valid: number;
+  imported: number;
+  failed: number;
+  duplicates: string[];
+  entry_errors: { index: number; name: string | null; errors: { field?: string; message: string }[] }[];
+  dry_run: boolean;
+  committed: boolean;
+}
+
+export interface PasswordChangeResult {
+  other_sessions_revoked: number;
+}
