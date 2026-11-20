@@ -396,6 +396,19 @@ def analyse(
 
     sequences = digit_sequences(raw)
 
+    def _digits(value: str) -> str | None:
+        compact = re.sub(r"\D", "", normalise(value))
+        return compact if compact and not re.search(r"[^\d\s]", normalise(value)) else None
+
+    digit_facts = {key: c for key, value in facts.items() if (c := _digits(value)) is not None}
+    # A number the bot quoted that matches *some* known fact is that fact, not
+    # evidence against another. Without this, a bot that correctly read back the
+    # account digits was "contradicting" the date of birth, and the caller
+    # corrected a correct read-back until its turn budget ran out.
+    unexplained = [
+        seq for seq in sequences if not any(c in seq or seq in c for c in digit_facts.values())
+    ]
+
     echoed: list[str] = []
     contradicted: list[str] = []
     for key, value in facts.items():
@@ -403,16 +416,11 @@ def analyse(
             echoed.append(key)
             continue
         # A contradiction is only decidable for digit-shaped facts: if the bot
-        # quoted *a* number where this fact is a number, and it is not this
-        # one, it has the wrong value. For free text, a different wording is
-        # not a different fact, so nothing is claimed.
-        compact = re.sub(r"\D", "", normalise(value))
-        is_digit_fact = bool(compact) and not re.search(r"[^\d\s]", normalise(value))
-        if (
-            is_digit_fact
-            and sequences
-            and all(compact not in seq and seq not in compact for seq in sequences)
-        ):
+        # quoted a number no known fact accounts for, where this fact is a
+        # number, it has the wrong value. For free text, a different wording
+        # is not a different fact, so nothing is claimed.
+        compact = digit_facts.get(key)
+        if compact is not None and unexplained:
             contradicted.append(key)
 
     # A refusal wins over a confirmation when both match: "I can confirm we

@@ -350,6 +350,38 @@ class TestSignalExtraction:
         )
         assert signals.facts_contradicted == ("claim_reference",)
 
+    def test_reading_back_one_fact_does_not_contradict_another(self) -> None:
+        """A number that is one known fact is not evidence against a second.
+
+        Found by the Bengali benchmark scenario: the bot read back the
+        account's last four digits correctly, the caller took them as a wrong
+        date of birth, and "corrected" a correct read-back until its budget ran
+        out - in Hindi and English too, so the phrase table was not the cause.
+        """
+        facts = {"account_last_four": "0083", "date_of_birth": "1949-03-11"}
+        signals = analyse(
+            "Your request with reference 0083 is confirmed.", language="bn-IN", known_facts=facts
+        )
+        assert signals.facts_echoed == ("account_last_four",)
+        assert signals.facts_contradicted == ()
+        signals = analyse(
+            "Your request with reference 19490311 is confirmed.",
+            language="bn-IN",
+            known_facts=facts,
+        )
+        assert signals.facts_echoed == ("date_of_birth",)
+        assert signals.facts_contradicted == ()
+
+    def test_an_unexplained_number_still_contradicts_every_digit_fact_it_could_be(self) -> None:
+        facts = {"account_last_four": "0083", "date_of_birth": "1949-03-11"}
+        signals = analyse(
+            "Your account ending 7710 is active.", language="en-IN", known_facts=facts
+        )
+        assert set(signals.facts_contradicted) == {"account_last_four", "date_of_birth"}
+        signals = analyse("I have 0083 and also 5521.", language="en-IN", known_facts=facts)
+        assert signals.facts_echoed == ("account_last_four",)
+        assert signals.facts_contradicted == ("date_of_birth",)
+
     def test_a_free_text_fact_is_never_reported_as_contradicted(self) -> None:
         """A different wording is not a different fact, so nothing is claimed."""
         signals = analyse(
