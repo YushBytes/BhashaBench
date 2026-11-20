@@ -50,6 +50,21 @@ def get_session_by_hash(session: Session, token_hash: str) -> AuthSession | None
     return session.scalar(select(AuthSession).where(AuthSession.token_hash == token_hash))
 
 
+def get_session_and_user(session: Session, token_hash: str) -> tuple[AuthSession, User] | None:
+    """A session and its user in one statement, for authenticating a request.
+
+    Every authenticated request runs this, so it is one round trip rather
+    than two: the load test found identity and scope to be most of an
+    authenticated read's database time.
+    """
+    row = session.execute(
+        select(AuthSession, User)
+        .join(User, User.id == AuthSession.user_id)
+        .where(AuthSession.token_hash == token_hash)
+    ).first()
+    return None if row is None else (row[0], row[1])
+
+
 def revoke_sessions(
     session: Session, user_id: uuid.UUID, *, now: datetime, keep: uuid.UUID | None = None
 ) -> int:
@@ -189,6 +204,7 @@ __all__ = [
     "count_owners",
     "get_project",
     "get_project_by_name",
+    "get_session_and_user",
     "get_session_by_hash",
     "get_user",
     "get_user_by_email",

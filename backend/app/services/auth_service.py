@@ -251,12 +251,12 @@ def resolve(session: Session, settings: Settings, token: str) -> Principal:
     """
     if not tokens.well_formed(token):
         raise UnauthenticatedError(SESSION_INVALID)
-    record = repo.get_session_by_hash(session, tokens.token_hash(token))
+    found = repo.get_session_and_user(session, tokens.token_hash(token))
     now = utc_now()
-    if record is None or not _live(record, settings, now):
+    if found is None or not _live(found[0], settings, now):
         raise UnauthenticatedError(SESSION_INVALID)
-    user = repo.get_user(session, record.user_id)
-    if user is None or not user.is_active:
+    record, user = found
+    if not user.is_active:
         raise UnauthenticatedError(SESSION_INVALID)
     if now - record.last_seen_at >= TOUCH_INTERVAL:
         record.last_seen_at = now

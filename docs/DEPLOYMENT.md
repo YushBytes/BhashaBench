@@ -172,11 +172,35 @@ concurrency 50:
 
 These describe that machine, not a server, and are not a capacity claim.
 The finding that carries over: **authenticated reads are the bottleneck**.
-Each one resolves the session, may write its activity time, scopes queries
-to the caller's projects and counts turns, on FastAPI's synchronous thread
-pool. Re-run on the chosen VM before sizing it; if the listing matters at
-load, cache the per-request project scope and make the turn counts one
-query before adding workers.
+
+### Project-scope caching (2026-11-20), measured
+
+Each authenticated request used to spend three statements on identity and
+scope (session row, user row, project roles), and a detail route three more
+re-resolving one project and membership. Now the session and user are one
+joined statement, and the caller's project roles are read once per request
+and kept in that request's own database session (`access_service`, cleared on
+any change to a project or membership and on every commit and rollback, never
+shared across requests or users; `tests/test_scope_cache.py`). The listing
+went from 6 statements to 5, and a run's detail and report routes from 11 to 9.
+
+Re-measured on the same laptop, same path, 2,000 requests at concurrency 50,
+one uvicorn process:
+
+| | Runs | Throughput | p50 |
+|-|------|-----------|-----|
+| Before | 2 | 102 and 111 req/s | 457 and 440 ms |
+| After | 4 (one outlier at 73 req/s excluded) | 106, 106, 107, 106 req/s | about 466 ms |
+| After, `--workers 4` | 1 warm run | 263 req/s | 228 ms |
+
+**The statement savings did not move throughput.** Fewer round trips is less
+database work, but a single process was never waiting on the database: it is
+bound by per-request Python work (about 9 ms under the GIL). Throughput scales
+with processes, which the production image already exposes as
+`UVICORN_WORKERS` (default 1). Set it to the VM's core count, and remember the
+rate limiter is per process, so N workers allow N times
+`RATE_LIMIT_REQUESTS_PER_MINUTE` (`docs/SECURITY.md`). Re-run this test on the
+chosen VM before sizing it.
 
 ## Not done, and needed for Phase 15's exit criterion
 

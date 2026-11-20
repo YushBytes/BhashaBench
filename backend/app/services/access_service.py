@@ -11,18 +11,27 @@ kept apart on purpose:
   change it.
 
 Services and routes call these; nothing else decides access.
+
+**The caller's project roles are read once per request**, not once per
+check (`_project_roles`). They are kept in the request's own SQLAlchemy
+session (`Session.info`), keyed by user, so they cannot outlive the request
+or be seen by another caller: each request gets a fresh session. They are
+dropped whenever a flush touches a project or a membership, and on every
+commit and rollback, so a role changed - or a change rolled back - within a
+request is never answered from a stale copy. Nothing about a user's
+permissions is cached across requests or process-wide.
 """
 
 from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from app.auth.permissions import Permission, allows
 from app.models.call_session import CallSession
-from app.models.identity import Project, Role, Workspace
+from app.models.identity import Project, Role, Workspace, WorkspaceMembership
 from app.models.scenario import Scenario
 from app.models.suite import TestSuite
 from app.models.test_run import TestRun
@@ -34,6 +43,40 @@ from app.services.errors import (
     NotFoundError,
     PermissionDeniedError,
 )
+
+_ROLES_KEY = "bhashabench.project_roles"
+
+
+def _project_roles(session: Session, principal: Principal) -> dict[uuid.UUID, Role]:
+    """Every project the principal can reach, with its role; once per request."""
+    cache: dict[uuid.UUID, dict[uuid.UUID, Role]] = session.info.setdefault(_ROLES_KEY, {})
+    roles = cache.get(principal.user_id)
+    if roles is None:
+        roles = repo.project_roles(session, principal.user_id)
+        cache[principal.user_id] = roles
+    return roles
+
+
+def forget_roles(session: Session) -> None:
+    """Drop the cached roles; the next check reads them from the database."""
+    session.info.pop(_ROLES_KEY, None)
+
+
+@event.listens_for(Session, "after_flush")
+def _forget_on_tenancy_change(session: Session, _context: object) -> None:
+    changed = (*session.new, *session.dirty, *session.deleted)
+    if any(isinstance(obj, (Project, WorkspaceMembership)) for obj in changed):
+        forget_roles(session)
+
+
+@event.listens_for(Session, "after_commit")
+def _forget_on_commit(session: Session) -> None:
+    forget_roles(session)
+
+
+@event.listens_for(Session, "after_soft_rollback")
+def _forget_on_rollback(session: Session, _previous: object) -> None:
+    forget_roles(session)
 
 
 def _deny(role: Role, permission: Permission) -> PermissionDeniedError:
@@ -77,7 +120,7 @@ def visible_project_ids(
     """Every project the principal holds `permission` in, for scoping listings."""
     return tuple(
         sorted(
-            (pid for pid, role in repo.project_roles(session, principal.user_id).items()
+            (pid for pid, role in _project_roles(session, principal).items()
              if allows(role, permission)),
             key=str,
         )
@@ -98,8 +141,7 @@ def _require_via_project(
     `NotFoundError`, with the resource's own name, so the two are
     indistinguishable to the caller.
     """
-    project = None if project_id is None else repo.get_project(session, project_id)
-    role = None if project is None else role_in(session, principal, project.workspace_id)
+    role = None if project_id is None else _project_roles(session, principal).get(project_id)
     if role is None:
         raise NotFoundError(resource, identifier)
     if not allows(role, permission):
