@@ -245,9 +245,10 @@ suite creation, a scenario built from the Tamil template and validated by the
 server, a fixture run started and followed, every route captured at 1440,
 768 and 390 with no horizontal overflow after the `TableScroll` fix.
 
-**Next exact step:** rebuild the local Docker frontend image from the
-`C:\dev\BhashaBench` clone (Docker cannot build from the OneDrive tree) and
-restart `bhashabench-local-frontend-1`, which was stopped during this work.
+**Frontend replacement: complete.** Commits `60f79c9` and `ba2a014`, CI
+44701201446 green (all five jobs). The local Docker frontend was rebuilt from
+the `C:\dev\BhashaBench` clone at `ba2a014` and is healthy on port 3000. The
+project's next task below is unchanged.
 
 ## Next task
 
