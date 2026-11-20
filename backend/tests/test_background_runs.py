@@ -201,6 +201,32 @@ class TestRecoveryLoop:
         )
         assert db_session.get(RunModel, recent.id).status is RunStatus.RUNNING
 
+    def test_only_one_process_sweeps_at_a_time(self, db_session: Session) -> None:
+        """With several uvicorn workers each runs this loop; while one holds the
+        sweep lock, another's sweep closes nothing rather than closing the same
+        runs a second time."""
+        from sqlalchemy import text
+
+        from app.pipeline.worker import RECOVERY_LOCK_KEY
+
+        stuck = self._stuck(db_session)
+        other = db_session.get_bind().engine.connect()
+        try:
+            other.begin()
+            other.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": RECOVERY_LOCK_KEY})
+            loop = RecoveryLoop(
+                lambda: _Borrowed(db_session), interval_seconds=0, threshold_seconds=660
+            )
+            assert loop.sweep_once() == 0
+            db_session.expire_all()
+            assert db_session.get(RunModel, stuck.id).status is RunStatus.RUNNING
+        finally:
+            other.rollback()  # releases the lock, as a worker's commit would
+            other.close()
+        assert loop.sweep_once() >= 1
+        db_session.expire_all()
+        assert db_session.get(RunModel, stuck.id).status is RunStatus.FAILED
+
     def test_the_protected_runs_are_never_swept(self, db_session: Session) -> None:
         protected = self._stuck(db_session, run_id=sorted(PROTECTED_RUN_IDS, key=str)[0])
         RecoveryLoop(

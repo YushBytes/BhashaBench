@@ -33,6 +33,7 @@ from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from functools import lru_cache
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.models.test_run import RunStatus
@@ -121,6 +122,9 @@ def run_worker() -> RunWorker:
     return RunWorker()
 
 
+RECOVERY_LOCK_KEY = 0x6262_7265_6376  # "bbrecv": one key for the stale-run sweep
+
+
 class RecoveryLoop:
     """Closes stale runs periodically, so a run whose process died ends itself."""
 
@@ -133,8 +137,20 @@ class RecoveryLoop:
         self._task: asyncio.Task[None] | None = None
 
     def sweep_once(self) -> int:
+        """Close stale runs once. Returns how many; 0 if another process is sweeping.
+
+        With `UVICORN_WORKERS` > 1 every worker runs this loop. A transaction-
+        scoped advisory lock lets one sweep at a time, so two workers never
+        abandon the same run twice; it is released at commit or rollback, so a
+        worker that dies mid-sweep cannot strand it.
+        """
         session = self._sessions()
         try:
+            got = session.execute(
+                text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": RECOVERY_LOCK_KEY}
+            ).scalar()
+            if not got:
+                return 0  # another process is sweeping; `close` ends this transaction
             now = utc_now()
             stale = recovery.find_stale_runs(session, older_than=self._threshold, now=now)
             for item in stale:

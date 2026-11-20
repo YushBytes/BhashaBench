@@ -55,6 +55,9 @@ services:
       TRUST_FORWARDED_FOR: "true"
     volumes:
       - artefacts:/storage
+    # A ceiling, not a reservation: about 100 MB per uvicorn worker idle, so
+    # 1 GB leaves room for UVICORN_WORKERS=2 under load (docs/DEPLOYMENT.md).
+    mem_limit: 1g
     expose:
       - "8000"
     depends_on:
@@ -71,6 +74,8 @@ services:
     restart: unless-stopped
     environment:
       BACKEND_URL: http://backend:8000
+    # The Next.js server measured about 380 MB in the local stack.
+    mem_limit: 768m
     ports:
       # Loopback only: the host's TLS reverse proxy is the only client.
       - "127.0.0.1:${FRONTEND_HOST_PORT:-3000}:3000"

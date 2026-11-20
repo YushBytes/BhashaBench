@@ -197,10 +197,28 @@ one uvicorn process:
 database work, but a single process was never waiting on the database: it is
 bound by per-request Python work (about 9 ms under the GIL). Throughput scales
 with processes, which the production image already exposes as
-`UVICORN_WORKERS` (default 1). Set it to the VM's core count, and remember the
-rate limiter is per process, so N workers allow N times
-`RATE_LIMIT_REQUESTS_PER_MINUTE` (`docs/SECURITY.md`). Re-run this test on the
-chosen VM before sizing it.
+`UVICORN_WORKERS` (default 1).
+
+### Choosing `UVICORN_WORKERS`
+
+| Environment | Workers | Why |
+|-------------|---------|-----|
+| Development (`docker-compose.yml`, `--reload`) | 1 | Reload needs a single process |
+| Local stack (`docker-compose.local.yml`) | 1 | One user; the image default |
+| Planned VM, 2 vCPU / 4 GB | **2** | One per core. PostgreSQL and the Next.js server share the same two cores, so more workers would oversubscribe them |
+| Larger VM, N vCPU, nothing else on it | N | Re-run `scripts/load_test.py` on it first |
+
+Measured on the local stack (2026-11-20): a backend worker uses about 100 MB
+idle and the frontend about 380 MB, so the production compose file caps the
+backend at 1 GB and the frontend at 768 MB.
+
+What multiplies with workers, stated: `RATE_LIMIT_REQUESTS_PER_MINUTE`,
+`RATE_LIMIT_LOGINS_PER_MINUTE` and `PIPELINE_MAX_CONCURRENT_RUNS` are enforced
+per process, so two workers allow twice each (halve them if the totals
+matter). Database connections are at most 15 per worker (pool 5 + overflow
+10), far under PostgreSQL's 100. The stale-run sweep runs in every worker but
+takes a PostgreSQL advisory lock, so only one sweeps at a time and no run is
+abandoned twice (`tests/test_background_runs.py`).
 
 ## Not done, and needed for Phase 15's exit criterion
 
