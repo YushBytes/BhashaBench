@@ -70,6 +70,21 @@ a one-off container, after reading that migration's docstring and taking a
 backup: `b588560f044d` refuses to downgrade when two projects share a suite
 name, and downgrading `bcf146f6c696` drops `telephony_calls` with its rows.
 
+### Roll back a bad release
+
+1. **Decide whether the database moved.** `git diff <previous>..HEAD --stat
+   -- backend/alembic/versions` lists any migration the release added.
+2. **No new migration:** `git checkout <previous>`, then `build` and `up -d`
+   as above. The data is untouched.
+3. **A new migration:** prefer restoring the backup taken before the upgrade
+   (`scripts/restore.sh <backup-dir> --yes`, then deploy `<previous>`), because
+   a downgrade deletes what the new tables held. If a downgrade is chosen,
+   read the migration's docstring first: downgrading `59b9983c8f1e` drops
+   `bot_integrations`, so every connected bot and its sealed token is lost
+   (runs keep their own record of the bot).
+4. Check `/api/v1/health` through the proxy and open one run and one
+   comparison in a browser before calling it done.
+
 ### TLS reverse proxy (Caddy, free certificates)
 
 ```
@@ -100,6 +115,12 @@ docker compose -f docker-compose.prod.yml exec backend \
 `scripts/backup.sh` writes `database.dump` (pg_dump custom format),
 `artefacts.tar.gz` (the `/storage` volume) and a `MANIFEST` with checksums.
 Read-only against the running system. Copy the directory off the host.
+
+**Schedule it** (none is installed by this repository): a nightly cron entry
+on the host, for example
+`0 3 * * * cd /opt/bhashabench && scripts/backup.sh >> /var/log/bhashabench-backup.log 2>&1`,
+plus a copy off the host once storage is chosen. Prune old backup
+directories by hand or with a second cron line; nothing prunes them today.
 
 ### Restore
 
@@ -156,6 +177,24 @@ documented in `backend/app/core/metrics.py`: responses by method and status
 class, time spent, 429s, and runs by status. They are per process and reset
 on restart. Alert first on: `/health` failing, a rising 5xx class, and runs
 accumulating in `running`.
+
+**With `UVICORN_WORKERS` > 1, each scrape reaches one worker** and sees only
+that process's counters. Treat `/metrics` as a sample until a multi-process
+collector is added; the 5xx and latency figures in the reverse proxy's access
+log cover every worker.
+
+### Monitoring, at no cost
+
+- **Uptime:** a free external monitor (UptimeRobot, Better Stack free tier,
+  or similar) polling `https://<domain>/health` every 5 minutes, alerting by
+  email. This is the alert that works when the host itself is down.
+- **Logs:** `LOG_FORMAT=json`; `docker compose -f docker-compose.prod.yml logs`
+  for now. Every line carries the request id. Ship them off-host when a
+  log service is chosen (not yet).
+- **Disk:** the artefacts volume grows with every audio run. Check
+  `df -h` weekly, or add it to the uptime monitor's keyword check.
+- **Backups:** once the cron entry above is installed, confirm its output exists and
+  rehearse a restore once on the host (`scripts/rehearse_restore.sh`).
 
 ## Load test
 
@@ -219,6 +258,26 @@ matter). Database connections are at most 15 per worker (pool 5 + overflow
 10), far under PostgreSQL's 100. The stale-run sweep runs in every worker but
 takes a PostgreSQL advisory lock, so only one sweeps at a time and no run is
 abandoned twice (`tests/test_background_runs.py`).
+
+## Release checklist
+
+Before the first public deploy, and before any release:
+
+- [ ] CI green on the exact commit being deployed (all five jobs).
+- [ ] `.env.production` on the host only: `APP_ENV=production`, a generated
+      `SECRET_KEY`, a generated database password, `CORS_ORIGINS` = the public
+      origin only, `AUTH_ALLOW_SIGNUP` deliberately set, `METRICS_TOKEN` set,
+      `UVICORN_WORKERS=2` on the 2 vCPU VM. The app refuses to start on the
+      placeholders.
+- [ ] No `BOT_HTTP_ALLOW_LOOPBACK`/`_PRIVATE`/`_PLAIN_PRIVATE` (refused in
+      production anyway); `LIVE_CALLS_AUTHORISED` remains `False` in code.
+- [ ] Backup taken (`scripts/backup.sh`) before `up -d`.
+- [ ] TLS: Caddy serving the domain; `curl -I https://<domain>` shows HSTS.
+- [ ] Smoke test through the proxy: sign up or sign in, connect a bot (the
+      reference bot is not deployed publicly; use a real bot you own),
+      run a text test, open the run and a comparison, download JSON and CSV.
+- [ ] A second account cannot open the first account's run or bot (404).
+- [ ] Uptime monitor and backup schedule in place.
 
 ## Not done, and needed for Phase 15's exit criterion
 
