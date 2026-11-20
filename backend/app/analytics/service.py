@@ -149,6 +149,7 @@ def compare_runs(
             "language": meta.get("language"),
             "mode": meta.get("mode"),
             "bot_adapter": meta.get("bot_adapter"),
+            "bot_integration": meta.get("bot_integration"),
             "evaluator_version": evaluation.evaluator_version,
             "evidence_fingerprint": evaluation.evidence_fingerprint,
             "verdict": evaluation.verdict.value,

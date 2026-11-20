@@ -98,6 +98,22 @@ class CreateRunRequest(BaseModel):
     )
 
 
+class RunBotIntegration(BaseModel):
+    """The connected bot a run was created against, as recorded at creation.
+
+    Copied into the run, not joined live: it stays true if the integration is
+    renamed, re-pointed or deleted later. Never carries a credential.
+    """
+
+    id: uuid.UUID
+    name: str
+    protocol: str
+    host: str
+    connection_checked_at: str | None = Field(
+        default=None, description="When the connection check that allowed this run succeeded."
+    )
+
+
 class StageEventResponse(BaseModel):
     """One step of one turn, and what became of it."""
 
@@ -185,6 +201,11 @@ class RunResponse(BaseModel):
         "no result, and reporting one would be a fabricated figure.",
     )
     caller_provider: str
+    bot_integration: RunBotIntegration | None = Field(
+        default=None,
+        description="The workspace's connected bot this run used, or `null` when the "
+        "bot's side came from a server adapter.",
+    )
     caller_phrase_review: str | None = Field(
         default=None,
         description=(
@@ -585,6 +606,11 @@ class RunSummary(BaseModel):
             "the external bot. Counted from the replies, never read from the mode. "
             "A text exchange establishes nothing about audio."
         ),
+    )
+    bot_integration: RunBotIntegration | None = Field(
+        default=None,
+        description="The workspace's connected bot this run used, or `null` when the "
+        "bot's side came from a server adapter.",
     )
     caller_phrase_review: str | None = Field(
         default=None,

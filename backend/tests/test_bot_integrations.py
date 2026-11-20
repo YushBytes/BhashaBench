@@ -315,6 +315,28 @@ class TestRunningAScenarioAgainstAConnectedBot:
         assert integration["id"] == connected["id"]
         assert integration["host"] == "127.0.0.1"
         assert TOKEN not in str(row.run_metadata)
+        # Which bot was tested is part of the run's own record, on every surface.
+        shown = api_client.get(f"{API}/test-runs/{run_id}").json()["bot_integration"]
+        assert shown["name"] == connected["name"] and shown["protocol"] == "http"
+        listed = api_client.get(f"{API}/test-runs", params={"suite_id": str(suite.id)}).json()
+        assert listed["items"][0]["bot_integration"]["id"] == connected["id"]
+        # And the comparison names each side's bot.
+        second = api_client.post(
+            f"{API}/test-runs",
+            json={
+                "suite_id": str(suite.id), "scenario_id": str(scenario.id),
+                "mode": "text_bot_test", "bot_integration_id": connected["id"],
+            },
+        ).json()["run_id"]  # fmt: skip
+        assert api_client.post(f"{API}/test-runs/{second}/start").status_code == 200
+        for rid in (run_id, second):
+            assert api_client.post(f"{API}/test-runs/{rid}/evaluations").status_code in (200, 201)
+        compared = api_client.get(
+            f"{API}/analytics/compare", params={"baseline": run_id, "candidate": second}
+        ).json()
+        assert compared["baseline"]["bot_integration"]["name"] == connected["name"]
+        assert compared["candidate"]["bot_integration"]["host"] == "127.0.0.1"
+        assert TOKEN not in str(compared)
 
     def test_an_unverified_integration_cannot_be_tested(
         self, api_client: TestClient, db_session: Session, project: Project, bot_url: str

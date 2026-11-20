@@ -475,6 +475,8 @@ class RunReport:
     bot_greeting: str | None = None
     caller_phrase_review: str | None = None
     """`reviewed`, `unreviewed`, or `None` for a run recorded before this existed."""
+    bot_integration: dict[str, Any] | None = None
+    """The connected bot this run used, as recorded at creation; `None` otherwise."""
 
     @property
     def total_audio_seconds(self) -> float:
@@ -2027,6 +2029,7 @@ class RunEngine:
             caller_provider=str(caller_meta.get("provider") or meta.get("caller_provider") or ""),
             uses_language_model=bool(caller_meta.get("uses_language_model", False)),
             caller_phrase_review=meta.get("caller_phrase_review"),
+            bot_integration=meta.get("bot_integration"),
             stt_provider=meta.get("stt_provider"),
             tts_provider=meta.get("tts_provider"),
             bot_adapter=str(meta.get("bot_adapter", "")),
