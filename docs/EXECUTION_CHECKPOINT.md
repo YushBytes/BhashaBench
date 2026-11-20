@@ -250,6 +250,26 @@ server, a fixture run started and followed, every route captured at 1440,
 the `C:\dev\BhashaBench` clone at `ba2a014` and is healthy on port 3000. The
 project's next task below is unchanged.
 
+## Round of 2026-11-20 (bring your own bot and hardening)
+
+Pushed and CI-green up to `d6e0296`, then the commits after it:
+DNS-rebinding fix (pinned connections); bring-your-own-bot backend
+(encrypted integrations, real connection check, runs by `bot_integration_id`)
+and the "Connect your chatbot" frontend; a nonce-based frontend CSP (pages now
+render per request); a hydration fix (one date locale); per-request
+project-scope cache (statements down; throughput unchanged at about 106 req/s
+for one process, 263 with four workers); a caller fix for read-back
+contradictions; unreviewed Bengali, Marathi and Telugu phrase tables with
+`docs/PHRASE_REVIEW.md`; LLM-judge validation tooling with
+`docs/JUDGE_VALIDATION.md` (nothing validated); and `bot_integration` on run,
+listing and comparison responses.
+
+Not done in this round: showing the connected bot on the run and compare
+pages (the API returns it); updating the README/CLAUDE.md test counts;
+`docs/FRONTEND_AUDIT.md`; a fresh-clone rehearsal beyond CI; fast-forwarding
+the `C:\dev\BhashaBench` clone (`git pull`, its tree is clean). Component
+tests exist (47); the older line saying they are missing is out of date.
+
 ## Next task
 
 **Blocked on the owner.** Choose and pay for a VM and a domain
