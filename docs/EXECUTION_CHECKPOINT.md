@@ -264,11 +264,11 @@ contradictions; unreviewed Bengali, Marathi and Telugu phrase tables with
 `docs/JUDGE_VALIDATION.md` (nothing validated); and `bot_integration` on run,
 listing and comparison responses.
 
-Not done in this round: showing the connected bot on the run and compare
-pages (the API returns it); updating the README/CLAUDE.md test counts;
-`docs/FRONTEND_AUDIT.md`; a fresh-clone rehearsal beyond CI; fast-forwarding
-the `C:\dev\BhashaBench` clone (`git pull`, its tree is clean). Component
-tests exist (47); the older line saying they are missing is out of date.
+Finished afterwards: the run and compare pages name the connected bot; the
+README and CLAUDE.md test counts were regenerated (3169 collected across 78
+modules); `docs/FRONTEND_AUDIT.md` updated; the `C:\dev\BhashaBench` clone
+fast-forwarded. Component tests exist (47). Not done: a fresh-clone rehearsal
+beyond what CI's clean checkout already does.
 
 ## Next task
 
@@ -279,12 +279,11 @@ runbook, rehearse a restore there, add external uptime alerting and a
 `/metrics` scraper, re-run the load test on the VM, run a week unattended,
 and only then cut `1.0.0`.
 
-Not blocked, if wanted meanwhile: caller phrase tables for Bengali, Marathi
-and Telugu (three reference scenarios are not runnable), a frontend CSP with
-nonces, component tests for the frontend, pinning the checked address into
-the outbound transport (the DNS-rebinding gap in `docs/SECURITY.md`), and
-caching the per-request project scope (the load test's bottleneck). The
-local deployment does not depend on any of these.
+Not blocked, if wanted meanwhile: a fluent-speaker review of the Bengali,
+Marathi and Telugu phrase tables (`docs/PHRASE_REVIEW.md`), and a decision
+on the worker count for the chosen VM (`docs/DEPLOYMENT.md`, load test). The
+earlier list here (phrase tables, frontend CSP, component tests, address
+pinning, scope caching) was done on 2026-11-20.
 
 ## Outstanding issues
 

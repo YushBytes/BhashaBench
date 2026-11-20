@@ -39,7 +39,7 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 | Suites | 1 (no delete in the UI) | fixed: rename and delete per suite; a suite holding scenarios asks again before deleting them too, and one whose scenarios have runs is refused |
 | Scenario edit, duplicate, delete | 4: API only; and DELETE of a scenario with runs was a 500 | fixed: `/app/scenarios/[id]`; delete-with-history is a 409 and archival is offered |
 | Scenario creation | 2: YAML paste only; the shipped reference scenarios cannot be loaded | fixed: "Start from a reference scenario" in the editor, served by `GET /api/v1/scenario-library` |
-| Bot adapter selection | 1 (reference bot only, by design) | — |
+| Bot adapter selection | 1 (reference bot only, by design) | 2026-11-20: users can now connect their own bot (Bots → Connect your chatbot), check it through the run's adapter, and pick it on New test; the run and comparison name it |
 | Language | 1, through the scenario's language | — |
 | Accent | 4: no accent parameter exists anywhere in the product | implemented as a requested dimension: `persona.accent` from a catalogue (`app/core/accents.py`), validated against the language, recorded per run with `applied` null and the reason, because no speech provider documents an accented voice. Shown on the run and scenario pages |
 | Noise profile and seed | 1 | — |
@@ -56,8 +56,21 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 | Run filters | 2: the "Created" status sent `created`, which the API refuses (422), so the history failed to load; `text_bot_test` and four outcomes were missing | fixed: values come from `lib/run-filters.ts`, tested against the backend enums |
 | Text bot runs | 2: `types.ts` lacked `text_bot_test` and the `bot_text_*` fields, so such a run was captioned "No external bot was contacted" | fixed: transcribed fields, own caveat and mislabel check |
 
-Component-level tests were absent at the audit. There are now 14, in
-`frontend/tests/components/`, run in CI (`npm run test:components`).
+Component-level tests were absent at the audit. There are now 47, in
+`frontend/tests/components/`, run in CI (`npm run test:components`),
+alongside 84 unit tests (`npm test`).
+
+## Since the audit (2026-11-20)
+
+- **Connect your chatbot** (`/app/bots/connect`, `/app/bots/[id]`): status
+  1, walked in a browser against the reference bot.
+- **Content-Security-Policy**: nonce-based on every page; verified with the
+  policy enforced in Chromium (no violations on 15 signed-in pages, an
+  injected inline script blocked). Pages now render per request.
+- **Hydration**: the overview and analytics pages threw React #418 once a run
+  existed (dates formatted in two locales); fixed.
+- **Caller language caveat**: runs in Bengali, Marathi or Telugu show that the
+  caller's phrases are unreviewed.
 
 ## Copy that contradicted the product
 

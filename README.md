@@ -438,7 +438,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 3084 tests across 73 modules
+│   ├── tests/                 3169 tests across 78 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -776,12 +776,12 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 3084 tests** across seventy-three modules.
-**3043 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3169 tests** across seventy-eight modules.
+**3128 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (3084) exceeds the number that run (3043). On
+why the collected total (3169) exceeds the number that run (3128). On
 Windows one more is skipped (a symlink test the OS refuses without
-developer mode), so a local run there reports 2989 passed, 42 skipped:
+developer mode), so a local run there reports 3127 passed, 42 skipped:
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -837,7 +837,7 @@ developer mode), so a local run there reports 2989 passed, 42 skipped:
 | `test_speech_timbre.py` | 132 | The Gnani Timbre adapter against its published contract: JSON body, every documented status and both error shapes, binary-response handling, the streaming WAV header, serialisation, client ownership |
 | `test_speech_core.py` | 121 | The Timbre contract constants, voice catalogue, domain models, registry and service rules - including that a tag the model ignores is refused rather than spoken aloud |
 | `test_speech_api.py` | 77 | The real FastAPI speech routes: binary response and its media types, `X-Speech-*` headers, error mapping, provider capabilities, cleanup on every exit path, security |
-| `test_caller_core.py` | 73 | The caller state machine, the transcript analyser (Indic digits, code-switched keywords), the decision schema and the provider registry |
+| `test_caller_core.py` | 75 | The caller state machine, the transcript analyser (Indic digits, code-switched keywords), the decision schema and the provider registry |
 | `test_caller_rules.py` | 155 | Every rule of the deterministic caller; that five different bot replies produce five different turns; a legality sweep of every state against every shape of reply |
 | `test_caller_service.py` | 34 | Decision validation, instruction-leak and invented-identifier rejection, synthesis, credential redaction in an error |
 | `test_caller_orchestrator.py` | 39 | Multi-turn conversations against real PostgreSQL: success, every failure reason, determinism, persistence, transcription failure, audio artefacts |
@@ -858,6 +858,11 @@ developer mode), so a local run there reports 2989 passed, 42 skipped:
 | `test_caller_llm_conversation.py` | 21 | Whole model-backed conversations against PostgreSQL with a scripted client: per-turn generation evidence is persisted, uses_language_model is derived from the turns that were actually generated (false before any turn and for an all-fallback conversation, sticky after one generated turn), the per-run cost limit holds across turns, the scenario's expected outcomes appear in no request, turn record or log line, and the run list and the caller API carry the derived value |
 | `test_caller_llm_budget.py` | 38 | The live-spending controls, offline: live language-model calls are unauthorised in code and no configuration value opens the gate, the 100-rupee ceiling can be lowered and never raised, a request's worst case is reserved in a durable ledger before it is sent and settled to reported usage afterwards, an unknown cost stays charged, and an unreadable or locked ledger refuses rather than reading as zero |
 | `test_caller_llm_sarvam.py` | 139 | The Sarvam client for both `sarvam-105b` and `sarvam-105b-conversations`, against a mock transport with **no request to Sarvam**: as shipped nothing is sent whatever the configuration and the caller falls back with `live_calls_disabled`; with the gate opened inside the test only, the documented request shape (key header, explicit model, temperature and output limit, reasoning disabled on one model and never mentioned to the other, seed, structured output), response and usage parsing without invented values, every documented status mapped to one normalised error, quota never retried as throttling, no credential in errors, logs, settings dumps or the ledger, cost from reported usage or the worst case, and the budget refusing before a request is sent; plus the settings and registry rules |
+| `test_pinned_transport.py` | 14 | DNS rebinding: requests to a hostname unknown to real DNS succeed only through the pinned address; a request-time rebinding answer is refused; environment proxies ignored; the pinned backend refuses unchecked hosts, ports and unix sockets; the WebSocket path pinned too |
+| `test_bot_integrations.py` | 31 | Bring your own bot against the reference bot on real sockets: saving is unverified and never returns the token; sealed and row-bound storage; URL and token rules; the connection check's outcomes (connected, wrong token, unreachable, forbidden addresses, voice handshake in the run's format); demotion on change; the whole journey to a completed run that records its bot; mode, project and deletion refusals; tenancy |
+| `test_scope_cache.py` | 7 | The per-request project-role cache: roles read once per request, never shared between callers, and never stale after a promotion, removal, new project or rollback; identity and scope in two statements |
+| `test_caller_phrases.py` | 20 | Phrase tables: every slot filled with only its placeholders, each table in its own script, the unreviewed status declared and reported by the provider listing and on every run, and docs/PHRASE_REVIEW.md identical to the code |
+| `test_judge_validation.py` | 11 | LLM-judge validation arithmetic: Cohen's kappa against hand-worked values, undefined as null, false pass and false fail rates, abstention, consistency, and the acceptance rule refusing too few items, one weak criterion and unmeasured rates |
 
 ```bash
 pytest
@@ -885,7 +890,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 3043 passed, 41 skipped ================
+================ 3128 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,
