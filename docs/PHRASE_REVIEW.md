@@ -93,6 +93,22 @@ the code, so this list is always what the caller actually says.
 | `close_success` | ధన్యవాదాలు, నాకు కావలసిన సమాచారం దొరికింది. |
 | `close_failure` | సరే, ధన్యవాదాలు. నేను తర్వాత మళ్ళీ ప్రయత్నిస్తాను. |
 
+## Review sheets
+
+`docs/phrase-review/bn-IN.csv`, `mr-IN.csv` and `te-IN.csv` are the sheets a
+reviewer fills in, one row per phrase: the phrase, its English reference, when
+it is used, and empty `decision`, `suggested_phrase`, `reviewer`,
+`reviewed_on` and `notes` columns. Every row's `status` is `pending`. They
+are generated from the code (`python scripts/phrase_review_sheet.py`) and a
+test fails if they go stale.
+
+**Mechanical checks done (2026-11-20, no fluent speaker involved):** every
+slot filled with exactly the placeholders its rule supplies; each table
+entirely in its own script (the shared danda aside); no two slots in a table
+identical; every phrase except the opening ends as a sentence. None of this
+says the phrases are natural or correct. **No reviewer has been supplied, so
+no phrase is recorded as reviewed.**
+
 ## How a fluent speaker reviews a table
 
 1. For each phrase, check against the English reference and the slot's use:

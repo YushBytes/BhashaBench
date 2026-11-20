@@ -1,0 +1,11 @@
+language,slot,phrase,english_reference,used_when,status,decision,suggested_phrase,reviewer,reviewed_on,notes
+bn-IN,opening,"নমস্কার, আমি {identity}। {objective}","Hello, I am {identity}. {objective}",first turn; {identity} and {objective} come from the scenario,pending,,,,,
+bn-IN,ask,এ বিষয়ে একটু বলতে পারবেন?,"Could you tell me about that, please?",the caller asks for information,pending,,,,,
+bn-IN,provide_fact,"হ্যাঁ, সেটা {fact}।","Yes, it is {fact}.",the bot asked for something the caller knows; {fact} is a scenario fact,pending,,,,,
+bn-IN,clarify,"দুঃখিত, ঠিক বুঝতে পারলাম না। আর একটু পরিষ্কার করে বলবেন?","Sorry, I did not quite follow that. Could you explain it more clearly?",the bot's reply could not be used,pending,,,,,
+bn-IN,repeat_request,"দুঃখিত, আর একবার বলবেন?","Sorry, could you say that again?",the bot's reply was empty or unclear,pending,,,,,
+bn-IN,correct,"না, ওটা ঠিক নয়। সঠিক তথ্য হল {fact}।","No, that is not right. The correct detail is {fact}.",the bot stated a known fact wrongly,pending,,,,,
+bn-IN,decline_unknown,"দুঃখিত, সেটা আমি জানি না।","Sorry, I do not know that.",the bot asked for something the caller does not know,pending,,,,,
+bn-IN,confirm,"আচ্ছা, আপনি বলছেন সেটা {fact}, তাই তো?","Right, so you are saying it is {fact} - is that correct?",reading back what the bot said,pending,,,,,
+bn-IN,close_success,"ধন্যবাদ, আমার যা দরকার ছিল পেয়ে গেছি।","Thank you, I have got what I needed.",the goal was reached,pending,,,,,
+bn-IN,close_failure,"ঠিক আছে, ধন্যবাদ। আমি পরে আবার চেষ্টা করব।","All right, thank you. I will try again later.",the caller gives up,pending,,,,,

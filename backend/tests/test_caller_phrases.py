@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import re
 import string
+import subprocess
+import sys
 import uuid
 from dataclasses import fields
 from pathlib import Path
@@ -76,6 +78,33 @@ class TestTables:
             letters = [c for c in letters if c.isalpha() or 0x0900 <= ord(c) <= 0x0DFF]
             stray = [c for c in letters if not low <= ord(c) <= high]
             assert letters and not stray, (language, slot, "".join(stray))
+
+
+class TestMechanicalReview:
+    """What can be checked without a fluent speaker. Meaning, register and
+    naturalness cannot, and are left to the review sheet."""
+
+    @pytest.mark.parametrize("language", sorted(deterministic._TABLES))
+    def test_no_two_slots_say_the_same_thing(self, language: str) -> None:
+        phrases = list(_slots(language).values())
+        assert len(set(phrases)) == len(phrases), language
+
+    @pytest.mark.parametrize("language", sorted(deterministic._TABLES))
+    def test_every_phrase_ends_as_a_sentence(self, language: str) -> None:
+        for slot, text in _slots(language).items():
+            if slot == "opening":
+                continue  # ends with the scenario's own objective
+            assert text.rstrip()[-1] in ".?!।", (language, slot)
+
+    def test_the_review_sheets_match_the_code(self) -> None:
+        root = REVIEW_DOC.parents[1]
+        result = subprocess.run(
+            [sys.executable, str(root / "scripts" / "phrase_review_sheet.py"), "--check"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        assert result.returncode == 0, result.stderr
 
 
 class TestReviewStatusIsHonest:

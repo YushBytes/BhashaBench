@@ -1,0 +1,11 @@
+language,slot,phrase,english_reference,used_when,status,decision,suggested_phrase,reviewer,reviewed_on,notes
+mr-IN,opening,"नमस्कार, मी {identity}. {objective}","Hello, I am {identity}. {objective}",first turn; {identity} and {objective} come from the scenario,pending,,,,,
+mr-IN,ask,याबद्दल थोडं सांगू शकाल का?,"Could you tell me about that, please?",the caller asks for information,pending,,,,,
+mr-IN,provide_fact,"हो, ते {fact} आहे.","Yes, it is {fact}.",the bot asked for something the caller knows; {fact} is a scenario fact,pending,,,,,
+mr-IN,clarify,"माफ करा, मला नीट समजलं नाही. जरा स्पष्ट सांगाल का?","Sorry, I did not quite follow that. Could you explain it more clearly?",the bot's reply could not be used,pending,,,,,
+mr-IN,repeat_request,"माफ करा, पुन्हा एकदा सांगाल का?","Sorry, could you say that again?",the bot's reply was empty or unclear,pending,,,,,
+mr-IN,correct,"नाही, ते बरोबर नाही. योग्य माहिती {fact} आहे.","No, that is not right. The correct detail is {fact}.",the bot stated a known fact wrongly,pending,,,,,
+mr-IN,decline_unknown,"माफ करा, ते मला माहीत नाही.","Sorry, I do not know that.",the bot asked for something the caller does not know,pending,,,,,
+mr-IN,confirm,"ठीक आहे, म्हणजे ते {fact} आहे, बरोबर?","Right, so you are saying it is {fact} - is that correct?",reading back what the bot said,pending,,,,,
+mr-IN,close_success,"धन्यवाद, मला हवी असलेली माहिती मिळाली.","Thank you, I have got what I needed.",the goal was reached,pending,,,,,
+mr-IN,close_failure,"ठीक आहे, धन्यवाद. मी नंतर पुन्हा प्रयत्न करेन.","All right, thank you. I will try again later.",the caller gives up,pending,,,,,

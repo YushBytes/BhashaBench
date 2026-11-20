@@ -1,0 +1,11 @@
+language,slot,phrase,english_reference,used_when,status,decision,suggested_phrase,reviewer,reviewed_on,notes
+te-IN,opening,"నమస్కారం, నేను {identity}. {objective}","Hello, I am {identity}. {objective}",first turn; {identity} and {objective} come from the scenario,pending,,,,,
+te-IN,ask,దాని గురించి కొంచెం చెప్పగలరా?,"Could you tell me about that, please?",the caller asks for information,pending,,,,,
+te-IN,provide_fact,"అవును, అది {fact}.","Yes, it is {fact}.",the bot asked for something the caller knows; {fact} is a scenario fact,pending,,,,,
+te-IN,clarify,"క్షమించండి, నాకు సరిగ్గా అర్థం కాలేదు. ఇంకొంచెం స్పష్టంగా చెప్పగలరా?","Sorry, I did not quite follow that. Could you explain it more clearly?",the bot's reply could not be used,pending,,,,,
+te-IN,repeat_request,"క్షమించండి, మళ్ళీ ఒకసారి చెప్పగలరా?","Sorry, could you say that again?",the bot's reply was empty or unclear,pending,,,,,
+te-IN,correct,"కాదు, అది సరైనది కాదు. సరైన వివరం {fact}.","No, that is not right. The correct detail is {fact}.",the bot stated a known fact wrongly,pending,,,,,
+te-IN,decline_unknown,"క్షమించండి, అది నాకు తెలియదు.","Sorry, I do not know that.",the bot asked for something the caller does not know,pending,,,,,
+te-IN,confirm,"సరే, అది {fact} అని చెబుతున్నారు, అంతేనా?","Right, so you are saying it is {fact} - is that correct?",reading back what the bot said,pending,,,,,
+te-IN,close_success,"ధన్యవాదాలు, నాకు కావలసిన సమాచారం దొరికింది.","Thank you, I have got what I needed.",the goal was reached,pending,,,,,
+te-IN,close_failure,"సరే, ధన్యవాదాలు. నేను తర్వాత మళ్ళీ ప్రయత్నిస్తాను.","All right, thank you. I will try again later.",the caller gives up,pending,,,,,
