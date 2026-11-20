@@ -185,6 +185,15 @@ class RunResponse(BaseModel):
         "no result, and reporting one would be a fabricated figure.",
     )
     caller_provider: str
+    caller_phrase_review: str | None = Field(
+        default=None,
+        description=(
+            "Whether a fluent speaker reviewed the caller's phrases in this run's "
+            "language: `reviewed`, or `unreviewed` (machine-written; a bot that "
+            "misunderstands them may be failing the caller, not the language). "
+            "`null` for a run recorded before this was tracked - unknown, not reviewed."
+        ),
+    )
     uses_language_model: bool = Field(
         description=(
             "Whether a language model actually generated at least one of the "
@@ -576,6 +585,10 @@ class RunSummary(BaseModel):
             "the external bot. Counted from the replies, never read from the mode. "
             "A text exchange establishes nothing about audio."
         ),
+    )
+    caller_phrase_review: str | None = Field(
+        default=None,
+        description="`reviewed`, `unreviewed` or `null` (not recorded); see the run detail.",
     )
     uses_language_model: bool = Field(
         default=False,

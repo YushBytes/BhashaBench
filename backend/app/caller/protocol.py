@@ -52,16 +52,29 @@ class CallerCapabilities:
     """Whether a learned model generates the text. **False** for every provider
     in Phase 6 - see this module's docstring."""
     languages: frozenset[str]
-    """BhashaBench language tags this provider can compose utterances in."""
+    """Language tags whose phrase tables a fluent speaker has reviewed."""
     supports_code_mixing: bool
     requires_credentials: bool
     max_turns_supported: int | None = None
     notes: tuple[str, ...] = field(default_factory=tuple)
     """Honest limitations, surfaced to clients."""
+    unreviewed_languages: frozenset[str] = field(default_factory=frozenset)
+    """Languages it can speak from phrase tables **no fluent speaker has
+    reviewed**. Runnable, and every run in one records
+    `caller_phrase_review: "unreviewed"`, because a bot that misunderstands an
+    unreviewed phrase may be failing the caller rather than the language."""
 
     def supports_language(self, language: str) -> bool:
-        """Whether this provider can speak `language`."""
-        return language in self.languages
+        """Whether this provider can speak `language`, reviewed or not."""
+        return language in self.languages or language in self.unreviewed_languages
+
+    def phrase_review(self, language: str) -> str | None:
+        """`reviewed`, `unreviewed`, or `None` when it cannot speak `language`."""
+        if language in self.languages:
+            return "reviewed"
+        if language in self.unreviewed_languages:
+            return "unreviewed"
+        return None
 
 
 @runtime_checkable

@@ -189,8 +189,15 @@ class CallerProviderResponse(BaseModel):
         "What a given conversation actually used is reported on the conversation."
     )
     languages: list[str] = Field(
-        description="Languages with reviewed phrase tables. A scenario in any "
-        "other language is refused rather than answered in English."
+        description="Languages with phrase tables a fluent speaker has reviewed. "
+        "A scenario in a language in neither list is refused rather than "
+        "answered in English."
+    )
+    unreviewed_languages: list[str] = Field(
+        default_factory=list,
+        description="Languages the caller can speak from phrase tables no fluent "
+        "speaker has reviewed. Runnable; each run records "
+        "`caller_phrase_review: unreviewed` so its results carry the caveat.",
     )
     supports_code_mixing: bool
     requires_credentials: bool

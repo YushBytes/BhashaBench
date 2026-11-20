@@ -49,6 +49,14 @@ PROVIDER_NAME = "deterministic"
 # coverage that does not exist.
 _REVIEWED_LANGUAGES = frozenset({"ta-IN", "hi-IN", "en-IN"})
 
+# Languages with phrase tables that are written but NOT reviewed by a fluent
+# speaker (added 2026-11-20 so the Bengali, Marathi and Telugu reference
+# scenarios can run). They are machine-written, kept in plain register, and
+# use only the slots the rules fill. They stay here, not above, until a fluent
+# speaker signs them off through `docs/PHRASE_REVIEW.md`; moving a language
+# into `_REVIEWED_LANGUAGES` is that sign-off and nothing else.
+_UNREVIEWED_LANGUAGES = frozenset({"bn-IN", "mr-IN", "te-IN"})
+
 # States in which a bare question from the bot is answered with the next unused
 # known fact, rather than only an explicitly identifier-shaped request.
 #
@@ -129,7 +137,55 @@ _ENGLISH = _Phrases(
     close_failure="All right, thank you. I will try again later.",
 )
 
-_TABLES: dict[str, _Phrases] = {"ta-IN": _TAMIL, "hi-IN": _HINDI, "en-IN": _ENGLISH}
+# -- Unreviewed tables (see `_UNREVIEWED_LANGUAGES`) ------------------------
+
+_BENGALI = _Phrases(
+    opening="নমস্কার, আমি {identity}। {objective}",
+    ask="এ বিষয়ে একটু বলতে পারবেন?",
+    provide_fact="হ্যাঁ, সেটা {fact}।",
+    clarify="দুঃখিত, ঠিক বুঝতে পারলাম না। আর একটু পরিষ্কার করে বলবেন?",
+    repeat_request="দুঃখিত, আর একবার বলবেন?",
+    correct="না, ওটা ঠিক নয়। সঠিক তথ্য হল {fact}।",
+    decline_unknown="দুঃখিত, সেটা আমি জানি না।",
+    confirm="আচ্ছা, আপনি বলছেন সেটা {fact}, তাই তো?",
+    close_success="ধন্যবাদ, আমার যা দরকার ছিল পেয়ে গেছি।",
+    close_failure="ঠিক আছে, ধন্যবাদ। আমি পরে আবার চেষ্টা করব।",
+)
+
+_MARATHI = _Phrases(
+    opening="नमस्कार, मी {identity}. {objective}",
+    ask="याबद्दल थोडं सांगू शकाल का?",
+    provide_fact="हो, ते {fact} आहे.",
+    clarify="माफ करा, मला नीट समजलं नाही. जरा स्पष्ट सांगाल का?",
+    repeat_request="माफ करा, पुन्हा एकदा सांगाल का?",
+    correct="नाही, ते बरोबर नाही. योग्य माहिती {fact} आहे.",
+    decline_unknown="माफ करा, ते मला माहीत नाही.",
+    confirm="ठीक आहे, म्हणजे ते {fact} आहे, बरोबर?",
+    close_success="धन्यवाद, मला हवी असलेली माहिती मिळाली.",
+    close_failure="ठीक आहे, धन्यवाद. मी नंतर पुन्हा प्रयत्न करेन.",
+)
+
+_TELUGU = _Phrases(
+    opening="నమస్కారం, నేను {identity}. {objective}",
+    ask="దాని గురించి కొంచెం చెప్పగలరా?",
+    provide_fact="అవును, అది {fact}.",
+    clarify="క్షమించండి, నాకు సరిగ్గా అర్థం కాలేదు. ఇంకొంచెం స్పష్టంగా చెప్పగలరా?",
+    repeat_request="క్షమించండి, మళ్ళీ ఒకసారి చెప్పగలరా?",
+    correct="కాదు, అది సరైనది కాదు. సరైన వివరం {fact}.",
+    decline_unknown="క్షమించండి, అది నాకు తెలియదు.",
+    confirm="సరే, అది {fact} అని చెబుతున్నారు, అంతేనా?",
+    close_success="ధన్యవాదాలు, నాకు కావలసిన సమాచారం దొరికింది.",
+    close_failure="సరే, ధన్యవాదాలు. నేను తర్వాత మళ్ళీ ప్రయత్నిస్తాను.",
+)
+
+_TABLES: dict[str, _Phrases] = {
+    "ta-IN": _TAMIL,
+    "hi-IN": _HINDI,
+    "en-IN": _ENGLISH,
+    "bn-IN": _BENGALI,
+    "mr-IN": _MARATHI,
+    "te-IN": _TELUGU,
+}
 
 
 def _phrases(language: str) -> _Phrases:
@@ -170,6 +226,7 @@ class DeterministicCallerProvider:
             # documentation repeats it: this is not Evon and not a model.
             uses_language_model=False,
             languages=_REVIEWED_LANGUAGES,
+            unreviewed_languages=_UNREVIEWED_LANGUAGES,
             supports_code_mixing=False,
             requires_credentials=False,
             max_turns_supported=None,
@@ -178,9 +235,10 @@ class DeterministicCallerProvider:
                 "integration is deferred until documented access and "
                 "credentials are available.",
                 "Utterances come from fixed per-language phrase tables. "
-                f"Reviewed tables exist for {sorted(_REVIEWED_LANGUAGES)}; a "
-                "scenario in any other catalogue language composes in English "
-                "rather than emitting unreviewed translation.",
+                f"Reviewed tables exist for {sorted(_REVIEWED_LANGUAGES)}. "
+                f"Tables for {sorted(_UNREVIEWED_LANGUAGES)} are machine-written "
+                "and unreviewed; runs in them say so. A scenario in any other "
+                "catalogue language is refused rather than answered in English.",
                 "Code-mixing is not generated. A scenario may declare it and "
                 "the caller will not produce it, so a code-mixing scenario "
                 "exercises the bot's handling of monolingual caller speech "

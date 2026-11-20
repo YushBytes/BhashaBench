@@ -295,6 +295,14 @@ async function Catalogue() {
                     {p.selected ? <SelectedBadge /> : null}
                     <Badge tone="idle">{p.uses_language_model ? "Language model" : "Rule engine"}</Badge>
                   </div>
+                  <p className="mt-1 text-[12px] text-text-3">
+                    Reviewed phrases: <span className="font-mono">{p.languages.join(", ") || "none"}</span>
+                    {p.unreviewed_languages && p.unreviewed_languages.length > 0 ? (
+                      <>
+                        {" · "}unreviewed (machine-written): <span className="font-mono">{p.unreviewed_languages.join(", ")}</span>
+                      </>
+                    ) : null}
+                  </p>
                   {p.notes.slice(0, 2).map((note) => (
                     <p key={note} className="mt-1 text-[12px] leading-relaxed text-text-2">
                       {note}

@@ -43,6 +43,14 @@ describe("RunEvidence", () => {
     expect(screen.getByText("Offline speech providers")).toBeTruthy();
   });
 
+  it("cautions that unreviewed caller phrases may be the caller's fault, and says nothing when reviewed", () => {
+    render(<RunEvidence run={run({ caller_phrase_review: "unreviewed", language: "bn-IN" })} />);
+    expect(screen.getByText("The caller's phrases in this language are unreviewed")).toBeTruthy();
+    cleanup();
+    render(<RunEvidence run={run({ caller_phrase_review: "reviewed", language: "ta-IN" })} />);
+    expect(screen.queryByText("The caller's phrases in this language are unreviewed")).toBeNull();
+  });
+
   it("says unknown, never 'all enforced', for a run that predates the record", () => {
     render(<RunEvidence run={run({ settings_not_enforced: null })} />);
     expect(screen.getByText(/were not recorded for this run/)).toBeTruthy();

@@ -64,7 +64,7 @@ the API:
 
 | Limit | Consequence |
 |-------|-------------|
-| Utterances come from fixed per-language phrase tables | Reviewed tables exist for `ta-IN`, `hi-IN` and `en-IN`. A scenario in any other catalogue language is **refused**, not answered in English |
+| Utterances come from fixed per-language phrase tables | Reviewed tables exist for `ta-IN`, `hi-IN` and `en-IN`. `bn-IN`, `mr-IN` and `te-IN` have **unreviewed**, machine-written tables: runnable, and every run records `caller_phrase_review: unreviewed` and shows a caution (`docs/PHRASE_REVIEW.md` is the review workflow). A scenario in any other catalogue language is **refused**, not answered in English |
 | Code-mixing is not generated | A scenario may declare `code_mixing`; the caller will not produce it, so such a scenario tests the bot against monolingual caller speech only |
 | Concrete details are only ever quoted from `known_facts` | The caller structurally cannot invent a reference number |
 

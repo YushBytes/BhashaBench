@@ -9,9 +9,15 @@ disappears. A test also proves a deliberately broken bot trips the gate.
 
 **What it measures: this pipeline, not any bot.** The caller is the rule
 engine and the bot is scripted to satisfy the reference scenarios, so the
-result is deterministic and any change comes from the code. Three
-scenarios are `not_runnable` today: the caller has no reviewed phrase table
-for Bengali, Marathi or Telugu.
+result is deterministic and any change comes from the code. All six
+reference scenarios run and pass (baseline regenerated 2026-11-20). The
+Bengali, Marathi and Telugu runs use the caller's **unreviewed**
+phrase tables (`docs/PHRASE_REVIEW.md`); a pass here says the pipeline
+completes those conversations against a scripted stub, nothing about how
+natural the caller sounds. Making them runnable also exposed a caller defect:
+a correctly read-back number was taken as contradicting a different numeric
+fact, so the Bengali scenario looped until its budget ran out (fixed in
+`app/caller/analysis.py`, with a regression test).
 
 To accept an intended change, regenerate the baseline and commit it with the
 change that explains it:

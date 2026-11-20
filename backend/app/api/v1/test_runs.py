@@ -465,6 +465,7 @@ def _summary(run: TestRun, turn_counts: dict[str, int]) -> RunSummary:
             and int(meta.get("bot_text_replies_received", 0)) > 0
         ),
         uses_language_model=bool(meta.get("uses_language_model", False)),
+        caller_phrase_review=meta.get("caller_phrase_review"),
         caller_turns=turn_counts.get(Speaker.CALLER.value, 0),
         bot_turns=turn_counts.get(Speaker.BOT.value, 0),
         created_at=run.created_at,
@@ -487,6 +488,7 @@ def _run(report: RunReport) -> RunResponse:
         outcome=report.outcome,
         caller_provider=report.caller_provider,
         uses_language_model=report.uses_language_model,
+        caller_phrase_review=report.caller_phrase_review,
         stt_provider=report.stt_provider,
         tts_provider=report.tts_provider,
         bot_adapter=report.bot_adapter,

@@ -473,6 +473,8 @@ class RunReport:
     the external bot. Counted from the replies, not read from the mode."""
     bot_session_id: str | None = None
     bot_greeting: str | None = None
+    caller_phrase_review: str | None = None
+    """`reviewed`, `unreviewed`, or `None` for a run recorded before this existed."""
 
     @property
     def total_audio_seconds(self) -> float:
@@ -670,6 +672,7 @@ class RunEngine:
             "language": spec.language,
             "caller_provider": caller_meta.get("provider"),
             "uses_language_model": caller_meta.get("uses_language_model", False),
+            "caller_phrase_review": caller_meta.get("phrase_review"),
             "stt_provider": self._stt_provider if config.uses_audio else None,
             "tts_provider": self._tts_provider if config.uses_audio else None,
             "bot_adapter": self._bot.capabilities.name,
@@ -2023,6 +2026,7 @@ class RunEngine:
             outcome=None if outcome_value is None else RunOutcome(outcome_value),
             caller_provider=str(caller_meta.get("provider") or meta.get("caller_provider") or ""),
             uses_language_model=bool(caller_meta.get("uses_language_model", False)),
+            caller_phrase_review=meta.get("caller_phrase_review"),
             stt_provider=meta.get("stt_provider"),
             tts_provider=meta.get("tts_provider"),
             bot_adapter=str(meta.get("bot_adapter", "")),

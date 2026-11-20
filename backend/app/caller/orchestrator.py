@@ -279,6 +279,9 @@ class ConversationOrchestrator:
                 "state": CallerState.INITIAL.value,
                 "provider": capabilities.name,
                 "provider_declares_language_model": capabilities.uses_language_model,
+                # Whether a fluent speaker reviewed the phrases the caller will
+                # speak in this language. Recorded once; the language is fixed.
+                "phrase_review": capabilities.phrase_review(spec.language),
                 # False until a turn's evidence says otherwise. Nothing has
                 # been generated yet, whatever provider is configured.
                 "uses_language_model": False,

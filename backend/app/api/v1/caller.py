@@ -428,6 +428,7 @@ def list_caller_providers(settings: SettingsDep) -> CallerProviderListResponse:
                 is_deterministic=capabilities.is_deterministic,
                 uses_language_model=capabilities.uses_language_model,
                 languages=sorted(capabilities.languages),
+                unreviewed_languages=sorted(capabilities.unreviewed_languages),
                 supports_code_mixing=capabilities.supports_code_mixing,
                 requires_credentials=capabilities.requires_credentials,
                 max_turns_supported=capabilities.max_turns_supported,

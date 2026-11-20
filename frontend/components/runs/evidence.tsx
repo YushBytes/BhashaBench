@@ -71,11 +71,19 @@ export function caveatsFor(run: Run): { level: Level; title: string; body: strin
     });
   }
 
+  if (run.caller_phrase_review === "unreviewed") {
+    caveats.push({
+      level: "caution",
+      title: "The caller's phrases in this language are unreviewed",
+      body: `No fluent speaker has reviewed the caller's ${run.language || "phrase table"} phrases; they were machine-written. A bot that misunderstands one may be failing the caller rather than the language, so read a failed turn with that in mind.`,
+    });
+  }
+
   if (!run.uses_language_model) {
     caveats.push({
       level: "note",
       title: "The caller is a rule engine, not a language model",
-      body: "Utterances come from reviewed per-language phrase tables and a state machine. Gnani Evon is not integrated. An utterance no rule anticipates produces a clarification request: that is the ceiling of a rule engine, and it bounds what this run can show.",
+      body: "Utterances come from fixed per-language phrase tables and a state machine. Gnani Evon is not integrated. An utterance no rule anticipates produces a clarification request: that is the ceiling of a rule engine, and it bounds what this run can show.",
     });
   }
 

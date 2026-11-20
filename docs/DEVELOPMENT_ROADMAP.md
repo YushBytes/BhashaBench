@@ -424,7 +424,7 @@ the year it registered a holding.
 | Conversation quality / naturalness | Not evaluated. A rule engine composing from fixed phrase tables |
 | Behaviour against a real voice bot | Not verified. Nothing here has had a conversation with one |
 | Code-mixed caller speech | Not generated. A scenario may declare it; the caller will not produce it |
-| Languages beyond `ta-IN`, `hi-IN`, `en-IN` | No reviewed phrase table. Such a scenario is refused, not answered in English |
+| Languages beyond `ta-IN`, `hi-IN`, `en-IN` | `bn-IN`, `mr-IN`, `te-IN` run on unreviewed, machine-written tables, and each run is labelled so (`docs/PHRASE_REVIEW.md`). Other catalogue languages are refused, not answered in English |
 
 **Exit criteria.** The simulated caller completes a multi-turn conversation
 without human input — **met** offline, against a scripted bot and against

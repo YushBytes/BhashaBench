@@ -76,9 +76,11 @@ provider is a rule engine that runs entirely in process.
 | Behaviour against a real voice bot | ❌ **Not verified** | Nothing in this repository has had a conversation with a voice bot |
 
 **Code-mixing is not generated.** A scenario may declare it; the caller will
-not produce it. Reviewed phrase tables exist for `ta-IN`, `hi-IN` and `en-IN`
-only, and a scenario in any other catalogue language is refused rather than
-answered in English.
+not produce it. Reviewed phrase tables exist for `ta-IN`, `hi-IN` and `en-IN`;
+`bn-IN`, `mr-IN` and `te-IN` have machine-written, **unreviewed** tables
+(`docs/PHRASE_REVIEW.md`), and every run in one records
+`caller_phrase_review: unreviewed`. A scenario in any other catalogue language
+is refused rather than answered in English.
 
 ### Caller — Sarvam language model (Phase 6)
 

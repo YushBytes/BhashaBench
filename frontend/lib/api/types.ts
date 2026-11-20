@@ -319,7 +319,10 @@ export interface CallerProvider {
   unavailable_reason: string | null;
   is_deterministic: boolean;
   uses_language_model: boolean;
+  /** Phrase tables a fluent speaker has reviewed. */
   languages: string[];
+  /** Phrase tables no fluent speaker has reviewed: runnable, and every run says so. */
+  unreviewed_languages?: string[];
   supports_code_mixing: boolean;
   requires_credentials: boolean;
   max_turns_supported: number | null;
@@ -364,6 +367,8 @@ export interface BotAdapters {
 // ---------------------------------------------------------------------------
 // Connected bots - transcribed from backend/app/schemas/integration.py
 // ---------------------------------------------------------------------------
+
+export type CallerPhraseReview = "reviewed" | "unreviewed";
 
 export type IntegrationProtocol = "http" | "ws_voice";
 
@@ -459,6 +464,8 @@ export interface RunSummary {
   bot_exchange: string | null;
   bot_text_externally_received: boolean;
   uses_language_model: boolean;
+  /** `reviewed`, `unreviewed`, or null (not recorded - unknown, not reviewed). */
+  caller_phrase_review?: CallerPhraseReview | null;
   caller_turns: number;
   bot_turns: number;
   created_at: string;
@@ -499,6 +506,10 @@ export interface Run {
   outcome: RunOutcome | null;
   caller_provider: string;
   uses_language_model: boolean;
+  /** Whether a fluent speaker reviewed the caller's phrases in this language.
+   *  `unreviewed`: machine-written, so a bot that misunderstands them may be
+   *  failing the caller. null: not recorded - unknown, never "reviewed". */
+  caller_phrase_review?: CallerPhraseReview | null;
   stt_provider: string | null;
   tts_provider: string | null;
   bot_adapter: string;
