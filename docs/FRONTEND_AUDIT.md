@@ -72,6 +72,41 @@ alongside 84 unit tests (`npm test`).
 - **Caller language caveat**: runs in Bengali, Marathi or Telugu show that the
   caller's phrases are unreviewed.
 
+## Browser walk of the whole journey (2026-11-20, local Docker stack)
+
+An 18-step Playwright script, run in Chromium with CSP enforced against the
+rebuilt local stack (`localhost:3000`), signed up a fresh account and went
+through suite, scenario from the library, connecting bots (success, wrong
+token, unreachable host, malformed URL, voice bot), the bot list, two runs
+against the connected text bot, evaluation, comparison, JSON and CSV export,
+analytics, a second tenant, and deleting the bot. Final result: **18 of 18
+passed, no console or page errors**. It found two real defects, both fixed:
+
+- **A text-bot run's page said "This run could not be loaded."** The report
+  endpoint answered 500 for every finished `text_bot_test` since the text
+  protocol shipped: the session-close event was stored with turn index -1,
+  which the response schema refused. Fixed in `46cc0bd`; older runs read the
+  -1 as "whole run".
+- **Two shipped scenarios could not be created from the library**
+  (`english_insurance_claim`, `bengali_balance_enquiry`): the builder wrote
+  YAML 1.2, and the server's YAML 1.1 parser read their dates as dates.
+  Fixed in `a37c43f`.
+
+Checked and found correct: a fully loaded run page has one `<main>`
+landmark (two appear only while streamed content swaps in); the connected
+bot is named on the run page and on both sides of a comparison; WER and CER
+show "not reported", never 0; a deleted bot's runs stay readable with their
+bot record; another tenant gets 404 for the bot. No token appeared in any
+page, export or backend log line.
+
+A voice run was also driven over the API against the connected voice bot:
+`external_bot_test`, `ws_voice`, completed, with `bot_audio_externally_received:
+true` and its report loading. Its transcripts come from the local stack's
+offline fake, so it shows the audio path works, not recognition quality.
+
+Not covered: PDF output itself (the print control is present; printing is
+the browser's), and the analytics regression check with enough runs to decide.
+
 ## Copy that contradicted the product
 
 - The landing page, as above.

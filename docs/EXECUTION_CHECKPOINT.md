@@ -270,6 +270,29 @@ modules); `docs/FRONTEND_AUDIT.md` updated; the `C:\dev\BhashaBench` clone
 fast-forwarded. Component tests exist (47). Not done: a fresh-clone rehearsal
 beyond what CI's clean checkout already does.
 
+## Round of 2026-11-20 (local verification)
+
+- **Local stack rebuilt** from `C:\dev\BhashaBench` with
+  `docker compose -f docker-compose.local.yml up -d --build`; volumes kept.
+  All five services healthy, migration `59b9983c8f1e` applied, existing data
+  intact (41 users, 40 runs at the time).
+- **Browser walk: 18 of 18 steps** (Playwright, CSP enforced; see
+  `docs/FRONTEND_AUDIT.md`). It found and fixed two real defects: text-bot run
+  reports answered 500 (`46cc0bd`), and two library scenarios could not be
+  created from the builder (`a37c43f`). A voice run through a connected voice
+  bot also completed over the API.
+- **Workers:** the stale-run sweep is now safe with several workers (advisory
+  lock); `UVICORN_WORKERS` documented, 2 recommended for the 2 vCPU VM;
+  memory ceilings in the production compose file.
+- **Phrase review:** generated review sheets in `docs/phrase-review/`; every
+  row pending. No reviewer supplied.
+- **Judge:** per-language validation and a metric provenance table. Nothing
+  validated: no labels, no authorised model calls.
+- **Deployment docs:** rollback runbook, free monitoring, backup cron
+  example, release checklist.
+- **Not rerun:** the full backend suite locally (stopped by Claude Code for
+  low system memory); CI runs it on every push.
+
 ## Next task
 
 **Blocked on the owner.** Choose and pay for a VM and a domain
