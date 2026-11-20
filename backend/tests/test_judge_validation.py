@@ -13,6 +13,7 @@ from app.evaluation.judge import DEFAULT_RUBRIC
 from app.evaluation.judge_validation import (
     LabelledItem,
     Thresholds,
+    by_language,
     cohen_kappa,
     items_from_rows,
     report_criterion,
@@ -138,3 +139,26 @@ class TestLabels:
         parsed = items_from_rows(rows)
         assert parsed[0].human == "pass" and parsed[0].judge == "fail"
         assert parsed[0].judge_repeat is None and parsed[1].judge_repeat == "fail"
+
+
+class TestPerLanguage:
+    def test_a_judge_good_in_one_language_and_weak_in_another_is_reported_per_language(
+        self,
+    ) -> None:
+        good, weak = [], []
+        for criterion in CRITERIA:
+            good += _items(criterion, {("pass", "pass"): 70, ("fail", "fail"): 40})
+            weak += _items(criterion, {("pass", "pass"): 70, ("fail", "pass"): 40})
+        items = [
+            LabelledItem(i.item_id, i.criterion_id, i.human, i.judge, i.judge_repeat, "hi-IN")
+            for i in good
+        ] + [
+            LabelledItem(
+                f"t-{i.item_id}", i.criterion_id, i.human, i.judge, i.judge_repeat, "ta-IN"
+            )
+            for i in weak
+        ]
+        reports = by_language(items, CRITERIA)
+        assert reports["hi-IN"].validated
+        assert not reports["ta-IN"].validated
+        assert any("false pass rate" in r for r in reports["ta-IN"].reasons)

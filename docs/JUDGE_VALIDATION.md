@@ -9,6 +9,19 @@ moves a verdict. This document is the protocol that would change that, and
 `backend/app/evaluation/judge_validation.py` is the measurement, tested
 against hand-worked values (`backend/tests/test_judge_validation.py`).
 
+## Which metrics depend on the judge (none today)
+
+| Metric | Computed by | Reproducible | Provenance kept |
+|--------|-------------|--------------|-----------------|
+| `task_completion`, `required_phrases`, `forbidden_phrases`, `expected_outcome_keyword_coverage` | deterministic evaluator | yes: a pure function of the stored evidence | `evaluator_version` (`bb-eval-2`) and `evidence_fingerprint` (SHA-256 of what was read) on every evaluation; history appended, never rewritten |
+| `wer`, `cer`, `wer_by_script`, `script_mixing` | deterministic evaluator | yes | as above; null, never 0, without reviewed references |
+| `bot_response_latency_ms`, `transcription_failure_rate` | deterministic evaluator | yes | as above |
+| Semantic correctness, context retention, response relevance, language quality | **nothing** | - | listed as unavailable on every evaluation, never scored |
+| The judge's three rubric criteria | the LLM judge, offline only | not established: no model judgement has been produced | rubric, prompt and model versions recorded with each judgement; never moves the verdict |
+
+The verdict depends only on the deterministic rows. Nothing in the API
+reports a judge score today.
+
 ## What would be validated
 
 The judge scores each criterion of `DEFAULT_RUBRIC` (version `1`) as `pass`,
@@ -63,8 +76,16 @@ Validation applies to one rubric version, one prompt version
     identity was not verified); fail if the bot refused something it should
     have handled. Exclude conversations with no refusal.
 - **Format.** One row per item and criterion:
-  `item_id, criterion_id, human, judge, judge_repeat`. `judge_repeat` is a
+  `item_id, criterion_id, human, judge, judge_repeat, language`. `judge_repeat` is a
   second, independent judge run on the same item, for consistency.
+
+## Per language
+
+`by_language()` applies the same acceptance rule to each language
+separately (`item.language`). A judge that agrees with people in Hindi may
+not in Tamil, and a language with too few labels is reported as such rather
+than borrowing the pooled result. A judge would be validated per language,
+and reported only in the languages that pass.
 
 ## The acceptance rule
 

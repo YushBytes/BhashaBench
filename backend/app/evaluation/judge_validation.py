@@ -45,6 +45,8 @@ class LabelledItem:
     judge: str
     judge_repeat: str | None = None
     """The judge's score on a second, independent run, for consistency."""
+    language: str | None = None
+    """The conversation's language tag, for the per-language breakdown."""
 
     def __post_init__(self) -> None:
         for name in ("human", "judge"):
@@ -204,8 +206,27 @@ def validate(
     return ValidationReport(validated=not reasons, criteria=reports, reasons=tuple(reasons))
 
 
+def by_language(
+    items: Iterable[LabelledItem],
+    criteria: Sequence[str],
+    thresholds: Thresholds | None = None,
+) -> dict[str, ValidationReport]:
+    """The same validation per language.
+
+    A judge can agree with people in Hindi and not in Tamil. Each language is
+    held to the same bars, so a language with too few labels reports that
+    rather than borrowing the pooled result. Items with no language are
+    grouped under `unknown`.
+    """
+    grouped: dict[str, list[LabelledItem]] = {}
+    for item in items:
+        grouped.setdefault(item.language or "unknown", []).append(item)
+    return {lang: validate(group, criteria, thresholds) for lang, group in sorted(grouped.items())}
+
+
 def items_from_rows(rows: Iterable[Mapping[str, str]]) -> list[LabelledItem]:
-    """Parse rows with item_id, criterion_id, human, judge and optional judge_repeat."""
+    """Parse rows with item_id, criterion_id, human, judge and optional
+    judge_repeat and language."""
     return [
         LabelledItem(
             item_id=row["item_id"],
@@ -213,6 +234,7 @@ def items_from_rows(rows: Iterable[Mapping[str, str]]) -> list[LabelledItem]:
             human=row["human"].strip().lower(),
             judge=row["judge"].strip().lower(),
             judge_repeat=(row.get("judge_repeat") or "").strip().lower() or None,
+            language=(row.get("language") or "").strip() or None,
         )
         for row in rows
     ]
@@ -228,6 +250,7 @@ __all__ = [
     "LabelledItem",
     "Thresholds",
     "ValidationReport",
+    "by_language",
     "cohen_kappa",
     "items_from_rows",
     "report_criterion",
