@@ -86,7 +86,9 @@ given: an empty period has no bar, an undecided group has no dot.
 | `/app/scenarios/new`, `/app/scenarios/[id]/edit` | The builder (guided sections plus YAML source), validated by the server before every save |
 | `/app/scenarios/[id]` | The specification read back, its runs; duplicate, archive or restore, delete (refused with the server's reason when runs use it) |
 | `/app/suites`, `/app/suites/[id]` | Suites by project with counts; a suite's scenarios, run history, move, bundle import (dry run first) and export, rename, delete |
-| `/app/bots` | Bot adapters, speech and caller providers, `telephony_status` and `evon_status` verbatim. Read-only: adapters are configured on the server |
+| `/app/bots` | The workspace's connected bots with their check status, then the server adapters, speech and caller providers, `telephony_status` and `evon_status` verbatim. Server adapters are read-only: the operator configures them |
+| `/app/bots/connect` | "Connect your chatbot": choose a path (text bot over HTTP, voice bot over WebSocket, another platform explained, the labelled demo), enter details checked against the server's rules, save, and see the connection check's outcome at once (`docs/CONNECT_YOUR_BOT.md`) |
+| `/app/bots/[integrationId]` | One connected bot: last check with each capability verified, failed or not checked; declared capabilities kept apart; re-check, edit, replace token, remove (admin); "Test this bot" once connected |
 | `/app/analytics` | Summary, trend and regression with the endpoints' own filters; pass rate by group; CSV |
 | `/app/compare` | Two runs picked by search, then `GET /analytics/compare`. Pairwise only |
 | `/app/reports` | Finished runs with JSON, CSV and PDF; the all-runs CSV; links to comparison |
@@ -101,7 +103,6 @@ a page that gets a 401 redirects through `signInAgainIfExpired`.
 
 ### What is not built, because the API does not back it
 
-- Bot-integration CRUD: adapters are a server-configured catalogue.
 - Password recovery, email invitations, notifications.
 - Renaming or deleting a workspace; editing your name or email.
 - Comparing more than two runs; suite-wide execution; reordering scenarios.
@@ -114,8 +115,32 @@ a page that gets a 401 redirects through `signInAgainIfExpired`.
 
 `next.config.ts` sets `cacheComponents: true`, so `export const dynamic`,
 `revalidate` and `fetchCache` are forbidden, and uncached data must sit inside
-`<Suspense>`. Every workspace route is a static shell (the page header
-prerenders) with its data streamed in behind a skeleton shaped like it.
+`<Suspense>`. Data streams in behind a skeleton shaped like it.
+
+**Every page renders per request** (since 2026-11-20). The root layout sets
+`export const instant = false` and awaits `connection()`, because the
+Content-Security-Policy carries a per-request nonce and a prerendered static
+shell, built before any nonce exists, would serve un-nonced scripts that the
+policy blocks. Partial prerendering is therefore off in effect. `tests/csp.test.mjs`
+fails if either line is removed.
+
+## Content-Security-Policy
+
+`proxy.ts` mints a 128-bit nonce per page request and sets the policy from
+`lib/csp.ts` on the request (Next stamps the nonce on every script and style
+it renders) and on the response. `script-src 'self' 'nonce-…' 'strict-dynamic'`
+with no `'unsafe-inline'` and no `'unsafe-eval'` outside development;
+`style-src` by nonce, with `style-src-attr 'unsafe-inline'` for React `style`
+attributes (chart widths, the audio progress bar), which cannot run script;
+`connect-src 'self'` because the browser calls only this origin;
+`object-src 'none'`, `frame-ancestors 'none'`, `base-uri 'self'`,
+`form-action 'self'`. The proxied `/api/v1` responses keep the backend's own
+stricter policy.
+
+Verified in a browser with CSP enforced (Chromium, `bypassCSP: false`): 15
+signed-in pages including a run page load with no violation and no page error
+and hydrate; an un-nonced inline script injected into the HTML, as reflected
+XSS would be, is blocked and reported.
 
 `usePathname()` is request-time data too: the shell reads it in a tiny
 component inside its own Suspense boundary (`PathAware` in

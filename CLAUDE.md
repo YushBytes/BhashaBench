@@ -452,8 +452,11 @@ attributes our fault to the system under test.
 fallback. A generated waveform is a picture of a sound that does not exist.
 
 **`cacheComponents` is on, so `export const dynamic` is forbidden** — it
-errors at build. Data access goes behind `<Suspense>` with a skeleton, which
-is what keeps every route a static shell with streamed content. `min-w-0` on
+errors at build. Data access goes behind `<Suspense>` with a skeleton. Every
+page renders per request (`instant = false` and `await connection()` in the
+root layout) because the CSP nonce cannot exist in a prerendered shell; do not
+remove either line, and do not add `'unsafe-inline'` to `script-src` to make
+something work (`docs/FRONTEND.md`, "Content-Security-Policy"). `min-w-0` on
 grid and flex children is load-bearing: without it a panel holding a
 `min-w-max` table inflates its own track and the page scrolls sideways.
 

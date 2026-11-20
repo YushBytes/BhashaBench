@@ -15,10 +15,9 @@ const BACKEND_URL = (
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
-  // The API's own hardening headers, for the pages. No Content-Security-
-  // Policy yet: Next's inline bootstrap scripts need per-request nonces to be
-  // allowed safely, and a policy with 'unsafe-inline' would only look like
-  // protection. Recorded as a gap in docs/SECURITY.md.
+  // The API's own hardening headers, for the pages. The Content-Security-
+  // Policy is not here: it carries a per-request nonce, so `proxy.ts` sets it
+  // (policy in `lib/csp.ts`).
   async headers() {
     return [
       {

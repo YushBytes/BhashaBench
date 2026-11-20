@@ -70,8 +70,8 @@ limited. Every API response carries `nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: no-referrer`, a device-denying `Permissions-Policy`, COOP,
 and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`
 (the dev-only docs pages excepted); HSTS is added in staging and production;
-auth responses are `no-store`. The frontend sends the same headers except
-the CSP.
+auth responses are `no-store`. The frontend sends the same headers, and
+since 2026-11-20 its own nonce-based CSP (below).
 
 **Scanning in CI (Phase 14 part 2).** Every push runs:
 
@@ -92,11 +92,23 @@ breaking upgrade). It is not shipped in any build.
 
 **Known gaps.** The rate-limit windows live in one process, so N processes
 allow N times the rate; `TRUST_FORWARDED_FOR` must only be set behind a
-proxy that overwrites the header. The frontend has no Content-Security-
-Policy yet: Next's inline scripts need per-request nonces, and a policy with
-`'unsafe-inline'` would be decoration. No multi-factor authentication. No email verification or password
+proxy that overwrites the header. No multi-factor authentication. No email verification or password
 reset by email: the application sends no email, and an account is created
 by an operator (`bhashabench users create`) or by sign-up when enabled.
+
+## Frontend Content-Security-Policy
+
+Every page response carries a policy built around a fresh 128-bit nonce
+(`frontend/proxy.ts`, `frontend/lib/csp.ts`): scripts only by nonce with
+`'strict-dynamic'`, no `'unsafe-inline'` for scripts or style elements, no
+`'unsafe-eval'` outside development, `object-src 'none'`, `frame-ancestors
+'none'`, `base-uri` and `form-action` `'self'`, `connect-src 'self'`. One
+documented exception: `style-src-attr 'unsafe-inline'`, for React `style`
+attributes, which cannot execute script. Pages render per request so the
+nonce can reach every script (a prerendered shell could not carry one); the
+cost is that no page is served from a prebuilt shell. Verified with CSP
+enforced in Chromium: signed-in pages load with no violation, and an
+un-nonced inline script injected into the HTML is blocked and reported.
 
 ## Outbound requests (SSRF)
 
