@@ -438,7 +438,7 @@ BhashaBench/
 │   │   └── utils/timing.py    UTC clock helpers
 │   ├── alembic/               migrations (alembic.ini is in backend/)
 │   ├── reference_bot/         reference text bot (docs/BOT_PROTOCOL.md)
-│   ├── tests/                 3169 tests across 78 modules
+│   ├── tests/                 3186 tests across 78 modules
 │   │   └── fixtures/audio/    generated test audio (no speech; see its README)
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
@@ -776,12 +776,12 @@ docker compose exec db psql -U bhashabench -d bhashabench
 
 ## Testing
 
-The backend suite **collects 3169 tests** across seventy-eight modules.
-**3128 run by default and pass**; the 41 live provider tests are *collected
+The backend suite **collects 3186 tests** across seventy-eight modules.
+**3145 run by default and pass**; the 41 live provider tests are *collected
 and skipped* unless you opt in. They are skipped, not deselected — which is
-why the collected total (3169) exceeds the number that run (3128). On
+why the collected total (3186) exceeds the number that run (3145). On
 Windows one more is skipped (a symlink test the OS refuses without
-developer mode), so a local run there reports 3127 passed, 42 skipped:
+developer mode), so a local run there reports 3144 passed, 42 skipped:
 
 | Module | Tests | Covers |
 |--------|-------|--------|
@@ -799,7 +799,7 @@ developer mode), so a local run there reports 3127 passed, 42 skipped:
 | `test_benchmark_gate.py` | 6 | The CI regression gate: every reference scenario run as a `text_bot_test` against the scripted reference bot and evaluated, compared with `benchmarks/baseline.json` so a worse verdict fails the build; the baseline matching `scenarios/` and containing passes worth guarding; a deliberately broken (refusing) bot tripping the gate on every baseline pass; and the comparison rules for worse, better, missing, new and unknown verdicts
 | `test_hardening.py` | 14 | Phase 14 part 2 hardening: the sliding-window limiter (limit, window, independent keys, 0 disables), 429 with `Retry-After` on the API, liveness never limited, login limited per email across addresses and checked before the right password is verified, `X-Forwarded-For` ignored unless trusted, and the security headers on responses and errors, HSTS only when deployed, no API CSP on the docs, `no-store` on auth
 | `test_streaming_voice.py` | 26 | Phase 9 streaming voice: framing and levels, latency from caller end to first voiced frame, end-of-turn silence, silence timeout, the deadline and barge-in on a simulated clock; then the `ws_voice` adapter against the reference bot over a real socket in real time - a prompt answer with measured latency, one socket across turns, end-pointing without a signal, a barge-in making the caller yield, a silent bot timing out with no audio, an endless bot cut off at the deadline, a wrong token and an off-allowlist host refused, no token in errors, a redirect refused without the token reaching its target - and a whole `external_bot_test` run recording per-turn streaming evidence and a silent bot turn, with fixture mode refusing an external voice bot; caller barge-in against the real reference bot in real time - a yielding bot stopping within 300 ms, one that talks on recorded as not yielding, a turn too short to interrupt sending nothing with its reason, no evidence unless requested - a whole run recording it per exchange, non-streaming adapters refused, the listing naming capable adapters, and the false 'never interrupts' caveat dropped |
-| `test_background_runs.py` | 8 | Phase 9 background execution: a run started with `background=true` answers 202 and completes after its request, a crash closes the run as `failed`/`abandoned` by the background worker with a redacted reason, a finished run and a run with no free slot are refused before the 202 with nothing started, the recovery sweep closing runs whose worker died while leaving recent and protected runs alone, a zero interval starting no loop, and the app never sweeping with the global settings
+| `test_background_runs.py` | 9 | Phase 9 background execution: a run started with `background=true` answers 202 and completes after its request, a crash closes the run as `failed`/`abandoned` by the background worker with a redacted reason, a finished run and a run with no free slot are refused before the 202 with nothing started, the recovery sweep closing runs whose worker died while leaving recent and protected runs alone, a zero interval starting no loop, and the app never sweeping with the global settings
 | `test_telephony_calls.py` | 16 | Phase 8 telephony with the mock provider against PostgreSQL and the real webhook: a placed call stored masked and labelled mocked with the caller namespace untouched, placing alone setting no status, an off-list number refused before the provider is contacted, concurrent, per-run and per-day limits, signed events driving each of four outcomes through the call and its conversation (`DIALING` first, `BUSY`/`NO_ANSWER` only from events), unsigned, wrong-secret and tampered events changing nothing, duplicates and stale events recorded but not applied, unknown providers and calls 404, the webhook absent with telephony off, oversized events refused, calls deleted with their run, and an invalid allowlist failing at startup
 | `test_telephony_core.py` | 44 | Phase 8 telephony core, offline: E.164 normalisation and refusal, masking, every guardrail refusing before dialling and never naming the full number, an empty allowlist allowing nothing, webhook signatures refusing edits, missing headers, bad timestamps, replays and an unconfigured secret, every provider status mapped and calls only moving forward, `telephony_test` still unimplemented, the mock labelled mocked with four scripted outcomes and strict event parsing, and the registry refusing the mock in production and any provider that does not exist
 | `test_signed_links.py` | 18 | Phase 10 signed audio links: the HMAC primitive verifying a fresh link and refusing any edit to variant, expiry, user or signature, another path, expiry, a rotated secret, an over-long lifetime and malformed values; and through the API, a link opening one turn's audio or the recording with no session, refusing to be pointed at another turn or tampered with, revoked when its minter leaves the workspace, unmintable by an outsider or for audio that does not exist, and capped at fifteen minutes
@@ -822,7 +822,7 @@ developer mode), so a local run there reports 3127 passed, 42 skipped:
 | `test_accents.py` | 10 | Accent profiles: every profile a variety of a catalogue language with a unique key, each language's profiles listed by `/languages` and none invented, a scenario's accent validated against its language, no provider today rendering any accent, evidence saying why it was not applied (provider or no audio), applied only when a provider declares the profile |
 | `test_api_library.py` | 74 | Search, filters, pagination and ordering; suite `PATCH` and guarded `DELETE`; copy and move; import dry-run and atomicity; export round-trip |
 | `test_database_gate.py` | 16 | `BHASHABENCH_REQUIRE_DATABASE`: an unreachable test database skips by default and fails when required - including a real pytest subprocess against a closed port |
-| `test_pipeline_recovery.py` | 20 | `bhashabench runs recover-stale` through the real Typer app: eligibility, the dry-run default, the timeout floor, `--apply` closing a stuck run as status `failed`, outcome `abandoned`, without deleting turns, events or artefacts, and the two protected historical runs staying excluded and unchanged with or without `--apply` |
+| `test_pipeline_recovery.py` | 21 | `bhashabench runs recover-stale` through the real Typer app: eligibility, the dry-run default, the timeout floor, `--apply` closing a stuck run as status `failed`, outcome `abandoned`, without deleting turns, events or artefacts, and the two protected historical runs staying excluded and unchanged with or without `--apply` |
 | `test_cli.py` | 65 | Argument parsing, exit codes and output for every command through Typer's `CliRunner`, plus that no connection string reaches the terminal on a database outage |
 | `test_reference_scenarios.py` | 40 | Every committed scenario in `scenarios/` validates and round-trips, the set covers six languages and the documented audio and code-mixing cases, and the generated bundle is not stale |
 | `test_demo_scenario.py` | 7 | The recorded demo's scenario file: it validates, its facts and marking criteria are unchanged, and its spoken Tamil opening passes caller validation, is deterministic and contains no English beyond the declared code-mixed terms |
@@ -859,10 +859,10 @@ developer mode), so a local run there reports 3127 passed, 42 skipped:
 | `test_caller_llm_budget.py` | 38 | The live-spending controls, offline: live language-model calls are unauthorised in code and no configuration value opens the gate, the 100-rupee ceiling can be lowered and never raised, a request's worst case is reserved in a durable ledger before it is sent and settled to reported usage afterwards, an unknown cost stays charged, and an unreadable or locked ledger refuses rather than reading as zero |
 | `test_caller_llm_sarvam.py` | 139 | The Sarvam client for both `sarvam-105b` and `sarvam-105b-conversations`, against a mock transport with **no request to Sarvam**: as shipped nothing is sent whatever the configuration and the caller falls back with `live_calls_disabled`; with the gate opened inside the test only, the documented request shape (key header, explicit model, temperature and output limit, reasoning disabled on one model and never mentioned to the other, seed, structured output), response and usage parsing without invented values, every documented status mapped to one normalised error, quota never retried as throttling, no credential in errors, logs, settings dumps or the ledger, cost from reported usage or the worst case, and the budget refusing before a request is sent; plus the settings and registry rules |
 | `test_pinned_transport.py` | 14 | DNS rebinding: requests to a hostname unknown to real DNS succeed only through the pinned address; a request-time rebinding answer is refused; environment proxies ignored; the pinned backend refuses unchecked hosts, ports and unix sockets; the WebSocket path pinned too |
-| `test_bot_integrations.py` | 31 | Bring your own bot against the reference bot on real sockets: saving is unverified and never returns the token; sealed and row-bound storage; URL and token rules; the connection check's outcomes (connected, wrong token, unreachable, forbidden addresses, voice handshake in the run's format); demotion on change; the whole journey to a completed run that records its bot; mode, project and deletion refusals; tenancy |
+| `test_bot_integrations.py` | 32 | Bring your own bot against the reference bot on real sockets: saving is unverified and never returns the token; sealed and row-bound storage; URL and token rules; the connection check's outcomes (connected, wrong token, unreachable, forbidden addresses, voice handshake in the run's format); demotion on change; the whole journey to a completed run that records its bot; mode, project and deletion refusals; tenancy |
 | `test_scope_cache.py` | 7 | The per-request project-role cache: roles read once per request, never shared between callers, and never stale after a promotion, removal, new project or rollback; identity and scope in two statements |
-| `test_caller_phrases.py` | 20 | Phrase tables: every slot filled with only its placeholders, each table in its own script, the unreviewed status declared and reported by the provider listing and on every run, and docs/PHRASE_REVIEW.md identical to the code |
-| `test_judge_validation.py` | 11 | LLM-judge validation arithmetic: Cohen's kappa against hand-worked values, undefined as null, false pass and false fail rates, abstention, consistency, and the acceptance rule refusing too few items, one weak criterion and unmeasured rates |
+| `test_caller_phrases.py` | 33 | Phrase tables: every slot filled with only its placeholders, each table in its own script, the unreviewed status declared and reported by the provider listing and on every run, and docs/PHRASE_REVIEW.md identical to the code |
+| `test_judge_validation.py` | 12 | LLM-judge validation arithmetic: Cohen's kappa against hand-worked values, undefined as null, false pass and false fail rates, abstention, consistency, and the acceptance rule refusing too few items, one weak criterion and unmeasured rates |
 
 ```bash
 pytest
@@ -890,7 +890,7 @@ they were skipped and not passed. They never silently pass.
 Point them elsewhere with `BHASHABENCH_TEST_DATABASE_URL`.
 
 ```
-================ 3128 passed, 41 skipped ================
+================ 3145 passed, 41 skipped ================
 ```
 
 pytest is configured in `pyproject.toml` with `filterwarnings = ["error"]`,

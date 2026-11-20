@@ -58,7 +58,7 @@ Both landing buttons ("Explore the test bench", "Open the workspace") go to
 
 Component-level tests were absent at the audit. There are now 47, in
 `frontend/tests/components/`, run in CI (`npm run test:components`),
-alongside 84 unit tests (`npm test`).
+alongside 86 unit tests (`npm test`).
 
 ## Since the audit (2026-11-20)
 
