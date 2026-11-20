@@ -397,15 +397,25 @@ supplies the operator rail.
 ```
 frontend/
   app/page.tsx          the public site
-  app/app/              the workspace: overview, runs, new-test,
-                        scenarios, providers
-  components/ui/        primitives, the status vocabulary, loading states
-  components/shell/     sidebar, mobile drawer, page header, wordmark
-  components/domain/    runs table, conversation, audio, stage timeline,
-                        evidence, filters, the new-test form
-  components/marketing/ public header/footer, pipeline diagram
+  app/app/              the workspace: overview, projects, runs (new,
+                        detail), scenarios (builder), suites, bots,
+                        analytics, compare, reports, settings
+  components/ui/        primitives, fields, native dialogs, status vocabulary
+  components/shell/     sidebar, drawer, command menu, page header, account
+  components/runs/      conversation inspector, audio, evaluation, evidence,
+                        run form and controls, compare picker
+  components/scenario/  the guided builder and scenario actions
+  components/charts/    verdict trend, pass-rate intervals
   lib/api/              the ONLY place the frontend calls the API
+  lib/api/context.ts    per-request user, workspaces, projects and roles
 ```
+
+The frontend was replaced on 2026-11-20 (design and routes in
+`docs/FRONTEND.md`): monochrome with an electric-blue accent, Host Grotesk
+and JetBrains Mono, Lucide icons. Two dependencies were added, `lucide-react`
+and `yaml` (the builder parses library YAML; it constructs no code). Blue
+means action, selection or focus, never a status. `caveatsFor(run)` is the one
+derivation of a run's caveats. `TableScroll` must stay `relative`.
 
 Six rules that are easy to break:
 

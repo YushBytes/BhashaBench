@@ -443,15 +443,17 @@ BhashaBench/
 │   ├── requirements.txt       runtime dependencies
 │   ├── requirements-dev.txt   test and lint dependencies
 │   └── Dockerfile             multi-stage: development / production
-├── frontend/                  public site and operator workspace (Phase 8)
+├── frontend/                  public site and operator workspace
 │   ├── app/page.tsx           the public site
-│   ├── app/app/               the workspace: overview, runs, new-test,
-│   │                          scenarios, providers
-│   ├── components/ui/         primitives, status vocabulary, loading states
-│   ├── components/shell/      sidebar, mobile drawer, page header
-│   ├── components/domain/     runs table, conversation inspector, audio
-│   │                          player, stage timeline, evidence notices
-│   ├── components/marketing/  public header/footer, pipeline diagram
+│   ├── app/app/               the workspace: overview, projects, runs,
+│   │                          scenarios (builder), suites, bots, analytics,
+│   │                          compare, reports, settings
+│   ├── components/ui/         primitives, fields, dialogs, status vocabulary
+│   ├── components/shell/      sidebar, drawer, command menu, page header
+│   ├── components/runs/       conversation inspector, audio, evaluation,
+│   │                          evidence, run form and controls
+│   ├── components/scenario/   the scenario builder and actions
+│   ├── components/charts/     verdict trend, pass-rate intervals
 │   ├── lib/api/               the ONLY place the frontend calls the API
 │   ├── lib/content.ts         public-site copy and phase status
 │   ├── public/
@@ -755,6 +757,8 @@ npm run build                        # production build
 npm run start                        # serve the production build
 npm run lint                         # ESLint
 npm run typecheck                    # tsc --noEmit
+npm test                             # lib/ unit and drift tests
+npm run test:components              # component tests (vitest, jsdom)
 ```
 
 ### Docker

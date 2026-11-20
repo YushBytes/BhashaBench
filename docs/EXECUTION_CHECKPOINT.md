@@ -205,6 +205,50 @@ Not done in this round, each for the reason given:
   owner's authorisation, credentials and spending. Unchanged below.
 - **Load testing at scale**: only the recorded local run exists.
 
+## Frontend replacement (started 2026-11-19)
+
+Owner brief: replace the frontend with a new design and information
+architecture, keeping the backend, API contracts and honesty rules intact.
+
+**Audit findings.** 66 paths / 83 operations. The brief asks for screens the
+API does not back, so each is built honestly or not at all:
+- Bot integrations: no CRUD. Adapters are a fixed, server-configured
+  catalogue chosen per run (`GET /test-runs/bot-adapters/available`). The
+  page is a read-only catalogue with each adapter's real availability.
+- No password recovery, invitations or notifications endpoints. Sign-in says
+  reset is unavailable; members are added by the email of an existing account.
+- Comparison is pairwise; groups go through the regression check.
+- Reports are run reports (JSON, CSV, print-to-PDF), the runs CSV and the
+  comparison page; there is no stored report entity.
+
+**Design.** Reference: `awesome-design-md/vercel` (monochrome, hairlines,
+mono for measurements) with the owner's electric blue as the single accent.
+Type dealt by design-taste-frontend: Host Grotesk + JetBrains Mono. Lucide
+icons. 21st.dev MCP is not installed in this environment.
+
+**Kept:** `lib/` (API client, types, formatters, conditions, filters,
+redirect guard, evaluation rows) and its tests - integration and honesty
+logic, not presentation. **Replaced:** `app/`, `components/`, `globals.css`.
+Old routes redirect (`/app/new-test`, `/app/providers`, `/app/workspace`).
+
+| Frontend unit | Commit | CI |
+|------|--------|----|
+| Plan, `lib/` additions with tests (client endpoints, content, script runs, password rule, scenario draft) | see log | |
+| New design system and every route (phases B-H); component tests | see log | |
+
+**Phases A-H done.** Measured on 2026-11-20: 62 unit and 36 component tests
+pass (14 component tests before); typecheck, lint and production build clean;
+`npm audit --omit=dev` 0 vulnerabilities; no backend URL in the client
+bundle. `scripts/local_e2e.py` through the new production frontend: 70
+passed, 0 failed. Playwright (one headless browser, scripted): sign-up,
+suite creation, a scenario built from the Tamil template and validated by the
+server, a fixture run started and followed, every route captured at 1440,
+768 and 390 with no horizontal overflow after the `TableScroll` fix.
+
+**Next exact step:** rebuild the local Docker frontend image from the
+`C:\dev\BhashaBench` clone (Docker cannot build from the OneDrive tree) and
+restart `bhashabench-local-frontend-1`, which was stopped during this work.
+
 ## Next task
 
 **Blocked on the owner.** Choose and pay for a VM and a domain

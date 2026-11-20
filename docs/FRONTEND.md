@@ -1,301 +1,232 @@
 # The frontend
 
-Two surfaces built from one visual system: a public site at `/` that explains
-what the instrument measures, and an operator workspace at `/app` that drives
-it.
+Two surfaces built from one visual system: a public site at `/` that says
+what BhashaBench tests and what it does not, and an operator workspace at
+`/app` that drives it. Replaced on 2026-11-20 with a new design system and
+information architecture; the API client and the honesty rules carried over
+unchanged. This file is the working reference.
 
-Design decisions and the measurements behind them are in
-[`PHASE_08_IMPLEMENTATION_REPORT.md`](PHASE_08_IMPLEMENTATION_REPORT.md).
-This file is the working reference.
+---
+
+## Design
+
+**Direction.** Monochrome rigour: white canvas, ink text, hairline borders,
+mono type for every measured value, and one electric-blue accent. The
+reference was `awesome-design-md/vercel` (a developer platform's black-and-ink
+system), adapted to the owner's black-and-white-with-electric-blue brief. The
+public hero and footer use a dark "instrument" surface; the workspace is light.
+
+**Type.** Host Grotesk for text and headings, JetBrains Mono for figures,
+ids and code, both through `next/font` (dealt by the design-taste-frontend
+skill for a calm, exact software page). Indic scripts fall back to the
+system's Nirmala UI / Noto Sans and get extra line height through `:lang()`.
+
+**Icons.** Lucide (`lucide-react`), one stroke family everywhere.
+
+### Tokens
+
+Defined once in `app/globals.css` and exposed through Tailwind v4's
+`@theme inline`.
+
+| Group | Tokens |
+|---|---|
+| Grounds | `--bg` #fff, `--bg-soft` #fafafa, `--bg-sunk` #f4f4f5 |
+| Lines | `--line`, `--line-strong` |
+| Text | `--text` #0a0a0a, `--text-2`, `--text-3` |
+| Accent | `--accent` #0a4bff, `--accent-hover`, `--accent-soft`, `--accent-line` |
+| Status | `--ok`, `--warn`, `--bad`, `--busy`, `--idle`, each with a `-soft` ground |
+| Instrument | `--night`, `--night-2`, `--night-3`, `--night-line`, `--night-text`, `--night-muted`, `--night-accent` |
+| Radius | 4, 6, 8, 12 px |
+
+Every text colour was measured against all three light grounds; the lowest
+pairing is `--busy` on `--bg-sunk` at 5.19:1 (AA needs 4.5:1). Re-measure if
+a value changes.
+
+Three rules:
+
+1. **Blue means action, selection or focus.** Never decoration, never a
+   status. External-bot modes are drawn in solid ink, not blue.
+2. **A status hue never means two things.**
+3. **No status is colour alone.** Every badge carries a word, most a glyph.
+
+### Charts
+
+`components/charts/`: the verdict trend (stacked bars) and pass rate by
+group (dot with its Wilson 95% interval). Verdicts are statuses, so they use
+the reserved status colours in the order pass, undetermined, fail, which the
+dataviz skill's validator passed for colour-vision deficiency only with red
+and green kept apart; fail also carries a hatch. Each chart has a legend, a
+hover and focus tooltip and a table view. No chart draws data it was not
+given: an empty period has no bar, an undecided group has no dot.
 
 ---
 
 ## Routes
 
-| Route | Rendering | Reads |
-|---|---|---|
-| `/` | Static | nothing — `lib/content.ts`, held to README.md's phase table by `tests/content.test.mjs` |
-| `/app` | Partial prerender | health, 4 provider endpoints, run list |
-| `/app/runs` | Partial prerender | run list with filters |
-| `/app/runs/[runId]` | Partial prerender | run report, run turns, artefact audio, evaluations with every measured metric, channel conditions with their source; reference transcripts per bot turn (read; added by members and above); JSON/CSV export links; Delete (finished runs, shown to admins and owners of its workspace, confirmed in-page) |
-| `/app/new-test` | Partial prerender | scenarios, bot adapters; per-run channel conditions (`lib/conditions.ts`) |
-| `/app/scenarios` | Partial prerender | scenarios (archived on request), languages, the shipped reference library (`/scenario-library`); suite rename and delete |
-| `/app/scenarios/[scenarioId]` | Partial prerender | one scenario: edit (validated, then `PUT`), duplicate, archive/restore, delete (refused with the server's reason when runs use it); controls by role |
-| `/app/providers` | Partial prerender | 4 provider endpoints, languages |
-| `/app/analytics` | Partial prerender | analytics summary (grouped), daily trend, regression check; recent completed runs for the comparison pickers |
-| `/app/compare` | Partial prerender | `GET /analytics/compare` for two run ids |
-| `/app/workspace` | Partial prerender | `/auth/me`, workspaces, members, projects; member and project controls |
-| `/login` | Static | `POST /auth/login` from the browser |
-| `/signup` | Streamed | `GET /auth/options`; the form only where `AUTH_ALLOW_SIGNUP` is on, then `POST /auth/signup` and `POST /auth/login` |
+| Route | Reads |
+|---|---|
+| `/` | Nothing at request time: `lib/content.ts` (phase table and language list drift-tested against README.md and `app/core/languages.py`) and the shipped Tamil scenario quoted in the hero preview |
+| `/login`, `/signup` | `POST /auth/login`; `GET /auth/options`, `POST /auth/signup`. No password reset exists, and the page says so |
+| `/app` | Analytics summary and trend, runs, suites and scenarios totals, health. A getting-started list computed from what exists |
+| `/app/projects`, `/app/projects/[id]` | Projects per workspace with suite counts; one project's suites and recent runs; rename, describe, delete (admin+, 409 while it holds suites) |
+| `/app/runs` | Runs with status, mode, outcome, language and scenario filters, pagination, CSV |
+| `/app/runs/new` | Scenarios, suites, bot adapters. Creates then starts in the background |
+| `/app/runs/[id]` | Report, turns, evaluations, recording manifest, metric catalogue, suite. Tabs: conversation, evaluation, evidence and setup, recording and audio, stages. Follows a live run every 3 s; sends the bot's reply for a paused run; evaluate, export, PDF, cancel, delete |
+| `/app/scenarios` | Search by name, language, tag, archived; the shipped reference library as templates |
+| `/app/scenarios/new`, `/app/scenarios/[id]/edit` | The builder (guided sections plus YAML source), validated by the server before every save |
+| `/app/scenarios/[id]` | The specification read back, its runs; duplicate, archive or restore, delete (refused with the server's reason when runs use it) |
+| `/app/suites`, `/app/suites/[id]` | Suites by project with counts; a suite's scenarios, run history, move, bundle import (dry run first) and export, rename, delete |
+| `/app/bots` | Bot adapters, speech and caller providers, `telephony_status` and `evon_status` verbatim. Read-only: adapters are configured on the server |
+| `/app/analytics` | Summary, trend and regression with the endpoints' own filters; pass rate by group; CSV |
+| `/app/compare` | Two runs picked by search, then `GET /analytics/compare`. Pairwise only |
+| `/app/reports` | Finished runs with JSON, CSV and PDF; the all-runs CSV; links to comparison |
+| `/app/settings`, `/settings/team`, `/settings/account` | Current workspace and health; members, roles and the permission matrix from docs/AUTH.md; profile, password change |
 
-Every `/app` route needs a session. `proxy.ts` redirects to
-`/login?next=...` when the `bb_session` cookie is absent - an optimistic
-check only; the API decides on every request, and a page that gets a 401
-redirects through `signInAgainIfExpired`.
+Old paths redirect: `/app/new-test` → `/app/runs/new`, `/app/providers` →
+`/app/bots`, `/app/workspace` → `/app/settings/team`.
 
-Every workspace route is a static shell with live data streamed in behind a
-`<Suspense>` boundary.
+Every `/app` route needs a session. `proxy.ts` redirects to `/login?next=...`
+when the `bb_session` cookie is absent; the API decides on every request, and
+a page that gets a 401 redirects through `signInAgainIfExpired`.
+
+### What is not built, because the API does not back it
+
+- Bot-integration CRUD: adapters are a server-configured catalogue.
+- Password recovery, email invitations, notifications.
+- Renaming or deleting a workspace; editing your name or email.
+- Comparing more than two runs; suite-wide execution; reordering scenarios.
+- Semantic correctness, context retention, response relevance and language
+  quality: listed as unavailable on every evaluation, never scored.
 
 ---
 
 ## Cache Components
 
-`next.config.ts` sets `cacheComponents: true`. Two consequences:
+`next.config.ts` sets `cacheComponents: true`, so `export const dynamic`,
+`revalidate` and `fetchCache` are forbidden, and uncached data must sit inside
+`<Suspense>`. Every workspace route is a static shell (the page header
+prerenders) with its data streamed in behind a skeleton shaped like it.
 
-**`export const dynamic`, `revalidate` and `fetchCache` are forbidden** — a
-route segment that exports one fails the build. Uncached `fetch` and
-request-time APIs already run at request time.
+`usePathname()` is request-time data too: the shell reads it in a tiny
+component inside its own Suspense boundary (`PathAware` in
+`components/shell/sidebar.tsx`) so the rest of the chrome prerenders.
 
-**Uncached data must sit inside `<Suspense>`.** Anything else fails the
-prerender with `blocking-prerender-dynamic`. The pattern throughout:
-
-```tsx
-export default function Page() {
-  return (
-    <>
-      <PageHeader title="…" />            {/* prerenders */}
-      <PageBody>
-        <Suspense fallback={<TableSkeleton />}>
-          <Data />                         {/* async, fetches */}
-        </Suspense>
-      </PageBody>
-    </>
-  );
-}
-```
-
-`usePathname()` is subject to the same rule, which is why `Sidebar` takes the
-current path as a prop and is wrapped in `<Suspense>` with a version that
-highlights nothing.
-
-The migration guide is bundled at
-`node_modules/next/dist/docs/01-app/02-guides/migrating-to-cache-components.md`.
-
----
-
-## Design tokens
-
-Defined once in `app/globals.css` and exposed through Tailwind v4's
-`@theme inline`. One dark palette, not a theme switch.
-
-| Group | Tokens |
-|---|---|
-| Surfaces | `--bg`, `--surface`, `--surface-raised`, `--surface-inset`, `--chrome` |
-| Lines | `--line`, `--line-strong` |
-| Text | `--text`, `--text-dim`, `--text-muted` |
-| Accent | `--accent`, `--accent-strong`, `--accent-dim`, `--accent-line`, `--accent-alt` |
-| Status | `--state-ok`, `--state-warn`, `--state-bad`, `--state-idle`, `--state-busy` (each with a `-dim` ground) |
-
-Three rules:
-
-1. **Accent is for the primary action, the current selection and focus.**
-   Never decoration, never an inactive state.
-2. **A status hue never means two things.**
-3. **No status is colour alone.** Every badge carries a word.
-
-`--text-muted` is `#808C9B`, not the `#778392` the competition Phase 8 brief proposed:
-that value measured 4.39:1 on `--surface-raised` and failed AA for body text.
-Any change to it must be re-measured on all three surfaces.
+Server data comes through `loadContext()` (`lib/api/context.ts`): the user,
+their workspaces and every workspace's projects with the caller's role,
+deduplicated per request with React's `cache()`. Roles there only decide
+which controls are shown; the API checks every action again. The selected
+workspace is a preference cookie (`bb_workspace`), not an access control.
 
 ---
 
 ## Components
 
-| Module | Holds |
+| Directory | Holds |
 |---|---|
-| `ui/primitives.tsx` | `Button`, `Panel`, `PanelHeader`, `Fact`, `NotReported`, `EmptyState`, `ErrorState`, `TableScroll`, `Th`, `Td`, `Skeleton` |
-| `ui/status.tsx` | `RunStatusBadge`, `OutcomeBadge`, `ModeBadge`, `HealthBadge`, `AvailabilityBadge`, `SelectedBadge` |
-| `ui/loading.tsx` | Suspense fallbacks shaped like the content they replace |
-| `shell/` | `Sidebar`, `MobileNav`, `PageHeader`, `PageBody`, `Wordmark` |
-| `domain/` | `RunsTable`, `Conversation`, `AudioArtefactPlayer`, `StageTimeline`, `RunEvidence`, `RunFilters`, `NewTestForm` |
-| `marketing/` | `SiteHeader`, `SiteFooter`, `PipelineDiagram` |
+| `components/ui/` | `primitives.tsx` (buttons, panels, facts, `NotReported`, `Stat`, states, tables, skeletons), `field.tsx` (labelled controls with error wiring), `status.tsx` (the status vocabulary), `interactive.tsx` (native-dialog `Dialog`, in-page `ConfirmAction`, ARIA `Tabs`, `PrintButton`, `useAction`) |
+| `components/shell/` | sidebar, mobile drawer and Ctrl/⌘ K command menu; page header; account and workspace switcher |
+| `components/marketing/` | header, footer, the hero's product preview |
+| `components/auth/` | sign-in, sign-up, password field |
+| `components/scenario/` | the builder and the scenario actions |
+| `components/runs/` | conversation inspector, audio player, reference editor, evidence, evaluation view, stage timeline, run controls, new-run form, compare picker |
+| `components/domain/` | runs table, project and suite controls |
+| `components/settings/` | team controls, password form, settings nav |
+| `components/charts/` | verdict trend, pass-rate intervals |
 
-**Five modules are client components** — nav, marketing chrome, run filters,
-the new-test form and the audio player. Everything else is server-rendered,
-which is why the workspace ships ~138 KB of JavaScript.
+**Dialogs are native `<dialog>` with `showModal()`**: the browser supplies the
+focus trap, the inert background, Escape and focus return. Destructive actions
+confirm in the page; `window.confirm()` would block the tab.
 
-**There is no component library.** Dependencies are `next`, `react`,
-`react-dom`. No modals, native `<select>`, `<details>` disclosures. Add a
-headless library only when a surface genuinely needs a positioned popover or
-a focus-trapped dialog.
+**`TableScroll` is `relative` on purpose.** An absolutely positioned
+descendant (a screen-reader-only header label) escapes an overflow container
+that is not positioned, and once widened the Team page by 187 px at 390 px.
 
-### `min-w-0` is load-bearing
-
-A grid or flex child defaults to `min-width: auto`, so a `Panel` holding a
-`min-w-max` table inflates its own track and scrolls the whole page sideways.
-`Panel` carries `min-w-0`, and grid containers declare
-`grid-cols-[minmax(0,1fr)]` explicitly. This caused a 858 px-wide page on a
-380 px screen before it was fixed.
-
-### Display utilities do not override each other reliably
-
-`buttonClass()` hardcodes `inline-flex`. Adding `hidden` alongside it is
-resolved by stylesheet order, not attribute order, and the button wins. Wrap
-the element in a `<span className="hidden sm:block">` instead. A `sm:hidden`
-variant is safe — variants sort after base utilities.
+**`min-w-0` on grid and flex children is load-bearing**, as before: without it
+a panel holding a wide table inflates its own track.
 
 ---
 
 ## The API client
 
-`lib/api/client.ts` is the only module that calls the API.
+`lib/api/client.ts` is the only module that calls the API. One `request`
+function owns the timeout, the error envelope, query serialisation (empty
+values dropped) and, since 2026-11-20, multipart bodies: a `FormData` body is
+sent as is so the browser sets the boundary (used only by `supplyBotAudio`).
 
-**Sessions (Phase 14).** The browser never calls the backend directly:
-`next.config.ts` rewrites `/api/v1/*` on the site's own origin to
-`BACKEND_URL`, so the API's `HttpOnly`, `SameSite=Strict` session cookie is
-first-party, travels by itself, and no script can read it.
+The browser calls only its own origin: `/api/v1/*` is rewritten to
+`BACKEND_URL`, so the HttpOnly session cookie is first-party.
+`lib/api/server.ts` reads the cookie for server components and passes it in.
+No script can read the token. There is no mock mode and no fallback data.
 
-- Sign-in posts `session_type: "cookie"`; the response carries no token.
-- Server components cannot rely on the browser sending the cookie to the
-  backend, so `lib/api/server.ts` (server-only) reads `bb_session` from the
-  incoming request and passes it to `request()` as a header. It calls no
-  route itself.
-- `artefactAudioUrl` is relative, so `<audio>` fetches through the proxy with
-  the cookie.
-- The site's origin must be in the API's `CORS_ORIGINS`: the API refuses a
-  cookie-authenticated write from an unlisted `Origin`.
-- `languages` stays cached and unauthenticated: it is public reference data.
-
-- One `request` function: timeouts (15 s, 120 s for `start`), the error
-  envelope, query serialisation that drops `undefined`.
-- `ApiError.kind` is `http`, `network` or `timeout` — three failures that
-  look alike in a `catch` and need different words on screen.
-- **No mock mode, no fallback data.** A failed call renders an error state.
-
-`lib/api/types.ts` is transcribed from the backend's Pydantic models field
-for field. **Never add a field the API does not return.** Where the API
-returns `null` because a provider does not report something, the type is
-`| null` and the UI renders `NotReported`, never a number.
-
-Verify query-parameter names against the generated OpenAPI document. FastAPI
-*ignores* an unknown query parameter rather than rejecting it, so a misspelled
-filter makes a search box appear to work while returning everything.
+`lib/api/types.ts` is transcribed from the backend's schemas. Never add a
+field the API does not return. Verify query-parameter names and `limit` caps
+against the OpenAPI document: an unknown parameter is ignored, not refused,
+and every listing caps `limit` at 100 (a 200 once broke the suite page).
 
 ---
 
 ## Honesty rules
 
-The API publishes fields specifically so a client cannot overclaim. These are
-rendered structurally, so a new page cannot forget them.
-
 | Field | Must drive |
 |---|---|
 | `uses_language_model` | "rule engine", never "AI caller" |
-| `bot_audio_externally_received` | whether a run may be described as testing a bot |
+| `bot_audio_externally_received`, `bot_text_externally_received` | whether a run may be described as testing a bot; derived from replies, never the mode |
 | `measurement_note` | printed verbatim wherever counts appear |
-| `evon_status`, `telephony_status` | printed verbatim; never paraphrased |
-| `settings_not_enforced` | each declared-but-unenforced setting listed with its reason; `null` shown as "not recorded", never as "all enforced" |
-| `degradation_requested` | the run's *Noise applied* as requested SNR and packet loss, not a preset name |
-| `selected: "fake"` | a visible warning that such runs establish nothing |
-| `confidence: null` | "not reported" |
+| `evon_status`, `telephony_status` | printed verbatim |
+| `settings_not_enforced` | each setting with its reason; `null` shown as "not recorded" |
+| `stt_provider: "fake"` | a caution above the run's tabs and on the adapters page |
+| a metric's `value: null` | "Not reported" with the evaluator's reason, never 0 |
 
-`RunEvidence` derives its caveats **from the run, never from the mode label**.
-A run created as `external_bot_test` whose replies were fixtures reports
-`bot_audio_externally_received: false`, and the component says so.
+`caveatsFor(run)` in `components/runs/evidence.tsx` is the single derivation:
+the cautions banner above a run's tabs and the full evidence list read it.
 
-### Three failure modes stay three things
+**Three failure modes stay three things**: `text: ""` is Silence (the bot),
+`text: null` plus `transcription_error` is Not transcribed (us), and
+`audio_validation_failed` is a run-level failure. **The waveform is drawn
+from decoded audio or not at all**, and decoding is lazy. Stage events are
+shown under the turn index the backend recorded, never re-attributed.
 
-| Backend state | Rendered as |
-|---|---|
-| `text: ""` | **Silence** — the bot said nothing. A finding about the bot. |
-| `text: null` + `transcription_error` | **Not transcribed** — our failure, not the bot's. |
-| run outcome `audio_validation_failed` | a run-level failure on the header |
-
-Merging any two attributes our fault to the system under test.
-
-### The waveform
-
-Drawn from bytes fetched and decoded with the Web Audio API, reduced to
-per-block peaks, normalised within one artefact. **There is no synthetic
-fallback**: if decoding fails the component says so and still offers playback.
-Decoding is lazy via `IntersectionObserver`.
-
-Amplitude is normalised per artefact, so two waveforms are not comparable by
-height — which is why no amplitude figure is printed beside one.
+The scenario builder emits only fields the specification declares and omits
+optional blocks the author left empty (`lib/scenario-draft.ts`); the server is
+the only validator and runs before every save.
 
 ---
 
 ## Accessibility
 
-Non-negotiable, and verified in the browser rather than assumed:
-
-- Contrast ≥ 4.5:1 for body text on every surface it appears on.
-- A skip link first in tab order on both surfaces.
-- Real mobile navigation: a drawer in the workspace, a disclosure on the
-  public site.
-- No horizontal page overflow at 360 px. Wide tables scroll inside
-  `TableScroll`.
-- No status by colour alone.
-- `langAttr()` sets `lang` on every transcript, endonym and language tag. A
-  screen reader handed Devanagari inside `lang="en"` pronounces it with
-  English phonetics.
+Verified in a browser, not assumed: a skip link first in tab order; visible
+focus everywhere; labels on every control with errors tied by
+`aria-describedby`; native selects; ARIA tabs with arrow keys; `lang` on every
+transcript, endonym and script sample; no status by colour alone; reduced
+motion respected; touch targets of 44 px on phone chrome; no horizontal page
+overflow at 390 px.
 
 ---
 
-## Commands
+## Commands and tests
 
 ```bash
 cd frontend
-npm run dev        # development server
-npm run typecheck  # tsc --noEmit
-npm run lint       # eslint
-npm run build      # production build - the real check for prerender errors
-npm run start      # serve the production build
+npm run dev               # development server
+npm run typecheck         # next typegen && tsc --noEmit
+npm run lint              # eslint
+npm run build             # production build - the real check for prerender errors
+npm test                  # node --test: lib/ units and drift tests
+npm run test:components   # vitest + jsdom + Testing Library
 ```
 
-`BACKEND_URL` is where the Next server reaches the backend (default
-`http://localhost:8000`, `http://backend:8000` under Compose); it is the
-`/api/v1` rewrite target and is compiled in at `next build`. The origin the
-frontend is served from must appear in the backend's `CORS_ORIGINS`, or
-cookie-authenticated writes (sign-out, starting a run) are refused with 403.
+Unit tests cover the formatters, the redirect guard, the API client, metric
+rows, barge-in wording, run filters, channel conditions, the script splitter,
+the password rule and the scenario draft. Drift tests read the backend:
+README's phase table, `languages.py`, `passwords.py`, the scenario
+specification's enumerations, and the run-filter enums.
 
-Browsing the dev server by IP rather than `localhost` trips Next's
-cross-origin dev-resource block, which silently prevents hydration. Use
-`localhost`, or set `allowedDevOrigins`.
+Component tests drive components as a user does, with only the API client and
+the router mocked: the builder's validate-before-save and field errors, the
+run form's create-then-start and orphaned-run paths, scenario and suite
+actions, the reference editor, sign-in and sign-up, the bot reply, the
+evidence caveats and the evaluation view's not-reported state.
 
-## Analytics views (Phase 13)
-
-- A pass rate is shown only as `formatPassRate` renders it: the point
-  estimate, its Wilson 95% interval and n. No decided runs reads "No
-  decided runs", never 0%.
-- The regression check and the run comparison show the API's own
-  conclusion, reason and statistical note verbatim; the page adds no
-  interpretation of its own.
-- The run page refreshes itself every 3 s while a run is in flight (not
-  while it waits for an operator) and stops when it finishes. It shows the
-  latest evaluation with an evaluate button, and plays the full recording
-  through the same-origin proxy, listing any excluded turns.
-- Workspace controls are shown only to roles that can use them; the server
-  still decides, and a refusal is shown as the API worded it. Nothing is
-  updated optimistically.
-
-## Tests
-
-```bash
-npm test                  # node --test on tests/**/*.test.mjs: lib/ units
-npm run test:components   # vitest + jsdom + Testing Library: components
-```
-
-**Component tests** (`tests/components/`, `vitest.config.mts`) render a
-component in jsdom and drive it as a user does, with `user-event` clicks and
-typing. Only the network boundary (`@/lib/api/client`'s `api`) and the
-router are mocked. Each asserts what the user sees and which request is
-sent: the reference editor's draft, save and refusal paths; the scenario
-manager's validate-then-save, delete refused with the server's 409 wording,
-confirm-before-delete, archive/restore and role-based controls; and a suite
-row's two-step delete that asks again before taking scenarios with it.
-Rendering-only assertions are deliberately absent.
-
-Node strips TypeScript types itself, so tests import `lib/` files directly.
-They cover the formatters (no "no data" ever rendered as a number), the
-sign-in redirect guard (`lib/redirect.ts`: only `/app` paths, never
-protocol-relative), and the API client (same-origin credentials, empty
-query values dropped, the error envelope's message, network versus timeout
-failures, no fallback data). `tests/content.test.mjs` holds the public
-site's phase table to README.md's, row by row, and checks that the hero
-badge is derived from it, so the landing page cannot fall behind the project
-again. `tests/run-filters.test.mjs` reads the backend's `RunStatus`,
-`ExecutionMode` and `RunOutcome` and fails on a filter value the API would
-refuse, or a value it would accept that the filters do not offer. Components
-without a component test are checked by typecheck, lint, the production
-build, and the end-to-end check against the running API.
+The dev server sometimes omits Tailwind classes unique to a newly created
+file; the production build does not. Review visuals against `next build` and
+`next start`.
