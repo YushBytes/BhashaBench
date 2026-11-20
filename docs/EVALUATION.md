@@ -163,3 +163,11 @@ Sarvam's, which is not authorised for live calls, so no judgement has ever
 been produced by a model, and its agreement with human labels has not been
 measured — no labelled set exists. It is tested end to end with the scripted
 client only.
+
+**How it would be validated.** `docs/JUDGE_VALIDATION.md` is the protocol
+(dataset, annotation guide, acceptance rule) and
+`app/evaluation/judge_validation.py` the measurement: per criterion, Cohen's
+kappa against adjudicated human labels, false pass and false fail rates,
+abstention and run-to-run consistency, each with a bar every criterion must
+clear on at least 100 decided items. With no labels, `validate()` reports
+`validated: false` and why; nothing is claimed until real labels clear it.
